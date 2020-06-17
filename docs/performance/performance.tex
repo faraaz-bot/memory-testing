@@ -1,0 +1,237 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Performance Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This document contains notes on performance for \texttt{rocFFT}.
+
+\section{Reduce number of transposes for 3D complex}
+
+The 3D plans are \texttt{RTRT}, with the first \texttt{R} being a 2D
+\texttt{RTRT}; this means that we actually have \texttt{RTRTTRT}, which has 4
+transposes.  This is 7 kernels in total:
+\begin{verbatim}
+rocfft-rider-d --length 4 4 4 | grep KERNEL | wc -l 7
+\end{verbatim}
+3 transposes is already enough.  With fused kernels, this should be
+just 3 kernels in total.
+
+There is no ticket for this improvement.  This would be a smallish
+change.
+
+\section{Fused kernels for 2D/3D complex transforms}
+
+Multi-dimensional transforms are computed by sequentially computing
+batched 1D transforms and then transposing the data for the next
+stage.  We can avoid global read/writes by combining performing the
+transpose when writing to global memory.  For 2D \texttt{RTRT}
+transforms, this would halve the number of read/writes, which should
+about double the speed.
+
+There are several tickets for this work:
+\begin{itemize}
+\item 2D:
+  \begin{itemize}
+  \item \href{http://ontrack-internal.amd.com/browse/SWDEV-237066}{SWDEV-237066}
+  \end{itemize}
+\item 3D:
+  \begin{itemize}
+  \item \href{http://ontrack-internal.amd.com/browse/SWDEV-240860}{SWDEV-240860}
+  \item \href{http://ontrack-internal.amd.com/browse/SWDEV-240863}{SWDEV-240863}
+  \item \href{http://ontrack-internal.amd.com/browse/SWDEV-240864}{SWDEV-240863}
+  \end{itemize}
+\end{itemize}
+Implementation would require modified kernels and would be a large
+feature.
+
+\subsection{Tiny FFTs for ants}
+
+For very small
+transforms\footnote{\url{https://www.youtube.com/watch?v=0KC_rd7-bf0}}
+it may be possible to launch a single kernel to compute all transforms
+by simply loading the data into LDS, thus avoiding a transpose for
+writing to global memory.  TODO: compute valid cases.
+
+Since LDS if 64KB\footnote{Wich ought to be enough for
+  anybody\ldots.}, we can fit $8192=2^{13}$ double or $16384=2^{14}$
+floats, which would allow for 3D transforms of
+$16\times{}16{}\times{}32$ doubles, or 2D transforms of size
+$64\times{}128$.  While these are not particularly useful transforms,
+they may be useful for some applications such as image analysis.  At
+any rate, there is no reason why we should have 6 kernels doing a
+$16^3$ transform when one would suffice; this is a factor of 6
+speedup.
+
+There are no tickets which currently address this improvement.  This
+would require generating kernels specifically for this size, which
+would be a moderately large amount of work.
+
+
+\section{1D large transforms}
+
+For large 1D transforms (which may be part of 2D and 3D transforms)
+the individual rows may not fit into LDS.  In order to compute a large
+1D transform, we break up the problem into stages, effectively turning
+the problem into a multiple-dimensional transform.  There are opportunities for
+providing fused kernels in this case.
+
+In addition, some kernels seem to have an abnormally decreased memory
+bandwidth usage, particularly for very large kernels.  This can be
+shown in Figure~\ref{1droofline}.  The compute schemes and kernel
+counts are shown in Table~\ref{1dkerneltable}.  There is a noted
+decrease in efficiency after size $2^{22}$.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{1d_c2c_batch1_radix2}
+  \caption{Roofline of 1D power-of-two transforms on an MI60}
+  \label{1droofline}
+\end{figure}
+
+\begin{table}
+  \begin{tabular}{lll}
+    Problem size & Number of kernels & Scheme \\
+    \hline
+    $2$--$2^{12}$ & 1 &\texttt{CS_KERNEL_STOCKHAM} \\
+    $2^{13}$--$2^{16}$ & 2 & \texttt{CS_L1D_CC} \\
+    $2^{17}$--$2^{18}$ & 3 &\texttt{CS_L1D_CRT} \\
+    $2^{19}$--$2^{24}$ & 5  &\texttt{CS_L1D_TRTRT} \\
+    $2^{25}$--$2^{28}$ & 6 & \texttt{CS_L1D_TRTRT} and \texttt{CS_L1D_CC}  \\
+    $2^{29}$ & 7 & \texttt{CS_L1D_TRTRT} and \texttt{CS_L1D_CRT}  \\
+  \end{tabular}
+  \caption{Compute schemes and kernel counts for 1D double-precision
+    complex power-of-two transforms.}
+  \label{1dkerneltable}
+\end{table}  
+
+
+There is a ticket for this, which is:
+\href{http://ontrack-internal.amd.com/browse/SWDEV-230567}{SWDEV-230567}
+This is probably a medium sized work-item.
+
+\section{Real/complex transforms}
+
+The real/complex transforms have different algorithms depending on the
+problem size:
+\begin{enumerate}
+\item Even-length problems.
+\item When the batch size is even, or any higher dimension is
+  even. Ticket for this feature is
+  \href{http://ontrack-internal.amd.com/browse/SWDEV-208963}{SWDEV-208963}.
+\item A fallback compute-as-complex algorithm via embedding
+\end{enumerate}
+For the even and batched methods, this requires an extra kernel call,
+and therefore a r/w to global memory.  By fusing these with the
+associated complex transforms used in the rest of the algorithm, we can
+reduce the amount of global i/o.
+
+For method 2, it may be possible to efficiently compute batched
+transforms even when no dimension or batch is even; just leave one
+transform using the embedding method, and do the rest as paired
+transforms.
+
+For the embedding method, it may be possible to combine the embedding
+kernel with the complex FFT; this would also avoid a global read/write.
+
+As far as I can tell, there doesn't seem to be any method to perform
+efficient real/complex transforms for a single odd-length problem.
+
+\section{Twiddle factors}
+
+The twiddle factors are computed on the CPU and stored on the GPU.  It
+may be worth looking at more memory efficient algorithms (such as a
+high/low table), or even just on-device computation.  There is a lot
+of literature on this.  For example,
+\url{https://ieeexplore.ieee.org/document/7780097}.
+
+There are no tickets for this feature.  Impact is unknown.
+
+\section{more radices}
+
+rocFFT currently supports radix 2, 3, and 5.  Radix 7 is a candidate
+for inclusion as well.
+
+For smaller sizes, cuFFT generates code to handle these cases up to a
+certain size; this may be possible for rocFFT as well.
+
+There is a ticket for the radix-7 feature:
+\href{http://ontrack-internal.amd.com/browse/SWDEV-231448}{SWDEV-231448}.
+This is a medium-sized feature.  Implemeting generated transforms for
+small sizes would be a large feature.
+
+\section{Bluestein}
+
+The Bluestein algorithm is a fallback method for when a problem size
+doesn't have an implemented method, such as for large prime sizes.
+This involves computing the FFT via a convolution; this convolution
+can itself be computed via FFT, but requires padding the input data
+with zeros to from length $N$ to at least $2N$.  This padding may be
+extended further, for example to length $2^p \geq 2N$; this
+length-$2^p$ transform may be computed using a radix-2 method.
+
+In order to compute this FFT, we need to first copy the data to the
+zero-padded buffer.  However, we could avoid this by simply reading
+the non-zero part of the data when we compute the FFT in the first
+place.  This would avoid a kernel call and therefore a global
+read/write.
+
+There are no tickets for this feature.  Implementation would require
+kernel changes, and would likely be a medium-to-large feature.
+
+\section{Transposed output}
+
+For certain applications, the user may be happy with transposed
+output; for example when computing convolutions on multi-dimensional
+data.  If we were to detect this, then we would be able to reduce the
+number of kernels: instead of \texttt{RTRT}, we would just have
+\texttt{RTR}.  If fused kernels were implemented, then we would still
+be able to avoid a synchronization step, which should help as well.
+
+There is no ticket for this feature.  The implementation would be
+small.
+
+\end{document}
