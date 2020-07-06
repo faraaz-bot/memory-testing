@@ -1,0 +1,115 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Bluestein FFT Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This document contains notes for computing FFTs via the Bluestein
+algorithm for \texttt{rocFFT}.
+
+\section{Bluestein algorithm}
+
+The Fourier trasnform of $\left\{x_n\right\}_{n=0}^{N-1}$ is
+\begin{dmath}
+  X_k = \sum_{n=0}^{N-1}x_n \zeta_N^{nk}
+\end{dmath}
+where $\zeta_N = e^{\frac{-2\pi i}{N}}$.
+
+Now,
+\begin{dmath}
+  kn
+  = kn -\frac{1}{2}\(n^2 + k^2\) +\frac{1}{2}\(n^2 + k^2\)
+  = \frac{2kn - n^2 - k^2}{2} + \frac{n^2}{2} + \frac{k^2}{2}
+  = -\frac{\(k-n\)^2}{2} + \frac{n^2}{2} + \frac{k^2}{2},
+\end{dmath}
+so
+\begin{dmath}
+  X_k
+  = \sum_{n=0}^{N-1}x_n \zeta_N^{nk}
+  = \sum_{n=0}^{N-1}x_n \zeta_N^{-\frac{\(k-n\)^2}{2} + \frac{n^2}{2} + \frac{k^2}{2}}
+  = \zeta_N^{\frac{k^2}{2}}
+  \sum_{n=0}^{N-1}x_n \zeta_N^{-\frac{\(k-n\)^2}{2} + \frac{n^2}{2}}
+  = \zeta_N^{\frac{k^2}{2}}
+  \sum_{n=0}^{N-1}x_n \zeta_N^{\frac{n^2}{2}}\zeta_N^{-\frac{\(k-n\)^2}{2}}
+  = \zeta_N^{\frac{k^2}{2}}
+ \(x_k\zeta_N^{\frac{k^2}{2}}\) * \(\zeta_N^{-\frac{k^2}{2}} \).
+\end{dmath}
+That is, the Fourier transform of $x_n$ can be expressed as a
+convolution of $x_k\zeta_N^{\frac{k^2}{2}}$ and
+$\zeta_N^{-\frac{k^2}{2}}$, with the result multiplied by
+$\zeta_N^{\frac{k^2}{2}}$.
+
+\section{Convolution Theorem}
+
+The convolution of $\{a_k\}_{k=0}^{N-1}$ and $\{b_k\}_{k=0}^{N-1}$ may
+be computed via a Fourier transform using the convolution theorem,
+which states that the Fourier transform of a convolution is an
+element-wise multiplication (which is referred to as the Hadamard
+product).  However, for length-$N$ convolutions, one gets aliases, as
+\begin{dmath}
+  \mathcal{F}^{-1}_N(A\circ{}B)_k
+  = \sum_{\ell=0}^{\ell=N-1}a_{\ell \Mod N} b_{(k-\ell) \Mod N}
+\end{dmath}
+which is different than the desired linear convolution, 
+\begin{dmath}
+  (a*b)_k
+  = \sum_{\ell=0}^{\ell=k}a_{\ell} b_{k-\ell}.
+\end{dmath}
+The extra terms are referred to as aliases, and removing them is
+dealiasing.  This can be accomplished by extending the input with
+zeros from length $N$ to at least length $2N$.  In fact, we can choose
+any length greater or equal to $2N$; one typically chooses the length
+to be $2^P$, where
+\begin{dmath}
+  P = \ceil{\log{2N}}.
+\end{dmath}
+
+
+\end{document}
