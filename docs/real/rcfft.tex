@@ -1,0 +1,491 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Real-Complex FFT Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This document contains notes for computing real/complex FFTs
+for \texttt{rocFFT}.
+
+
+\subsection{Properties of real/complex DFTs}
+
+The output of a real-to-complex Fourier transform exhibits Hermitian
+symmetry, which is to say
+\begin{dmath}
+  F_k = F^*_{-k}
+\end{dmath}
+where ${}^*$ denotes complex conjugation and $k$ is a (possibly
+multi-dimensional) wave vector.  Note that $k$ is considered to be a
+cyclic in each index.
+
+It is easy to see that the origin is real-valued, since
+$F_0=F^*_{-0}=F^*_{0}\implies F_0\in\mathbb{R}$.
+
+In adidtion to restrictions on the origin, we may have verious
+restrictions on the Nyquist frequency (or frequencies, in the case of
+multi-dimensional transforms).
+
+\subsubsection{1D Hermitian symmetry}
+For 1D transforms of length $N_x$, we have two cases:
+\begin{itemize}
+\item $N_x\mid 2$.  Then $F_{N_x/2} = F^*_{-N_x/2} = F^*_{N_x/2}$, so
+  $F_{N_x/2}\in\mathbb{R}$.
+\item $N_x\nmid 2$.  Then the highest fequency is $\frac{N_x - 1}{2}$,
+  and is conjugate to
+  $\frac{-N_x+1}{2}=\frac{N_x+1}{2}=neq\frac{N_x-1}{2}$, so there is no reality
+  condition for the Nyquist frequency in this case.
+\end{itemize}
+
+\subsubsection{2D Hermitian symmetry}
+For 2D transforms of length $N_x\times{}N_y$, we store indices $(i,j)$ with
+$i=0,\dots{}N_x-1$ and $j=0,\dots{}\floor{N_y/2}$.  We have:
+\begin{itemize}
+\item $F_{0,0}\in\mathbb{R}$.
+\item If $N_x\mid 2$, then $F_{\frac{N_x}{2},0}\in\mathbb{R}$
+\item If $N_y\mid 2$, then $F_{0,\frac{N_y}{2}}\in\mathbb{R}$
+\item If $N_x\mid 2$ and $N_y\mid 2$, then
+  $F_{\frac{N_x}{2},\frac{N_y}{2}}\in\mathbb{R}$
+\end{itemize}
+Moreover,
+\begin{itemize}
+\item Since we keep all of the $x$-axis, $F_{i,0}=F^*_{N_x-1,0}$ for
+  $i=1,\dots,\floor{N_x/2}-1$.
+\item If $N_y\mid 2$, then
+  $F_{i,N_y/2}=F^*_{-i,-N_y/2}=F^*_{N_x-i,N_y/2}$, so $F_{i,N_y/2}$
+  and $F_{N_x-i,N_y/2}$ are conjugate-pairs for
+  $i=1,\dots,\floor{N_x/2}-1$.
+\end{itemize}
+However, there is no such condition if $N_x\mid 2$, because
+$(\frac{N_x}{2},j)\rightarrow(-\frac{N_x}{2},-j)=(\frac{N_x}{2},N_y-j)$,
+and, for $j=0,\dots{},\floor{N_y/2}-1$, $N_y-j$ isn't explicitly
+stored.
+
+\subsubsection{3D Hermitian symmetry}
+
+For 3D transforms of length $N_x\times{}N_y\times{}N_z$, we store
+indices $(i,j,k)$ with $i=0,\dots,N_x-1$, $j=0,\dots,N_y-1$, and
+$k=0,\dots\floor{N_z/2}$.
+
+\begin{itemize}
+\item $F_{0,0,0} \in \mathbb{R}$ .
+\item If $N_x \mid 2$, then $F_{N_x/2,0,0} \in \mathbb{R}$
+\item If $N_y \mid 2$, then $F_{0,N_y/2,0} \in \mathbb{R}$
+\item If $N_z \mid 2$, then $F_{0,0,N_z/2} \in \mathbb{R}$
+\item If $N_x \mid 2$ and $N_y \mid 2$, then $F_{N_x/2,N_y/2,0} \in \mathbb{R}$
+\item If $N_x \mid 2$ and $N_z \mid 2$, then $F_{N_x/2,0,N_z/2} \in \mathbb{R}$
+\item If $N_y \mid 2$ and $N_z \mid 2$, then $F_{0,N_y/2,N_z/2} \in \mathbb{R}$
+\item If $N_x \mid 2$, $N_y \mid 2$, and $N_z \mid 2$, then
+  $F_{N_x/2,N_y/2,N_z/2} \in \mathbb{R}$
+\end{itemize}
+Moreover, then $k=0$ we have redundant data which must be made
+consistent.
+\begin{itemize}
+\item Since we keep all of the $x$-axis, $F_{i,0,0}=F^*_{N_x-1,0,0}$ for
+  $i=1,\dots,\floor{N_x/2}-1$.
+\item Now the $x$--$y$ plane: $F_{i,j,0}=F^*_{N_x-i,N_y-j,0}$ for
+  $i=1,\dots,N_x-1$, $j=1,\dots,\floor{N_y/2}-1$.
+\item Similarly, if $N_z\mid{}2$, then
+  \begin{itemize}
+  \item $F_{i,0,N_z/2}=F^*_{N_x-1,0,N_z/2}$ for $i=1,\dots,\floor{N_x/2}-1$.
+  \item $F_{i,j,N_z/2}=F^*_{N_x-i,N_y-j,N_z/2}$ for $i=1,\dots,N_x-1$,
+    $j=1,\dots,\floor{N_y/2}-1$
+  \end{itemize}
+\end{itemize}
+
+
+\section{1D Transforms}
+
+\subsection{Using a complex array with zero imaginary part}
+\label{embed1d}
+The easiest way is to just compute a length-$N$ complex FFT with zero
+imaginary part.  Using the split format, one can allocate $N$ real
+values and use this buffer to hold the imaginary part of the
+split-array complex format.  Setting this imaginary array to be all
+zero allows one to compute the real-to-complex transform by just
+performing a complex-to-complex transform and amalgamating the output
+into the format we want.
+
+\subsection{Packing two $\mathbb{R}$ transforms into one $\mathbb{C}$ transform}
+\label{packed1d}
+
+Let $x=\left\{x_\ell\right\}_{\ell=0}^{N-1}$ and
+$y=\left\{y_\ell\right\}_{\ell=0}^{N-1}$, be real-valued
+sequences. Let $z=x + iy$. By the linearity of the Fourier transform,
+$Z=X+iY$. Since $x$ and $y$ are real-valued, we have $X_r^*=X_{N-r}$.
+Thus,
+\begin{dmath}
+  \frac{Z_r + Z_{N-r}^*}{2}
+  = \frac{X_r + i Y_r}{2} + \(\frac{X_{N-r} + iY_{N-r}}{2}\)^*
+  = \frac{X_r + i Y_r}{2} + \(\frac{X^*_r + iY^*_r}{2}\)^*
+  = \frac{X_r + i Y_r}{2} + \frac{X_r - iY_r}{2}
+  =  X_r.
+\end{dmath}
+Similarly,
+\begin{dmath}
+  \frac{Z_r - Z_{N-r}^*}{2i} =  Y_r.
+\end{dmath}
+Thus we can compute the Fourier transform of $x$ and $y$ for
+$r=1,\dots,\floor*{\frac{N}{2}}+1$ via
+\begin{equation}\label{packedrcfft}
+  \boxed{X_r = \frac{Z_r + Z_{N-r}^*}{2}},\qquad
+  \boxed{Y_r = \frac{Z_r - Z_{N-r}^*}{2i}}.
+\end{equation}
+For $r$=0, we use the fact that $Z$ is cyclic, so $Z_N=Z_0$, and
+\begin{equation}\label{packedrcfft0}
+  \boxed{X_0 = \Re{Z_0},\qquad  Y_0 = \Im{Z_0}.}
+\end{equation}
+Since $X_r^*=X_{N-r}$, we don't have to store all of the data in
+equation~\eqref{packedrcfft}, but just for
+$r=0,\dots,\floor*{N/2}-1$.  The data flow diagram for this
+technique is given in Figure~\ref{packedfftflow}.
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{packedfft}
+  \caption{Data flow diagram for packed real-to-complex transform
+    given in equation~\eqref{packedrcfft}.}
+  \label{packedfftflow}
+\end{figure}
+The inverse transform $(X,Y)\rightarrow(x,y)$ is performed by
+computing $Z$ from $X$ and $Y$ via
+\begin{align}
+  Z_0 &= \Re{X_0} + i \Re{Y_0}\\
+  \label{packinvr}
+  Z_r &= X_r + iY_r, \qquad r = 1,\dots, \floor*{\frac{N}{2}} \\
+  \label{packinvNr}
+  Z_{N-r} &= X_{r}^* + iY_{r}^*, \qquad r = 1,\dots, \floor*{\frac{N}{2}}.
+\end{align}
+Note that, for even $N$, if $r=N/2$, then $N-r=r$, and
+equations~\eqref{packinvr} and~\eqref{packinvNr} are consistent but
+redundant.  The data flow diagram for an inverse packed FFT is shown
+in Figure~\ref{packedifftflow}.
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{packedifft}
+  \caption{Data flow diagram for complex-to-real packed FFT.}
+  \label{packedifftflow}
+\end{figure}
+
+
+\subsection{Computing one even-length $\mathbb{R}$ transform}
+\label{even1d}
+
+Let $x=\left\{x_\ell\right\}_{r=0}^{N-1}$ be the real-valued input and
+suppose $N\mid{}2$. Let $X=\Four_N\(x\)$ be the length-$N$ transform
+of $x$.  Let $x_{\rm{e}}=\left\{x_{2\ell}\right\}$ and
+$x_{\rm{o}}=\left\{x_{2\ell+1}\right\}$, and
+\begin{dmath}
+  z_\ell = x_{2\ell} + i x_{2\ell + 1},
+  \quad \text {for } \ell \no= 0,\dots, \frac{N}{2} -1
+\end{dmath}
+and denote $Z=\Four_{N/2}\(z\)$, $E=\Four_{N/2}\(x_{\rm e}\)$, and
+$O=\Four_{N/2}\(x_{\rm o}\)$.  From the linearity of the Fourier
+transform, $Z=E+iO$.  Since $x_{\rm{e}}$ and $x_{\rm{o}}$ are real,
+their transforms are Hermitian-symmetric (ie $E_{N/2-r}=E_r^*$ and
+$O_{N/2-r}=O_r^*$), one can easily verify that
+\begin{align}
+  E_r &= \frac{1}{2}\(Z_r + Z_{\frac{N}{2}-r}^*\), \\
+  O_r &= \frac{i}{2}\(Z_{\frac{N}{2}-r}^*-Z_r\).
+\end{align}
+We can compute a length--$N$ FFT from two length--$N/2$ FFTs via
+\begin{dmath}
+  X_r
+  = \sum_{\ell=0}^{N-1} x_\ell \omega_N^{r\ell}
+  = \sum_{\ell=0}^{N/2-1} x_{2\ell} \omega_{N/2}^{r\ell}
+  + \omega_N^r  \sum_{\ell=0}^{N/2-1} x_{2\ell+1} \omega_{N/2}^{r\ell}
+  = E_r + \omega_N^r O_r,
+\end{dmath}
+which simplifies to
+\begin{dmath}
+  X_r
+  = \frac{1}{2}\(Z_r + Z_{\frac{N}{2}-r}^*\)
+  + \omega_N^r \frac{i}{2}\(Z_{\frac{N}{2}-r}^*-Z_r\),
+\end{dmath}
+so we can compute $X$ from $Z$ via
+
+\begin{dmath}\label{rcfftpost}
+  \boxed{
+    X_r
+    = Z_r \frac{1 - i\omega_N^r}{2} + Z_{\frac{N}{2}-r}^* \frac{1 + i\omega_N^r}{2}
+    \quad\text{ for } r = 1,\dots\,\frac{N}{2}-1.}
+\end{dmath}
+We can compute $X_{N/2}$ via the fact that $Z_{N/2}=Z_0$, so
+\begin{dmath}
+  X_{\frac{N}{2}}
+  = Z_{\frac{N}{2}} \frac{1 - i\omega_N^{N/2}}{2}
+  + Z_{\frac{N}{2}-\frac{N}{2}}^* \frac{1 + i\omega_N^{N/2}}{2}
+  = Z_0 \frac{1 + i}{2} +  Z_0^* \frac{1 -i}{2}
+%  = \Re{Z_0} - \Im{Z_0}.
+\end{dmath}
+which gives
+\begin{dmath}\label{XN}
+  \boxed{X_{\frac{N}{2}} = \Re{Z_0} - \Im{Z_0}.}
+\end{dmath}
+Similarly, 
+\begin{dmath}\label{X0}
+  \boxed{X_0 
+    %= Z_0 \frac{1 - i\omega_N^0}{2} +  Z_{\frac{N}{2}-0}^* \frac{1 + i\omega_N^0}{2}
+  %= Z_0 \frac{1 - i}{2} + Z_0^* \frac{1 + i}{2}
+  = \Re{Z_0} + \Im{Z_0}.}
+\end{dmath}
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{rcffteven}
+  \caption{Data flow diagram for even-length real-to-complex FFT.}
+  \label{rcffteven}
+\end{figure}
+
+To compute a Hermitian-symmetric to real-valued FFT, one inverts
+equation~\eqref{rcfftpost} to get $Z_r$ from $X_r$.  From
+equation~\eqref{rcfftpost}, we have
+\begin{eqnarray}
+  \label{2xr}
+  2 X_r &=& Z_r \(1 - i \omega_N^r \) + Z_{N/2 -r}^* \(1 + i \omega_N^r \)
+  \\
+  \label{2xN2r}
+  2 X_{N/2 -r}^* &=& Z_r \( 1 + i \omega_N^r \) + Z_{N/2 -r}^* \( 1 - i \omega_N^r \)
+\end{eqnarray}
+Taking equation~\ref{2xr} times $\(1-i\omega_N^r\)$ minus
+equation~\ref{2xN2r} times $\(1+i\omega_N^r\)$, we get
+\begin{dmath}
+  Z_r
+  = X_r \frac{1 + i \omega_N^{-r}}{2}
+   + X^*_{\frac{N}{2}-r} \frac{1 - i \omega_N^{-r}}{2}
+  %Z_r = X_r\frac{1+i\omega_N^{-r}}{2} - X_{N/2-r}^*\frac{1-i\omega_N^{-r}}{2}.
+\end{dmath}
+From equations~\eqref{XN} and~\eqref{X0}, we also have, using the fact
+that $X_{N/2}$ is real-valued, that
+\begin{dmath}
+  Z_0 = \frac{X_0 + X_{N/2}}{2} + i \frac{X_0 - X_{N/2}}{2}.
+\end{dmath}
+However, note that these are the normalized transforms.  Removing the
+factor of 2, we get
+\begin{eqnarray}
+  Z_r
+  &=& X_r \(1 + i \omega_N^{-r}\)
+  + X^*_{\frac{N}{2}-r} \(1 - i \omega_N^{-r}\), \quad r = 1,\dots,N-1 \\
+  Z_0 &=& X_0 + X_{N/2} + i \(X_0 - X_{N/2}\)
+\end{eqnarray}
+which can be reduced to one case:
+\begin{dmath}\label{xr}
+\boxed{Z_r 
+  = X_r \(1 + i \omega_N^{-r}\)
+  + X^*_{\frac{N}{2}-r} \(1 - i \omega_N^{-r}\), \quad r = 0,\dots,N-1}.
+\end{dmath}
+which gives us the pre-processing stage for the complex-to-real FFT
+when the problem size is even.  The data flow diagram is given in
+Figure~\ref{crffteven}.
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{crffteven}
+  \caption{Data flow diagram for even-length complex-to-real FFT.}
+  \label{crffteven}
+\end{figure}
+
+
+\subsubsection{Strides}
+The real-to-complex data flow diagram in Figure~\ref{rcffteven} starts
+with computing $z$ from $x$.  When the input stride is 1, this is a
+simple cast operation.  When the input stride is greater than 1 more
+work is required, as the real and complex parts of $z$ are no longer
+contiguous in memory.  One might be able to abuse the split array
+format\footnote{\href{http://www.fftw.org/fftw3_doc/Interleaved-and-split-arrays.html}{FFTW},
+  \href{https://docs.nvidia.com/cuda/cufft/index.html}{cuFFT}}, where
+a complex array is stored in separate real and complex buffers.  One
+points the real buffer to $x_0$ and the imaginary buffer to $x_1$ and
+then adjusts the strides accordingly.  From the rocFFT
+documentation\footnote{\href{https://rocfft.readthedocs.io/en/latest/library.html\#transform-and-array-types}{rocFFT:
+    Transform and Array types}}, one is led to believe that the
+complex planar format supports this already.  Note that, as of
+2019-05-27, the complex-to-complex transform does not support
+\lstinline{rocfft_array_type_complex_planar}.
+
+
+\subsection{$N\nmid{}2$ real-complex transforms}
+
+Q: if, for example, $N\nmid{}3$, can we somehow pack 3 FFTs together?
+
+Alternatively, we can probably just put the data into a complex array
+with zero imaginary part and then do a the FFT on that, keeping just
+the part that we need.
+
+If $N$ is prime, then we need to do Bluestein.  However, to zero-pad
+from $N$ to $2N$ for the Bluestein convolution gives us a problem size
+that is divisible by 2, which means that we can presumably do both the
+insertion into a larger buffer and the even/odd to complex packing at
+the same time, at which point we now have a complex convolution
+(perhaps).
+
+Q: for convolutions of real input, can we just abuse the multiply and
+avoid having to do all of the extra work in the post/pre processing
+stage?  I kind of doubt it, but worth checking out.
+
+\section{Multi-dimensional transforms}
+
+Multidimensional transforms apply Hermitian symmetry in the last
+dimension.  For 2D transforms, this is the $y$-direction, and for 3D
+this is the $z$-direction.
+
+\subsection{Computation via complex transform with zero imaginary part}
+
+The least complicated technique for computing a multidimensional
+real/complex FFT is to simply compute a complex/complex FFT with zero
+imaginary part, as in subsection~\ref{embed1d}.  The memory footprint
+of this technique can be reduced by using the planar complex format.
+This works in all cases, and may actually be fairly efficient for very
+small problem sizes, particularly if the planar complex format is
+available.
+
+\subsection{Computation via packed 1D FFTs}
+
+In subsection~\ref{packed1d}, we demonstrated a technique to compute
+two real/complex 1D transforms using one complex/complex transform.
+For multidimensional transforms, which start with multiple 1D
+transforms to perform in the last direction, we can effectively batch
+two 1D real/complex transforms together.  If the total problem size is
+odd, there will be one transform leftover which can be computed by
+embedding the real data into a complex array as in
+subsection~\ref{embed1d}.  If the other dimensions are not very small,
+then this shouldn't be too costly as compared with the even case.
+
+The planar data format is important for this case, as it allows one to
+perform complex/complex transforms in the last dimension of a
+multidimensional without having to copy the data to a separate buffer.
+
+\subsection{Computation for even-length data}
+
+The algorithms for the real-complex transforms given in
+subsection~\ref{even1d} can be used in the multi-dimensional case if
+the last dimension is even.
+
+For multi-dimensional transforms, we need to apply this in the last
+dimension multiple times.  For batched transforms, this might be
+annoying, as the 1D transform is already batched when applied to a 2D
+(or 3D) transform, and then batching the 2D (or 3D) transform will
+likely introduce a non-uniform distance parameter, though is appears
+that we may have a solution using thread blocks.  Another possibility
+is to create multiple pre/post-kernel nodes in the tree.
+
+For a complex-complex 2D,
+$\Four=\Four_x\circ\Four_y=\Four_y\circ\Four_x$, ie the sub-transforms
+commute.  This isn't the case for a 2D real-complex transform when
+taking advantage of Hermitian symmetry for the output.  To see this,
+note that the input of a 2D real-to-complex FFT has $N_x\times{}N_y$
+real values, the output is $N_x\times{}\(\floor{N_y/2} + 1\)$ complex
+values, which is not symmetric in $N_x\leftrightarrow{}N_y$.  The
+real-to-complex transform must then consist of first performing $N_x$
+real-to-complex in the $y$ direction, followed by $\floor{N_y/2} + 1$
+complex-to-complex transforms in the $x$ direction.
+In other words, since
+\begin{dmath}\label{nocommute}
+  \Four_{x}\circ\text{post-process}_y\circ\Four_{y}
+  \neq
+  \Four_{x}\circ\Four_{y}\circ\text{post-process}_y
+\end{dmath}
+we cannot use the fact that $\Four_{x}\circ\Four_{y} = \Four_{xy}$.
+It is easy to see why equation~\eqref{nocommute} is true, since
+\begin{align}
+  \Four_{y}
+  &: N_x\times\frac{N_y}{2}\rightarrow N_x\times \frac{N_y}{2}\\
+  \text{post-process}
+  &: N_x\times\frac{N_y}{2}\rightarrow N_x\times \(\frac{N_y}{2}+1\)\\
+  \Four_{x}
+  &: N_x\times\(\frac{N_y}{2}+1\)\rightarrow N_x\times \(\frac{N_y}{2} +1\)
+\end{align}
+so, for the dimensions to match, we must perform $\Four_{y}$, then
+$\text{post-process}$, and then $\Four_{x}$.
+
+For a 2D complex-to-real transform, one performs the inverse
+complex-to-real transform in the $y$ direction $N_x$ times, then
+performs $N_y/2$ inverse complex-to-complex transforms in the $x$
+direction.  In inverse case, however, one can make use of a 2D
+complex-complex transform: the pre-processing can be applied, taking
+the data from size $N_x\times{}\(Ny/2+1\)$ to $N_x\times{}Ny/2$, which
+can be then transformed directly using a 2D complex-to-complex inverse
+FFT.  This makes use of the fact that
+\begin{dmath}
+  \Four_{x}^{-1}  \circ  \Four_{y}^{-1} \circ \text{pre-process}_y
+  = \Four_{xy}^{-1}\circ\text{pre-process}_y
+  = \Four_{yx}^{-1}\circ\text{pre-process}_y
+\end{dmath}
+where the Fourier transforms are complex-complex.  Looking at
+\begin{align}
+  \text{pre-process}_y
+  &: N_x\times\(\frac{N_y}{2}+1\)\rightarrow N_x\times \frac{N_y}{2}\\
+  \Four_{y}^{-1}
+  &: N_x\times\frac{N_y}{2}\rightarrow N_x\times \frac{N_y}{2}\\
+  \Four_{x}^{-1}
+  &: N_x\times\frac{N_y}{2}\rightarrow N_x\times \frac{N_y}{2}
+\end{align}
+one can see that, once the pre-processing is applied, all of the
+dimensions match.
+
+For 3D and higher transforms of dimension $d$, the direct transform
+algorithm is
+\begin{dmath}
+  \Four_{d} \circ \text{post-process}_d
+  \circ \Four_{d-1} \circ \dots \circ \Four_1
+  =
+  \Four_{d} \circ \text{post-process}_d  \circ \Four_{1 \dots (d-1)},
+\end{dmath}
+ie one performs $N_1\times{}N_{d-1}$ FFTs and post-process in the
+dimension $d$, followed by a $N_d$ $d-1$-dimensional transforms in the
+other dimensions.  For the inverse transform, we have
+\begin{dmath}
+  \text{pre-process}_d \circ \Four_d \circ \dots \circ \Four_1
+  =
+  \text{pre-process}_d \circ \Four_{d\dots{}1}
+\end{dmath}
+which is simply pre-processing in dimension $d$ followed by a
+complex-complex transform on the entire array.
+
+\end{document}
+
+%%  LocalWords:  FFTs rocFFT FFT iy iY packedrcfft packinvr packinvNr
+%%  LocalWords:  iO Hermitian ie rcfftpost XN pre FFTW cuFFT rocfft
+%%  LocalWords:  Bluestein Multi multi prepostPlan xy nocommute Ny yx
+
