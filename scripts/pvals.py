@@ -64,12 +64,12 @@ def main(argv):
                 #w, pw = scipy.stats.wilcoxon(row0[1], row1[1])
                 stat, pwu = scipy.stats.mannwhitneyu(row0[1], row1[1])
                 stat, pkru = scipy.stats.kruskal(row0[1], row1[1])
-                print(scipy.stats.ttest_ind(row0[1], row1[1]))
+                #print(scipy.stats.ttest_ind(row0[1], row1[1]))
                 median0 = np.median(row0[1])
                 median1 = np.median(row1[1])
-                pvals.append([N, pm, pwu, pkru, median0,median1, median0/median1])
+                pvals.append([N, pm, median0,median1, median0/median1])
 
-    print("size, median test, mwu, prku, median0, median1:")
+    print("size, p_median_test, median0, median1, speedup")
     for vals in pvals:
         print("\t".join(str(x) for x in vals))
         
