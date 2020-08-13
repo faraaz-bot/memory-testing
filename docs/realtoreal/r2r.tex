@@ -1,0 +1,76 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Real-to-Real FFT Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This document contains notes for computing real-to-real FFTs (like
+sine transforms) for \texttt{rocFFT}.
+
+
+
+\subsection{DST-I}
+
+
+Given $\{x_n\}_{n=0}^{N-1}$,
+\begin{dmath}
+  X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}(n+1)(k+1)\right]
+\end{dmath}
+It would appear that this can be computed from a FFT of length $N$
+with pre/post-processing.
+
+
+\subsection{DST-IV}
+
+Given $\{x_n\}_{n=0}^{N-1}$,
+\begin{dmath}
+  X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}\(n+\frac{1}{2}\)\(k+\frac{1}{2}\)\right]
+\end{dmath}
+It would appear that this can be computed from a FFT of length $N$
+with pre/post-processing.
+
+\end{document}
