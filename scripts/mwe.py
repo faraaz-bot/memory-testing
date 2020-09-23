@@ -63,8 +63,10 @@ def bitreverse(x, Nbit):
         x >>= 1
     return result
 
-# Iterative Cooley-Tukey, assuming length is a power of 2
+# Iterative Cooley-Tukey, assuming length is a power of 2, DIF
 def icooley_tukey_pow2(x):
+    # DIF: decimation in frequency, which refers to the fact that the
+    # finest stage (ie neighbouring values) is done last.
     N = x.size
     halfN = int(N / 2)
     log2N = int(np.log(N) / np.log(2))
