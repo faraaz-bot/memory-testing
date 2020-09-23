@@ -36,7 +36,7 @@ def naive_rmul(x):
         X[k] = np.dot(x, roots(N, k))
     return X
 
-# Cooley-Tukey, assuming length is a power of 2
+# Recursive Cooley-Tukey, assuming length is a power of 2
 def cooley_tukey_pow2(x):
     N = x.size
     if N == 1:
@@ -53,6 +53,46 @@ def cooley_tukey_pow2(x):
         X[k+N2] = E[k] - r * O[k]
 
     return X
+
+# The dreaded bit-reverse:
+def bitreverse(x, Nbit):
+    result = 0
+    for i in range(Nbit):
+        result <<= 1
+        result |= x & 1
+        x >>= 1
+    return result
+
+# Iterative Cooley-Tukey, assuming length is a power of 2
+def icooley_tukey_pow2(x):
+    N = x.size
+    halfN = int(N / 2)
+    log2N = int(np.log(N) / np.log(2))
+    
+    # Length log(N) loop:
+    for s in range(0, log2N):
+        a = int(pow(2, s))
+        b = int(N / a)
+        halfb = int(b / 2)
+        # Length N/2 loop:
+        for l in range(halfb):
+            for k in range(a):
+                p = l + k * b
+                q = p + halfb
+                r = np.exp(-2j * np.pi * l / b)
+                xp = x[p]
+                xq = x[q]
+                x[p] = xp + xq
+                x[q] = r * (xp - xq)
+                
+    # bit-reverse:
+    for p in range(N):
+        q = bitreverse(p, log2N)
+        if(p > q):
+            x[p], x[q] = x[q], x[p]
+        
+    return x
+
 
 # Cooley-Tukey, assuming length is a product N1 N2
 def cooley_tukey_decomp(x, N1, N2):
@@ -88,15 +128,16 @@ def compare(y, f1, f2):
     k1, k2 = f1(y), f2(y)
     return la.norm(k1-k2) / la.norm(k1)
 
-
-y = nr.rand(64)
+N = 64
+y = nr.rand(N) + 1j * nr.rand(N)
 print('rmul', compare(y, naive, naive_rmul))
 print('mmul', compare(y, naive, naive_mmul))
 print('pow2', compare(y, naive, cooley_tukey_pow2))
 print('dec8', compare(y, naive, lambda y: cooley_tukey_decomp(y, 4, 16)))
+print('ipow2', compare(y, naive, icooley_tukey_pow2))
+#icooley_tukey_pow2(y)
 
-
-y = nr.rand(7)
+y = nr.rand(7) + 1j * nr.rand(7)
 N = y.size
 A = np.zeros((N, N), np.complex64)
 for k in range(N):
