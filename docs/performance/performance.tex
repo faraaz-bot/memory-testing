@@ -57,7 +57,11 @@ transposes.  This is 7 kernels in total:
 \begin{verbatim}
 rocfft-rider-d --length 4 4 4 | grep KERNEL | wc -l 7
 \end{verbatim}
-3 transposes is already enough.  With fused kernels, this should be
+3 transposes is already enough. The task has been implemented with 
+\href{http://ontrack-internal.amd.com/browse/SWDEV-244390}{SWDEV-244390}
+
+
+With fused kernels, this should be
 just 3 kernels in total.
 
 There is no ticket for this improvement.  This would be a smallish
@@ -96,7 +100,7 @@ it may be possible to launch a single kernel to compute all transforms
 by simply loading the data into LDS, thus avoiding a transpose for
 writing to global memory.  TODO: compute valid cases.
 
-Since LDS if 64KB\footnote{Wich ought to be enough for
+Since LDS is 64KB\footnote{Wich ought to be enough for
   anybody\ldots.}, we can fit $8192=2^{13}$ double or $16384=2^{14}$
 floats, which would allow for 3D transforms of
 $16\times{}16{}\times{}32$ doubles, or 2D transforms of size
@@ -188,9 +192,10 @@ high/low table), or even just on-device computation.  There is a lot
 of literature on this.  For example,
 \url{https://ieeexplore.ieee.org/document/7780097}.
 
-There are no tickets for this feature.  Impact is unknown.
+Ticket for this feature is \href{http://ontrack-internal.amd.com/browse/SWDEV-247571}
+{SWDEV-247571}.  Impact is unknown.
 
-\section{more radices}
+\section{More radices}
 
 rocFFT currently supports radix 2, 3, and 5.  Radix 7 is a candidate
 for inclusion as well.
@@ -233,5 +238,21 @@ be able to avoid a synchronization step, which should help as well.
 
 There is no ticket for this feature.  The implementation would be
 small.
+
+\section{Global memory channel conflict}
+
+We observed global memory channel conflict has big impact on pow-of-2
+cases. For transpose, we could apply extra padding or diangnoal 
+transpose \href{http://ontrack-internal.amd.com/browse/SWDEV-247591}
+{SWDEV-247591}. More attendtion may be for regular batched FFT kernel
+or non-unit stride transpose.
+
+
+\section{Data-Parallel Primitives}
+Data-Parallel Primitives(DPP) or shuffle is another choice other than
+LDS. We need prototype to evaluate the performance first. This will be
+a large refactoring if we need it. See details in 
+\href{http://ontrack-internal.amd.com/browse/SWDEV-247569}
+{SWDEV-247569}.
 
 \end{document}
