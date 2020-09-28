@@ -1,0 +1,71 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Cooley--Tukey and Stockham FFTs}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+
+\section{Cooley--Tukey}
+
+The Cooley--Tukey algorithm was the first FFT algorithm developed.
+For $N=2^p$, it involves $p$ butterfly stages followed by a
+reshuffling or ``bit-reversal'' stage.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{ct}
+  \caption{Cooley-Tukey algorithm data flow diagram, DIF.}
+  \label{ct}
+\end{figure}
+
+
+\section{Stockham}
+
+
+
+\end{document}
