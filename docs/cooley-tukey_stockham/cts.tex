@@ -57,14 +57,17 @@
 
 Notation:
 \begin{dmath}
+  \label{DFT}
   X_k = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
 \end{dmath}
 \begin{dmath}
   \omega_N = e^{\frac{-2 \pi i}{N}}
 \end{dmath}
 
-The DIF algorithm has the bit-reversal at the input, and the DIT
-algorithm as the bit-reversal at the output.
+The DIT algorithm breaks RHS of equation~\eqref{DFT} into into even
+and odd parts; the DIF algorithm breaks it into halves.  The DIF
+algorithm has the bit-reversal at the input, and the DIT algorithm as
+the bit-reversal at the output. (See Sloan 1.9.5).
 
 \section{Cooley--Tukey}
 
@@ -74,12 +77,29 @@ The Cooley--Tukey algorithm was the first FFT algorithm developed.
 For $N=2^p$, it involves $p$ butterfly stages followed by a
 reshuffling or ``bit-reversal'' stage.
 
+\begin{dmath}
+  X_k
+  = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
+  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{\(2n+1\)k}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
+  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{2nk}\omega_N^{k}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_{N/2}^{nk}
+  +\omega_N^{k}\sum_{n=0}^{N/2-1} x_{2n+1} \omega_{N/2}^{nk}
+  = \mathcal{F}\[\{x_{2n}\}_{n=0}^{\frac{N}{2}-1}\]_k
+  +\omega_N^{k}\mathcal{F}\[\{x_{2n+1}\}_{n=0}^{\frac{N}{2}-1}\]_k
+\end{dmath}
+
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{ct}
   \caption{Cooley-Tukey algorithm data flow diagram, DIT.}
   \label{ct}
 \end{figure}
+
+\subsection{DIF}
+
+
 
 \begin{dmath}
   X_k
@@ -122,26 +142,9 @@ so
   - \mathcal{F}_{N/2}\[\{x_n\}_{n=N/2}^{N - 1}\]\).
 \end{dmath}
 
-\subsection{DIF}
-
-On the other hand,
-\begin{dmath}
-  X_k
-  = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
-  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
-  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{\(2n+1\)k}
-  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
-  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{2nk}\omega_N^{k}
-  = \sum_{n=0}^{N/2-1} x_{2n} \omega_{N/2}^{nk}
-  +\omega_N^{k}\sum_{n=0}^{N/2-1} x_{2n+1} \omega_{N/2}^{nk}
-  = \mathcal{F}\[\{x_{2n}\}_{n=0}^{\frac{N}{2}-1}\]_k
-  +\omega_N^{k}\mathcal{F}\[\{x_{2n+1}\}_{n=0}^{\frac{N}{2}-1}\]_k
-\end{dmath}
-
-
-
 \section{Stockham}
 
-
+The Stockham algorithm does not have an explicit bit-reversal stage.
+Instead, each butterfly is followed by a partial re-ordering.
 
 \end{document}
