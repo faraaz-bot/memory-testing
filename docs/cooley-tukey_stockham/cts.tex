@@ -55,12 +55,20 @@
 
 \section{Radix-2 FFTS}
 
-
+Notation:
 \begin{dmath}
   X_k = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
 \end{dmath}
+\begin{dmath}
+  \omega_N = e^{\frac{-2 \pi i}{N}}
+\end{dmath}
+
+The DIF algorithm has the bit-reversal at the input, and the DIT
+algorithm as the bit-reversal at the output.
 
 \section{Cooley--Tukey}
+
+\subsection{DIT}
 
 The Cooley--Tukey algorithm was the first FFT algorithm developed.
 For $N=2^p$, it involves $p$ butterfly stages followed by a
@@ -72,7 +80,6 @@ reshuffling or ``bit-reversal'' stage.
   \caption{Cooley-Tukey algorithm data flow diagram, DIT.}
   \label{ct}
 \end{figure}
-
 
 \begin{dmath}
   X_k
@@ -99,12 +106,9 @@ and
   = \sum_{n=0}^{N/2-1} x_n \omega_N^{n\(2k+1\)}
   + \(-1\)^{2k+1} \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{n\(2k+1\)}
   = \omega_N \(\sum_{n=0}^{N/2-1} x_n \omega_{N/2}^{nk} 
-  - \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_{N/2}^{nk} \)
+  - \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_{N/2}^{nk} \),
 \end{dmath}
-
-
-
-So
+so
 \begin{dmath}
   \{X_{2k}\}_{k=0}^{N/2-1}
   =
@@ -115,8 +119,10 @@ So
   \{X_{2k+1}\}_{k=0}^{N/2-1}
   =
   \omega_N\(\mathcal{F}_{N/2}\[\{x_n\}_{n=0}^{N/2 - 1}\]
-  - \mathcal{F}_{N/2}\[\{x_n\}_{n=N/2}^{N - 1}\]\)
+  - \mathcal{F}_{N/2}\[\{x_n\}_{n=N/2}^{N - 1}\]\).
 \end{dmath}
+
+\subsection{DIF}
 
 On the other hand,
 \begin{dmath}
