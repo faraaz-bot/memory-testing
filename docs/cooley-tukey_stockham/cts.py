@@ -25,15 +25,17 @@ def icooley_tukey_pow2_DIT(x):
     
     # Length log(N) loop:
     for s in range(0, log2N):
-        a = int(pow(2, s))
-        b = N // a
-        halfb = b // 2
+        Nb = int(pow(2, s)) # Number of butterflies
+        lb = N // (2 * Nb) # Length of butterfly
+        print(Nb, lb)
         # Length N/2 loop:
-        for l in range(halfb):
-            for k in range(a):
-                p = l + k * b
-                q = p + halfb
-                r = np.exp(-2j * np.pi * l / b)
+        for n in range(lb):
+            for b in range(Nb):
+                p = n + b * 2* lb
+                q = p + lb
+                print("\t\t", p, q)
+                r = np.exp(-2j * np.pi * n / (2 * lb))
+                print("\t", r)
                 Xp = X[p]
                 Xq = X[q]
                 X[p] = Xp + Xq
@@ -70,22 +72,22 @@ def icooley_tukey_pow2_DIF(x):
         Nb = N // int(pow(2, s + 1)) # Number of butterflies
         lb = N // (Nb * 2)           # Length of butterfly
         print(Nb, lb)
-        for b in range(Nb):
-            for n in range(lb):
+        for n in range(lb):
+            r = np.exp(-2j * np.pi * n / (2*lb) )
+            for b in range(Nb):
                 p = b * lb * 2 + n
                 q = p + lb
                 print("\t", p, q)
-                r = np.exp(-2j * np.pi * Nb / N)
                 print("\t", r)
                 Xp = X[p]
                 Xq = X[q]
-                X[p] = Xp + Xq
-                X[q] = r * (Xp - Xq)
+                X[p] = Xp + r * Xq
+                X[q] = Xp - r * Xq
         
     return X
 
 
-N = 4
+N = 8
 print("Length:", N)
 
 x = nr.rand(N) + 1j * nr.rand(N)
@@ -94,7 +96,7 @@ X0 = np.fft.fft(x)
 
 X = icooley_tukey_pow2_DIT(x)
 
-#print("DIT L-inf error:", np.max(np.abs(X - X0)))
+print("DIT L-inf error:", np.max(np.abs(X - X0)))
 
 print(X0)
 
