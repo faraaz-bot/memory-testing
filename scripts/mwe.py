@@ -109,13 +109,12 @@ def cooley_tukey_decomp(x, N1, N2):
     if N1 == 4:
         # explicit butterfly with twiddles...
         for k2 in range(N2):
-            i1, i2 = k2*N1, (k2+1)*N1
-            t = np.exp(-2j*np.pi*k2/N1/N2 * np.arange(N1))
-            Y[i1:i2] = t * Y[i1:i2]
-            X[k2     ] = Y[i1] +      Y[i1+1] + Y[i1+2] +      Y[i1+3]
-            X[k2+  N2] = Y[i1] - 1j * Y[i1+1] - Y[i1+2] + 1j * Y[i1+3]
-            X[k2+2*N2] = Y[i1] -      Y[i1+1] + Y[i1+2] -      Y[i1+3]
-            X[k2+3*N2] = Y[i1] + 1j * Y[i1+1] - Y[i1+2] - 1j * Y[i1+3]
+            i1, i2 = 4*k2, 4*(k2+1)
+            T = np.exp(-2j*np.pi*k2/4/N2 * np.arange(4)) * Y[i1:i2]
+            X[k2     ] = T[0] +      T[1] + T[2] +      T[3]
+            X[k2+  N2] = T[0] - 1j * T[1] - T[2] + 1j * T[3]
+            X[k2+2*N2] = T[0] -      T[1] + T[2] -      T[3]
+            X[k2+3*N2] = T[0] + 1j * T[1] - T[2] - 1j * T[3]
     else:
         for k2 in range(N2):
             i1, i2 = k2*N1, (k2+1)*N1
@@ -137,12 +136,3 @@ print('mmul', compare(y, naive, naive_mmul))
 print('pow2', compare(y, naive, cooley_tukey_pow2))
 print('dec8', compare(y, naive, lambda y: cooley_tukey_decomp(y, 4, 16)))
 print('ipow2', compare(y, naive, icooley_tukey_pow2))
-#icooley_tukey_pow2(y)
-
-y = nr.rand(7) + 1j * nr.rand(7)
-N = y.size
-A = np.zeros((N, N), np.complex64)
-for k in range(N):
-    A[k, :] = roots(N, k)
-
-print(A)
