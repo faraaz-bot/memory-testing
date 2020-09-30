@@ -6,6 +6,7 @@
 import numpy as np
 import numpy.linalg as la
 import numpy.random as nr
+from numpy.fft import fft
 
 def roots(N, k):
     a = -2j*np.pi/N * k
@@ -131,8 +132,9 @@ def compare(y, f1, f2):
 
 N = 64
 y = nr.rand(N) + 1j * nr.rand(N)
-print('rmul', compare(y, naive, naive_rmul))
-print('mmul', compare(y, naive, naive_mmul))
-print('pow2', compare(y, naive, cooley_tukey_pow2))
-print('dec8', compare(y, naive, lambda y: cooley_tukey_decomp(y, 4, 16)))
-print('ipow2', compare(y, naive, icooley_tukey_pow2))
+print('naive', compare(y, fft, naive))
+print('rmul ', compare(y, fft, naive_rmul))
+print('mmul ', compare(y, fft, naive_mmul))
+print('pow2 ', compare(y, fft, cooley_tukey_pow2))
+print('dec8 ', compare(y, fft, lambda y: cooley_tukey_decomp(y, 4, 16)))
+print('ipow2', compare(y, fft, icooley_tukey_pow2))
