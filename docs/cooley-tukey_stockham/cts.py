@@ -20,6 +20,8 @@ def icooley_tukey_pow2_DIT(x):
     N = x.size
     halfN = N // 2
     log2N = int(np.log(N) / np.log(2))
+
+    X = np.copy(x)
     
     # Length log(N) loop:
     for s in range(0, log2N):
@@ -32,18 +34,18 @@ def icooley_tukey_pow2_DIT(x):
                 p = l + k * b
                 q = p + halfb
                 r = np.exp(-2j * np.pi * l / b)
-                xp = x[p]
-                xq = x[q]
-                x[p] = xp + xq
-                x[q] = r * (xp - xq)
+                Xp = X[p]
+                Xq = X[q]
+                X[p] = Xp + Xq
+                X[q] = r * (Xp - Xq)
                 
     # bit-reverse:
     for p in range(N):
         q = bitreverse(p, log2N)
         if(p > q):
-            x[p], x[q] = x[q], x[p]
+            X[p], X[q] = X[q], X[p]
         
-    return x
+    return X
 
 
 
@@ -54,34 +56,37 @@ def icooley_tukey_pow2_DIF(x):
     N = x.size
     halfN = N // 2
     log2N = int(np.log(N) / np.log(2))
+
+    X = np.copy(x)
     
     # bit-reverse:
     for p in range(N):
         q = bitreverse(p, log2N)
         if(p > q):
-            x[p], x[q] = x[q], x[p]
+            X[p], X[q] = X[q], X[p]
 
     # Length log(N) loop:
-    for s in range(1, log2N + 1):
-        m = int(pow(2, s))
-        a = N // m
-        b = N // a
-        print(a, b)
-        for k in range(a):
-            for l in range(b // 2):
-                p = b * k + l
-                q = p + b // 2
-                print("\t\t", p, q)
-                r = np.exp(-2j * np.pi * k / a)
-                xp = x[p]
-                xq = x[q]
-                x[p] = xp + xq
-                x[q] = r * (xp - xq)
+    for s in range(log2N):
+        Nb = N // int(pow(2, s + 1)) # Number of butterflies
+        lb = N // (Nb * 2)           # Length of butterfly
+        print(Nb, lb)
+        for b in range(Nb):
+            for n in range(lb):
+                p = b * lb * 2 + n
+                q = p + lb
+                print("\t", p, q)
+                r = np.exp(-2j * np.pi * Nb / N)
+                print("\t", r)
+                Xp = X[p]
+                Xq = X[q]
+                X[p] = Xp + Xq
+                X[q] = r * (Xp - Xq)
         
-    return x
+    return X
 
 
 N = 4
+print("Length:", N)
 
 x = nr.rand(N) + 1j * nr.rand(N)
 
@@ -89,11 +94,12 @@ X0 = np.fft.fft(x)
 
 X = icooley_tukey_pow2_DIT(x)
 
-print("DIT L-inf error:", np.max(np.abs(X - X0)))
+#print("DIT L-inf error:", np.max(np.abs(X - X0)))
 
+print(X0)
 
 X = icooley_tukey_pow2_DIF(x)
 print(X)
-print(X0)
+
 print("DIF L-inf error:", np.max(np.abs(X - X0)))
 
