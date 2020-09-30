@@ -12,6 +12,10 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 
+\def\[#1\]{{\left[#1\right]}}
+\def\(#1\){{\left(#1\right)}}
+\DeclarePairedDelimiter\set\{\}
+
 \newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
 
 
@@ -49,6 +53,12 @@
 \begin{document}
 \maketitle
 
+\section{Radix-2 FFTS}
+
+
+\begin{dmath}
+  X_k = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
+\end{dmath}
 
 \section{Cooley--Tukey}
 
@@ -62,6 +72,55 @@ reshuffling or ``bit-reversal'' stage.
   \caption{Cooley-Tukey algorithm data flow diagram, DIT.}
   \label{ct}
 \end{figure}
+
+
+\begin{dmath}
+  X_k
+  = \sum_{n=0}^{N-1}  x_n \omega_N^{nk}
+  = \sum_{n=0}^{N/2-1} x_n \omega_N^{nk} + \sum_{n=N/2}^{N-1} x_n \omega_N^{nk}
+  = \sum_{n=0}^{N/2-1} x_n \omega_N^{nk}
+  + \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{\(n + \frac{N}{2}\)k}
+  = \sum_{n=0}^{N/2-1} x_n \omega_N^{nk}
+  + \omega_N^{\frac{N}{2}k} \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{nk}
+  = \sum_{n=0}^{N/2-1} x_n \omega_N^{nk}
+  + \(-1\)^k \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{nk}
+\end{dmath}
+So
+\begin{dmath}
+  \{X_{2k}\}_{k=0}^{N/2-1}
+  %=
+  %\sum_{n=0}^{N/2-1} x_n \omega_N^{n2k}
+  %+ \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{nk}
+  %\right\}_{k=0}^{N/2 - 1}
+  =
+  \mathcal{F}_{N/2}\[\{x_n\}_{n=0}^{N/2 - 1}\]
+  + \mathcal{F}_{N/2}\[\{x_n\}_{n=N/2}^{N - 1}\]
+\end{dmath}
+\begin{dmath}
+  \{X_{2k+1}\}_{k=0}^{N/2-1}
+  %=
+  %\sum_{n=0}^{N/2-1} x_n \omega_N^{n2k}
+  %+ \sum_{n=0}^{N/2-1} x_{n + \frac{N}{2}} \omega_N^{nk}
+  %\right\}_{k=0}^{N/2 - 1}
+  =
+  \mathcal{F}_{N/2}\[\{x_n\}_{n=0}^{N/2 - 1}\]
+  - \mathcal{F}_{N/2}\[\{x_n\}_{n=N/2}^{N - 1}\]
+\end{dmath}
+
+On the other hand,
+\begin{dmath}
+  X_k
+  = \sum_{n=0}^{N-1} x_n \omega_N^{nk}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
+  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{\(2n+1\)k}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_N^{2nk}
+  +\sum_{n=0}^{N/2-1} x_{2n+1} \omega_N^{2nk}\omega_N^{k}
+  = \sum_{n=0}^{N/2-1} x_{2n} \omega_{N/2}^{nk}
+  +\omega_N^{k}\sum_{n=0}^{N/2-1} x_{2n+1} \omega_{N/2}^{nk}
+  = \mathcal{F}\[\{x_{2n}\}_{n=0}^{\frac{N}{2}-1}\]_k
+  +\omega_N^{k}\mathcal{F}\[\{x_{2n+1}\}_{n=0}^{\frac{N}{2}-1}\]_k
+\end{dmath}
+
 
 
 \section{Stockham}
