@@ -27,15 +27,15 @@ def icooley_tukey_pow2_DIT(x):
     for s in range(0, log2N):
         Nb = int(pow(2, s)) # Number of butterflies
         lb = N // (2 * Nb) # Length of butterfly
-        print(Nb, lb)
+        #print(Nb, lb)
         # Length N/2 loop:
         for n in range(lb):
             for b in range(Nb):
                 p = n + b * 2* lb
                 q = p + lb
-                print("\t\t", p, q)
+                #print("\t\t", p, q)
                 r = np.exp(-2j * np.pi * n / (2 * lb))
-                print("\t", r)
+                #print("\t", r)
                 Xp = X[p]
                 Xq = X[q]
                 X[p] = Xp + Xq
@@ -71,14 +71,14 @@ def icooley_tukey_pow2_DIF(x):
     for s in range(log2N):
         Nb = N // int(pow(2, s + 1)) # Number of butterflies
         lb = N // (Nb * 2)           # Length of butterfly
-        print(Nb, lb)
+        #print(Nb, lb)
         for n in range(lb):
             r = np.exp(-2j * np.pi * n / (2*lb) )
             for b in range(Nb):
                 p = b * lb * 2 + n
                 q = p + lb
-                print("\t", p, q)
-                print("\t", r)
+                #print("\t", p, q)
+                #print("\t", r)
                 Xp = X[p]
                 Xq = X[q]
                 X[p] = Xp + r * Xq
@@ -98,10 +98,10 @@ X = icooley_tukey_pow2_DIT(x)
 
 print("DIT L-inf error:", np.max(np.abs(X - X0)))
 
-print(X0)
+#print(X0)
 
 X = icooley_tukey_pow2_DIF(x)
-print(X)
+#print(X)
 
 print("DIF L-inf error:", np.max(np.abs(X - X0)))
 
