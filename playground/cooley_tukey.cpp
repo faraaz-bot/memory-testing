@@ -11,8 +11,9 @@
 #include<utility>
 #include<vector>
 
-#include<hip/hip_runtime.h>
 #include<fftw3.h>
+#include<hip/hip_runtime.h>
+#include<hip/hip_complex.h>
 
 #define PI 3.141592653589793238462643383279502884L
 
@@ -121,6 +122,63 @@ vector<fftw_complex> fft_ict(vector<fftw_complex>& x)
 }
 
 //
+// Cooley-Tukey FFT on the GPU
+//
+
+__global__ void cooley_tukey1(int a, int b, hipDoubleComplex *x)
+{
+    int l = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int k = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
+
+    if (l >= b/2) return;
+    if (k >= a) return;
+
+    double theta = -2 * PI * l / b;
+    double cost = cos(theta);
+    double sint = sin(theta);
+
+    int p = l + k * b;
+    int q = p + b/2;
+
+    hipDoubleComplex xp = x[p];
+    hipDoubleComplex xq = x[q];
+
+    x[p] = xp + xq;
+    x[q].x = cost * (xp.x - xq.x) - sint * (xp.y - xq.y);
+    x[q].y = cost * (xp.y - xq.y) + sint * (xp.x - xq.x);
+}
+
+vector<fftw_complex> fft_gpu(vector<fftw_complex>& x)
+{
+  auto const N = x.size();
+  auto const log2N = (size_t) log2(N);
+
+  void *X;
+  hipMalloc(&X, N*sizeof(fftw_complex));
+  hipMemcpy(X, x.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
+
+  for (int s = 0; s < log2N; ++s) {
+    auto a = (size_t) pow(2, s);
+    auto b = N / a;
+    dim3 threads(16, 16);
+    dim3 blocks(max(1, b/32), max(1, a/16));
+    cooley_tukey1<<<blocks, threads>>>(a, b, (hipDoubleComplex*) X);
+  }
+
+  vector<fftw_complex> z(N);
+  hipMemcpy(z.data(), X, N*sizeof(fftw_complex), hipMemcpyDeviceToHost);
+  hipFree(X);
+
+  for (size_t p=0; p < N; ++p) {
+    auto q = bitreverse(p, log2N);
+    if (p > q) swap(z[p], z[q]);
+  }
+
+  return z;
+}
+
+
+//
 // Quick compare
 //
 void compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
@@ -130,7 +188,6 @@ void compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
   for (size_t n = 0; n < z1.size(); ++n) {
     double dx = z1[n][0] - z2[n][0];
     double dy = z1[n][1] - z2[n][1];
-    //    cout << n << " " << z1[n][0] << " " << z2[n][0] << endl;
     d += sqrt(dx*dx + dy*dy);
     r += sqrt(z1[n][0] * z1[n][0] + z1[n][1] * z1[n][1]);
   }
@@ -139,15 +196,15 @@ void compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
 
 void test_ct()
 {
-  size_t const n = 4096;
+  size_t const n = 4096*2;
   auto x = random_vector(n);
   auto z1 = fft_fftw(x);
   auto z2 = fft_naive(x);
   auto z3 = fft_ict(x);
-  //  auto z4 = fft_gpu(x);
+  auto z4 = fft_gpu(x);
   compare(z1, z2);
   compare(z1, z3);
-  //  compare(z1, z4);
+  compare(z1, z4);
 }
 
 int main(int argc, char* argv[])
