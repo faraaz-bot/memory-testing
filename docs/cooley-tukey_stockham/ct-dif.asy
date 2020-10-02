@@ -4,7 +4,7 @@ usepackage("amsfonts");
 usepackage("amsfonts");
 usepackage("physics");
 
-// N must be even.
+// N must be a power of 2.
 int N = 16;
 
 real boxw = 1.0;
@@ -29,22 +29,38 @@ void draw_array(pair pos, real boxw, real boxh, int N)
 }
 
 
+real yh = 0;
+
+pair pos = (0, yh);
+draw_array(pos, boxw, boxh, N);
+for(int p = 0; p < N; ++p)
+{
+    int q = bitreverse(p, log2N);
+    pair pp = (boxw * p + 0.5 * boxw, yh - 0.5 * boxh);
+    pair qq = (boxw * q + 0.5 * boxw, yh - boxdh - 0.5 * boxh);
+    draw(pp -- qq, arrowPen, EndArrow);
+}
+
+yh -= boxdh;
+draw_array(pos, boxw, boxh, N);
+
 // Butterflies
 for(int s = 0; s <= log2N; ++s)
 {
-    real yh =-s * boxdh;
     pair pos = (0, yh);
     draw_array(pos, boxw, boxh, N);
-    int a = 2^s;
+    int a = 2^( log2N - s);
     int b = N # a;
+    //write(s);
     for(int l = 0; l < b # 2; ++l)
     {
         for(int k = 0; k < a; ++k)
         {
             int p = l + k * b;
             int q = p + b # 2;
-            pair pp = (boxw * p + 0.5 * boxw, yh - 0.5 * boxh);
-            pair qq = (boxw * q + 0.5 * boxw, yh - 0.5 * boxh);
+            //write("    ", p, q);
+            pair pp = (boxw * p + 0.5 * boxw, yh + boxdh - 0.5 * boxh);
+            pair qq = (boxw * q + 0.5 * boxw, yh + boxdh - 0.5 * boxh);
 
             draw(pp -- pp - (0, boxdh), arrowPen, EndArrow);
             draw(qq -- qq - (0, boxdh), arrowPen, EndArrow);
@@ -52,15 +68,6 @@ for(int s = 0; s <= log2N; ++s)
             draw(qq -- pp - (0, boxdh), arrowPen, EndArrow);
         }
     }
+    yh -= boxdh;
 }
 
-real yh = -(log2N + 1) * boxdh;
-pair pos = (0, yh);
-draw_array(pos, boxw, boxh, N);
-for(int p = 0; p < N; ++p)
-{
-    int q = bitreverse(p, log2N);
-    pair pp = (boxw * p + 0.5 * boxw, yh + boxdh -  0.5 * boxh);
-    pair qq = (boxw * q + 0.5 * boxw, yh - 0.5 * boxh);
-    draw(pp -- qq, arrowPen, EndArrow);
-}

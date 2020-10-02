@@ -71,13 +71,13 @@ def icooley_tukey_pow2_DIF(x):
     for s in range(log2N):
         Nb = N // int(pow(2, s + 1)) # Number of butterflies
         lb = N // (Nb * 2)           # Length of butterfly
-        #print(Nb, lb)
+        print(Nb, lb)
         for n in range(lb):
             r = np.exp(-2j * np.pi * n / (2*lb) )
             for b in range(Nb):
                 p = b * lb * 2 + n
                 q = p + lb
-                #print("\t", p, q)
+                print("\t", p, q)
                 #print("\t", r)
                 Xp = X[p]
                 Xq = X[q]
@@ -88,20 +88,21 @@ def icooley_tukey_pow2_DIF(x):
 
 
 def istockham(x):
+    # Straigth from 1.71 in Van Loan.
     X = np.copy(x)
     N = X.size
     halfN = N // 2
     log2N = int(np.log(N) / np.log(2))
 
     for q in range(1, log2N + 1):
-        print(q)
+        #print(q)
         L = pow(2, q)
         r = N // L
         Lstar = L // 2
         Y = np.copy(X)
         for k in range(r):
             for j in range(Lstar):
-                print("\t",k, j)
+                #print("\t",k, j)
                 omega = np.exp(-2j * np.pi * j / L)
                 tau = omega * Y[(k + r) * Lstar + j]
                 X[k * L + j]         = Y[k * Lstar + j] + tau
