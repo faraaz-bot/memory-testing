@@ -1,0 +1,12 @@
+
+hflags = -Wall -I/usr/include
+
+rule hipcc
+  command = hipcc $hflags -c $in -o $out
+
+rule link
+  command = hipcc $in -o $out $libs
+
+build cooley_tukey.o: hipcc cooley_tukey.cpp
+build cooley_tukey: link cooley_tukey.o
+  libs = -lfftw3
