@@ -42,11 +42,13 @@ for(int p = 0; p < N; ++p)
 }
 
 yh -= boxdh;
+pos = (0, yh);
 draw_array(pos, boxw, boxh, N);
 
 // Butterflies
 for(int s = 0; s <= log2N; ++s)
 {
+    yh -= boxdh;
     pair pos = (0, yh);
     draw_array(pos, boxw, boxh, N);
     int a = 2^( log2N - s);
@@ -68,6 +70,5 @@ for(int s = 0; s <= log2N; ++s)
             draw(qq -- pp - (0, boxdh), arrowPen, EndArrow);
         }
     }
-    yh -= boxdh;
 }
 

@@ -154,6 +154,15 @@ so
 \section{Stockham}
 
 The Stockham algorithm does not have an explicit bit-reversal stage.
-Instead, each butterfly is followed by a partial re-ordering.
+Instead, each butterfly is combined with a partial re-ordering.  The
+butterflies are equivalent to the relevant Cooley--Tukey alrogithm.
+The data flow is shown in Figure~\ref{stockham-dit}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{stockham-dit}
+  \caption{Stockham algorithm data flow diagram, DIF.}
+  \label{stockham-dit}
+\end{figure}
 
 \end{document}
