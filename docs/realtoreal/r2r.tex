@@ -63,6 +63,12 @@ Given $\{x_n\}_{n=0}^{N-1}$,
 It would appear that this can be computed from a FFT of length $N$
 with pre/post-processing.
 
+This is equivalent to the negative imaginary part of the DFT of
+\begin{dmath}
+  0, x_0, x_1, \dots, x_{N-1}, 0, -x_{N-1}, \dots, -x_1, -x_0
+\end{dmath}
+and taking indices $1,\dots,N$.
+
 
 \subsection{DST-IV}
 
