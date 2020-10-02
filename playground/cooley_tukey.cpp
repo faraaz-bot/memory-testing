@@ -12,8 +12,8 @@
 #include<vector>
 
 #include<fftw3.h>
-#include<hip/hip_runtime.h>
 #include<hip/hip_complex.h>
+#include<hip/hip_runtime.h>
 
 #define PI 3.141592653589793238462643383279502884L
 
@@ -28,25 +28,35 @@ vector<fftw_complex> random_vector(size_t n)
   random_device rd;
   mt19937 gen(rd());
   uniform_real_distribution<double> dis(0.0, 1.0);
-  for (auto xi : x) {
-    *xi = dis(gen);
+  for (size_t i = 0; i < n; ++i) {
+    x[i][0] = dis(gen);
+    x[i][1] = dis(gen);
   }
   return x;
 }
 
 //
+// Copy helper for fftw_complex (which aren't assignable!)
+//
+vector<fftw_complex> copy(vector<fftw_complex> const & x)
+{
+  vector<fftw_complex> z(x.size());
+  for (size_t i = 0; i < x.size(); ++i)
+  {
+      z[i][0] = x[i][0];
+      z[i][1] = x[i][1];
+  }
+  return z;
+}
+
+//
 // Naive DFT
 //
-vector<fftw_complex> fft_naive(vector<fftw_complex>& x)
+vector<fftw_complex> fft_naive(vector<fftw_complex> const & x)
 {
   auto const N = x.size();
 
   vector<fftw_complex> z(N);
-  for (size_t n = 0; n < N; ++n) {
-    z[n][0] = 0.0;
-    z[n][1] = 0.0;
-  }
-
   for (size_t k = 0; k < N; ++k) {
     for (size_t n = 0; n < N; ++n) {
       double theta = -2 * PI * n * k / N;
@@ -60,10 +70,10 @@ vector<fftw_complex> fft_naive(vector<fftw_complex>& x)
 //
 // FFTW backed FFT
 //
-vector<fftw_complex> fft_fftw(vector<fftw_complex>& x)
+vector<fftw_complex> fft_fftw(vector<fftw_complex> const & x)
 {
-  vector<fftw_complex> z(x.size());
-  auto p = fftw_plan_dft_1d(x.size(), x.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+  auto z = copy(x);
+  auto p = fftw_plan_dft_1d(z.size(), z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
   fftw_execute(p);
   fftw_destroy_plan(p);
   return z;
@@ -83,17 +93,12 @@ size_t bitreverse(size_t x, size_t n) {
   return r;
 }
 
-vector<fftw_complex> fft_ict(vector<fftw_complex>& x)
+vector<fftw_complex> fft_ict(vector<fftw_complex> const & x)
 {
   auto const N = x.size();
   auto const log2N = (size_t) log2(N);
 
-  vector<fftw_complex> z(N);
-  for (size_t n = 0; n < N; ++n) {
-    z[n][0] = x[n][0];
-    z[n][1] = x[n][1];
-  }
-
+  auto z = copy(x);
   for (size_t s = 0; s < log2N; ++s) {
     auto a = (size_t) pow(2, s);
     auto b = N / a;
@@ -148,7 +153,7 @@ __global__ void cooley_tukey1(int a, int b, hipDoubleComplex *x)
     x[q].y = cost * (xp.y - xq.y) + sint * (xp.x - xq.x);
 }
 
-vector<fftw_complex> fft_gpu(vector<fftw_complex>& x)
+vector<fftw_complex> fft_gpu(vector<fftw_complex> const & x)
 {
   auto const N = x.size();
   auto const log2N = (size_t) log2(N);
@@ -157,6 +162,7 @@ vector<fftw_complex> fft_gpu(vector<fftw_complex>& x)
   hipMalloc(&X, N*sizeof(fftw_complex));
   hipMemcpy(X, x.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
 
+  auto tic = clock();
   for (int s = 0; s < log2N; ++s) {
     auto a = (size_t) pow(2, s);
     auto b = N / a;
@@ -164,6 +170,10 @@ vector<fftw_complex> fft_gpu(vector<fftw_complex>& x)
     dim3 blocks(max(1, b/32), max(1, a/16));
     cooley_tukey1<<<blocks, threads>>>(a, b, (hipDoubleComplex*) X);
   }
+  hipDeviceSynchronize();
+  auto toc = clock();
+
+  cout << "GPU cycles (inner): " << toc - tic << endl; // echoing this here is kinda gross...
 
   vector<fftw_complex> z(N);
   hipMemcpy(z.data(), X, N*sizeof(fftw_complex), hipMemcpyDeviceToHost);
@@ -179,9 +189,9 @@ vector<fftw_complex> fft_gpu(vector<fftw_complex>& x)
 
 
 //
-// Quick compare
+// Relative difference
 //
-void compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
+double compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
 {
   double d = 0.0;
   double r = 0.0;
@@ -191,20 +201,40 @@ void compare(vector<fftw_complex> const & z1, vector<fftw_complex> const & z2)
     d += sqrt(dx*dx + dy*dy);
     r += sqrt(z1[n][0] * z1[n][0] + z1[n][1] * z1[n][1]);
   }
-  cout << "rel diff: " << d / r << endl;
+  return d / r;
 }
 
 void test_ct()
 {
-  size_t const n = 4096*2;
+  clock_t tic, toc;
+
+  size_t const n = (size_t) pow(2, 22);
   auto x = random_vector(n);
+
+  cout << "1d input length: " << n << endl;
+
+  tic = clock();
   auto z1 = fft_fftw(x);
-  auto z2 = fft_naive(x);
+  toc = clock();
+  cout << "FFTW cycles: " << toc - tic << endl;
+
+  // tic = clock();
+  // auto z2 = fft_naive(x);
+  // toc = clock();
+  // cout << "NAIVE time: " << toc - tic << endl;
+
+  tic = clock();
   auto z3 = fft_ict(x);
+  toc = clock();
+  cout << "ICT cycles: " << toc - tic << endl;
+
+  tic = clock();
   auto z4 = fft_gpu(x);
-  compare(z1, z2);
-  compare(z1, z3);
-  compare(z1, z4);
+  toc = clock();
+  cout << "GPU cycles: " << toc - tic << endl;
+
+  cout << "ICT rel diff " << compare(z1, z3) << endl;
+  cout << "GPU rel diff " << compare(z1, z4) << endl;
 }
 
 int main(int argc, char* argv[])
