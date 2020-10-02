@@ -87,12 +87,35 @@ def icooley_tukey_pow2_DIF(x):
     return X
 
 
+def istockham(x):
+    X = np.copy(x)
+    N = X.size
+    halfN = N // 2
+    log2N = int(np.log(N) / np.log(2))
+
+    for q in range(1, log2N + 1):
+        print(q)
+        L = pow(2, q)
+        r = N // L
+        Lstar = L // 2
+        Y = np.copy(X)
+        for k in range(r):
+            for j in range(Lstar):
+                print("\t",k, j)
+                omega = np.exp(-2j * np.pi * j / L)
+                tau = omega * Y[(k + r) * Lstar + j]
+                X[k * L + j]         = Y[k * Lstar + j] + tau
+                X[k * L + Lstar + j] = Y[k * Lstar + j] - tau
+    
+    return X
+
 N = 8
 print("Length:", N)
 
 x = nr.rand(N) + 1j * nr.rand(N)
 
 X0 = np.fft.fft(x)
+print(X0)
 
 X = icooley_tukey_pow2_DIT(x)
 
@@ -105,3 +128,7 @@ X = icooley_tukey_pow2_DIF(x)
 
 print("DIF L-inf error:", np.max(np.abs(X - X0)))
 
+
+X = istockham(x)
+print(X)
+print("Stockham L-inf error:", np.max(np.abs(X - X0)))
