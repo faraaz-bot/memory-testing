@@ -97,6 +97,32 @@ def icooley_tukey_pow2(x):
     return x
 
 
+# Iterative Cooley-Tukey, assuming length is a power of 2, DIF
+def mwe_icooley_tukey_pow2(x):
+    N = x.size
+    P = 1                       # P tracks the current number of blocks; P doubles every iteration
+    M = N                       # M tracks the size of the current block; M halfs every iteration
+    while M > 1:
+        M >>= 1
+        P <<= 1
+        for p in range(0, P, 2): # cycle through even blocks
+          for m in range(M):
+            w = np.exp(-1j * np.pi * m / M)
+            i = p * M + m
+            j = p * M + M + m
+            xi, xj = x[i], x[j]
+            x[i] = xi + xj       # update even block
+            x[j] = w * (xi - xj) # update odd block
+
+    # bit-reverse:
+    log2N = int(np.log(N) / np.log(2))
+    for p in range(N):
+        q = bitreverse(p, log2N)
+        if(p > q):
+            x[p], x[q] = x[q], x[p]
+
+    return x
+
 # Cooley-Tukey, assuming length is a product N1 N2
 def cooley_tukey_decomp(x, N1, N2):
     X = np.zeros(N1*N2, np.complex64)
