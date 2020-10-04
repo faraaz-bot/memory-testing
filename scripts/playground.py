@@ -123,6 +123,36 @@ def mwe_icooley_tukey_pow2(x):
 
     return x
 
+
+# Iterative Cooley-Tukey, assuming length is a power of 2, DIF
+def mwe_icooley_tukey_pow2_rev(x):
+    N = x.size
+    P = 1      # P tracks current number of "halves"; doubles every iteration
+    M = N      # M tracks size of "halves"; halves every iteration
+
+    while M > 1:
+        M >>= 1
+        P <<= 1
+        for i in range(N):
+            if (i // M) % 2 != 0:
+                continue
+            j = i + M
+            m = i % M
+            w = np.exp(-1j * np.pi * m / M)
+            xi, xj = x[i], x[j]
+            x[i] = xi + xj       # update even block
+            x[j] = w * (xi - xj) # update odd block
+
+    # bit-reverse:
+    log2N = int(np.log(N) / np.log(2))
+    for p in range(N):
+        q = bitreverse(p, log2N)
+        if(p > q):
+            x[p], x[q] = x[q], x[p]
+
+    return x
+
+
 # Cooley-Tukey, assuming length is a product N1 N2
 def cooley_tukey_decomp(x, N1, N2):
     X = np.zeros(N1*N2, np.complex64)
@@ -153,7 +183,8 @@ def cooley_tukey_decomp(x, N1, N2):
 
 
 def compare(y, f1, f2):
-    k1, k2 = f1(y), f2(y)
+    y1, y2 = y.copy(), y.copy()
+    k1, k2 = f1(y1), f2(y2)
     return la.norm(k1-k2) / la.norm(k1)
 
 N = 64
@@ -164,3 +195,5 @@ print('mmul ', compare(y, fft, naive_mmul))
 print('pow2 ', compare(y, fft, cooley_tukey_pow2))
 print('dec8 ', compare(y, fft, lambda y: cooley_tukey_decomp(y, 4, 16)))
 print('ipow2', compare(y, fft, icooley_tukey_pow2))
+print('mwe2 ', compare(y, fft, mwe_icooley_tukey_pow2))
+print('mwe2r', compare(y, fft, mwe_icooley_tukey_pow2_rev))
