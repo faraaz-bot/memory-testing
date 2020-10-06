@@ -262,7 +262,7 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const & x)
   hipMemcpy(X, x.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
 
   auto tic = clock();
-  int threads = 256;
+  int threads = N;
   int blocks = 1;
   cooley_tukey2<<<blocks, threads>>>(N, (hipDoubleComplex*) X);
   hipDeviceSynchronize();
@@ -284,12 +284,12 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const & x)
 
 //
 // This version does a single element across all iterations;
-// bit-reverse done first.  It doesn't synchronise properly so will
-// fail for large N.
+// bit-reverse done first.
 //
-__global__ void cooley_tukey3(int N, hipDoubleComplex *x)
+__device__ void cooley_tukey3_(int N, hipDoubleComplex *x)
 {
-    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+  int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
     if (i >= N) return;
 
@@ -297,6 +297,8 @@ __global__ void cooley_tukey3(int N, hipDoubleComplex *x)
     int M = 1;                  // size of current block
 
     while (M < N) {
+      if (M > 64) __syncthreads();
+
       if ((i / M) % 2 != 0) {
         M <<= 1;
         P >>= 1;
@@ -312,16 +314,28 @@ __global__ void cooley_tukey3(int N, hipDoubleComplex *x)
 
       hipDoubleComplex xi = x[i];
       hipDoubleComplex xj = x[j];
+      hipDoubleComplex d;
 
-      x[i].x = xi.x + cost * xj.x - sint * xj.y;
-      x[i].y = xi.y + sint * xj.x + cost * xj.y;
+      d.x = cost * xj.x - sint * xj.y;
+      d.y = sint * xj.x + cost * xj.y;
 
-      x[j].x = xi.x - cost * xj.x + sint * xj.y;
-      x[j].y = xi.y - sint * xj.x - cost * xj.y;
+      x[i] = xi + d;
+      x[j] = xi - d;
 
       M <<= 1;
       P >>= 1;
     }
+
+}
+
+__global__ void cooley_tukey3(int N, hipDoubleComplex *x_)
+{
+  int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+  __shared__ hipDoubleComplex x[1024];
+  x[i] = x_[i];
+  cooley_tukey3_(N, x);
+  __syncthreads();
+  x_[i] = x[i];
 }
 
 vector<fftw_complex> fft_gpu3(vector<fftw_complex> const & x)
@@ -340,7 +354,7 @@ vector<fftw_complex> fft_gpu3(vector<fftw_complex> const & x)
   hipMemcpy(X, z.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
 
   auto tic = clock();
-  int threads = 256;
+  int threads = N;
   int blocks = 1;
   cooley_tukey3<<<blocks, threads>>>(N, (hipDoubleComplex*) X);
   hipDeviceSynchronize();
@@ -377,7 +391,7 @@ void test_ct()
 {
   clock_t tic, toc;
 
-  size_t const n = (size_t) pow(2, 6);
+  size_t const n = (size_t) pow(2, 10);
   auto x = random_vector(n);
 
   cout << "1d input length: " << n << endl;
