@@ -114,7 +114,16 @@ Consider
   X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}\(n+\frac{1}{2}\)(k+1)\right]
 \end{dmath}
 
-
+This transform can be compuated via a length-$4N$ transform with input
+\begin{dmath}
+  \tilde{x} = \{0, x_0, 0, x_1, 0, \dots, x_{N-1} ,0,  -x_{N-1}, 0, -x_{N-2}\dots , 0,  -x_2, 0, -x_1 \}
+\end{dmath}
+That is, for $0\leq n < N$,
+\begin{eqnarray}
+  \tilde{x}_n &= \tilde{x}_{4N - (2n +1)} = 0 \\
+  \tilde{x}_{2n + 1} &= x_n \\
+  \tilde{x}_{4N - (2n + 1)} &= -x_n.
+\end{eqnarray}
 
 \subsection{DST-III}
 
