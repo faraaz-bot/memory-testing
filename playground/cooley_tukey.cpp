@@ -262,7 +262,7 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const & x)
   hipMemcpy(X, x.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
 
   auto tic = clock();
-  int threads = 256;
+  int threads = N;
   int blocks = 1;
   cooley_tukey2<<<blocks, threads>>>(N, (hipDoubleComplex*) X);
   hipDeviceSynchronize();
@@ -274,10 +274,96 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const & x)
   hipMemcpy(z.data(), X, N*sizeof(fftw_complex), hipMemcpyDeviceToHost);
   hipFree(X);
 
+   for (size_t p=0; p < N; ++p) {
+     auto q = bitreverse(p, log2N);
+     if (p > q) swap(z[p], z[q]);
+   }
+
+  return z;
+}
+
+//
+// This version does a single element across all iterations;
+// bit-reverse done first.
+//
+__device__ void cooley_tukey3_(int N, hipDoubleComplex *x)
+{
+
+  int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if (i >= N) return;
+
+    int P = N;                  // current number of blocks
+    int M = 1;                  // size of current block
+
+    while (M < N) {
+      if (M > 64) __syncthreads();
+
+      if ((i / M) % 2 != 0) {
+        M <<= 1;
+        P >>= 1;
+        continue;
+      }
+
+      int j = i + M;
+      int m = i % M;
+
+      double theta = -PI * m / M;
+      double cost = cos(theta);
+      double sint = sin(theta);
+
+      hipDoubleComplex xi = x[i];
+      hipDoubleComplex xj = x[j];
+      hipDoubleComplex d;
+
+      d.x = cost * xj.x - sint * xj.y;
+      d.y = sint * xj.x + cost * xj.y;
+
+      x[i] = xi + d;
+      x[j] = xi - d;
+
+      M <<= 1;
+      P >>= 1;
+    }
+
+}
+
+__global__ void cooley_tukey3(int N, hipDoubleComplex *x_)
+{
+  int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+  __shared__ hipDoubleComplex x[1024];
+  x[i] = x_[i];
+  cooley_tukey3_(N, x);
+  __syncthreads();
+  x_[i] = x[i];
+}
+
+vector<fftw_complex> fft_gpu3(vector<fftw_complex> const & x)
+{
+  auto const N = x.size();
+  auto const log2N = (size_t) log2(N);
+
+  auto z = copy(x);
   for (size_t p=0; p < N; ++p) {
     auto q = bitreverse(p, log2N);
     if (p > q) swap(z[p], z[q]);
   }
+
+  void *X;
+  hipMalloc(&X, N*sizeof(fftw_complex));
+  hipMemcpy(X, z.data(), N*sizeof(fftw_complex), hipMemcpyHostToDevice);
+
+  auto tic = clock();
+  int threads = N;
+  int blocks = 1;
+  cooley_tukey3<<<blocks, threads>>>(N, (hipDoubleComplex*) X);
+  hipDeviceSynchronize();
+  auto toc = clock();
+
+  cout << "GPU time (inner): " << double(toc - tic)/CLOCKS_PER_SEC*1000 << "ms" << endl; // echoing this here is kinda gross...
+
+  hipMemcpy(z.data(), X, N*sizeof(fftw_complex), hipMemcpyDeviceToHost);
+  hipFree(X);
 
   return z;
 }
@@ -305,7 +391,7 @@ void test_ct()
 {
   clock_t tic, toc;
 
-  size_t const n = (size_t) pow(2, 6);
+  size_t const n = (size_t) pow(2, 10);
   auto x = random_vector(n);
 
   cout << "1d input length: " << n << endl;
@@ -335,9 +421,15 @@ void test_ct()
   toc = clock();
   cout << "GPU cycles: " << toc - tic << endl;
 
+  tic = clock();
+  auto z6 = fft_gpu3(x); // this fails for large n
+  toc = clock();
+  cout << "GPU cycles: " << toc - tic << endl;
+
   cout << "ICT rel diff " << compare(z1, z3) << endl;
   cout << "GPU1 rel diff " << compare(z1, z4) << endl;
   cout << "GPU2 rel diff " << compare(z1, z5) << endl;
+  cout << "GPU3 rel diff " << compare(z1, z6) << endl;
 }
 
 int main(int argc, char* argv[])
