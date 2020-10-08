@@ -57,7 +57,7 @@ sine transforms) for \texttt{rocFFT}.
 As way of reference, the FFT of complex inputs $\{x_n\}_{n=0}^{N-1}$
 is
 \begin{dmath}
-  X_k = \sum_{k=0}^{N-1} x_n \omega_N^{ik}
+  X_k = \sum_{k=0}^{N-1} x_n \omega_N^{nk}
 \end{dmath}
 with $\omega_N=e^{\frac{-2 \pi i}{N}}$.
 
@@ -124,6 +124,36 @@ That is, for $0\leq n < N$,
   \tilde{x}_{2n + 1} &= x_n \\
   \tilde{x}_{4N - (2n + 1)} &= -x_n.
 \end{eqnarray}
+
+Consider
+\begin{dmath}
+  \sum_{n=0}^{4N-1} \tilde{x}_n \omega_{4N}^{nk}
+  =
+  \cancelto{0}{\sum_{n=0}^{2N-1} \tilde{x}_{2n} \omega_{4N}^{2nk}}\quad
+  +
+  \sum_{n=0}^{2N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
+  =
+  \sum_{n=0}^{N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
+  +
+  \sum_{n=0}^{N-1} \tilde{x}_{2n+2N+1} \omega_{4N}^{(2n+2N+1)k}
+  =
+  \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+  +
+  \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{4N}^{(2n+2N+1)k}
+  =
+  \omega_{4N}^{k} \sum_{n=0}^{N-1} x_n \omega_{2N}^{nk} 
+  +
+  \cancelto{\(-1\)^k}{\omega_{2}^{k} }\qquad  \omega_{4N}^{k}
+  \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N}^{nk}
+  =
+  \omega_{4N}^{k}
+  \(
+  \sum_{n=0}^{N-1} \(x_n -\(-1\)^k x_{N-n-1} \) \omega_{2N}^{nk}
+  \).
+\end{dmath}
+NB: double-check the index for the second $x$.  To transform
+$\omega_{2N}$ to $\omega_{N}$, we divide the sum into even and odd
+parts.
 
 \subsection{DST-III}
 
