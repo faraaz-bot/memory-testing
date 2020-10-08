@@ -52,6 +52,27 @@ X1 = -np.fft.fft(xtilde).imag[1:N+1] / 2
 print(X1)
 print(np.max(np.abs(X0 - X1)))
 
+
+# Shao and Johnson 2009.
+ytilde = np.empty(N)
+for n in range(N // 2):
+    ytilde[n] = x[2 * n]
+    ytilde[N - 1 -n] = -x[2 * n + 1]
+Z = np.fft.fft(ytilde)
+X3 = np.empty(N)
+X3[0] = Z[0].real
+for k in range(1, N // 2):
+    omega = np.exp(-2j * np.pi * k / (4 * N))
+    X3[k] = (omega * Z[k]).real
+    X3[N-k] = -(omega * Z[k]).imag
+X3[N // 2] = Z[N // 2].real / np.sqrt(2)
+X3 = np.flip(X3)
+print(X3)
+print(np.max(np.abs(X0 - X3)))
+
+
+
+
 print("DCT-I")
 
 X0 = scipy.fft.dct(x, type=1) / 2
