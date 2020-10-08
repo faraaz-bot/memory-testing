@@ -310,10 +310,9 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const& x)
 //
 __device__ void cooley_tukey3_(int N, hipDoubleComplex* x)
 {
-
-    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-
-    if(i >= N)
+    // note: i0 in [0, N/2]
+    int i0 = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    if(i0 >= N/2)
         return;
 
     int P = N; // current number of blocks
@@ -324,13 +323,8 @@ __device__ void cooley_tukey3_(int N, hipDoubleComplex* x)
         if(M > 64)
             __syncthreads();
 
-        if((i / M) % 2 != 0)
-        {
-            M <<= 1;
-            P >>= 1;
-            continue;
-        }
-
+        // convert i0 to i in [0, N]; skip odd blocks
+        int i = ((M-1) & i0) + ((~(M-1) & i0)<<1);
         int j = i + M;
         int m = i % M;
 
@@ -355,12 +349,16 @@ __device__ void cooley_tukey3_(int N, hipDoubleComplex* x)
 
 __global__ void cooley_tukey3(int N, hipDoubleComplex* x_)
 {
-    int                         i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
     __shared__ hipDoubleComplex x[1024];
+
+    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
     x[i] = x_[i];
+    x[i+N/2] = x_[i+N/2];
     cooley_tukey3_(N, x);
     __syncthreads();
     x_[i] = x[i];
+    x_[i+N/2] = x[i+N/2];
 }
 
 vector<fftw_complex> fft_gpu3(vector<fftw_complex> const& x)
@@ -381,7 +379,7 @@ vector<fftw_complex> fft_gpu3(vector<fftw_complex> const& x)
     hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
 
     auto tic     = clock();
-    int  threads = N;
+    int  threads = N / 2;
     int  blocks  = 1;
     cooley_tukey3<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
     hipDeviceSynchronize();
