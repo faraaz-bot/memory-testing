@@ -16,6 +16,9 @@
 #include <hip/hip_runtime.h>
 
 #define PI 3.141592653589793238462643383279502884L
+#define HIP_CHECK(r)    \
+    if(r != hipSuccess) \
+        return {};
 
 using namespace std;
 using gpu_result = pair<size_t, vector<fftw_complex>>;
@@ -224,19 +227,19 @@ gpu_result fft_gpu_ct_dit_01(vector<fftw_complex> const& x)
     auto const log2N = (size_t)log2(N);
 
     void* X;
-    hipMalloc(&X, N * sizeof(fftw_complex));
-    hipMemcpy(X, x.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
+    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
+    HIP_CHECK(hipMemcpy(X, x.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
     auto tic     = clock();
     int  threads = N;
     int  blocks  = 1;
     cooley_tukey_dit_01<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
-    hipDeviceSynchronize();
+    HIP_CHECK(hipDeviceSynchronize());
     auto toc = clock();
 
     vector<fftw_complex> z(N);
-    hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
-    hipFree(X);
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(X));
 
     for(size_t p = 0; p < N; ++p)
     {
@@ -320,9 +323,9 @@ __device__ void reorder(hipDoubleComplex* x, int N)
     if(p >= N / 2)
         return;
 
-    int log2n = (int) log2(N);
+    int log2n = (int)log2(N);
     reorder1(x, p, log2n);
-    reorder1(x, p+N/2, log2n);
+    reorder1(x, p + N / 2, log2n);
 }
 
 __global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, int offset, int stride)
@@ -344,38 +347,43 @@ __global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, int offset, int
 
 gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
 {
-    auto const N     = x.size();
-    auto const log2N = (size_t)log2(N);
+    auto const N = x.size();
 
     auto z = copy(x);
 
     void* X;
-    hipMalloc(&X, N * sizeof(fftw_complex));
-    hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
+    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
+    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
     auto tic     = clock();
     int  threads = N / 2;
     int  blocks  = 1;
     cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, N, 0, 1);
-    hipDeviceSynchronize();
+    HIP_CHECK(hipDeviceSynchronize());
     auto toc = clock();
 
-    hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
-    hipFree(X);
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(X));
 
     return {toc - tic, move(z)};
 }
 
 gpu_result fft_gpu_ct_dit_2d_02(vector<fftw_complex> const& x, int nx, int ny)
 {
-    auto const N     = x.size();
-    auto const log2N = (size_t)log2(nx);
+    auto const N = x.size();
 
     auto z = copy(x);
 
     void* X;
-    hipMalloc(&X, N * sizeof(fftw_complex));
-    hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
+    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
+    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
+
+    int const           nstreams = 32;
+    vector<hipStream_t> streams(nstreams);
+    for(int s = 0; s < nstreams; ++s)
+    {
+        HIP_CHECK(hipStreamCreateWithFlags(&streams[s], hipStreamNonBlocking));
+    }
 
     auto tic = clock();
 
@@ -384,22 +392,30 @@ gpu_result fft_gpu_ct_dit_2d_02(vector<fftw_complex> const& x, int nx, int ny)
     {
         int threads = ny / 2;
         int blocks  = 1;
-        cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, ny, i * ny, 1);
+        cooley_tukey_dit_02<<<blocks, threads, 0, streams[i % nstreams]>>>(
+            (hipDoubleComplex*)X, ny, i * ny, 1);
     }
+    HIP_CHECK(hipDeviceSynchronize());
 
     // strided
     for(int j = 0; j < ny; ++j)
     {
         int threads = nx / 2;
         int blocks  = 1;
-        cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, nx, j, nx);
+        cooley_tukey_dit_02<<<blocks, threads, 0, streams[j % nstreams]>>>(
+            (hipDoubleComplex*)X, nx, j, nx);
     }
 
-    hipDeviceSynchronize();
+    HIP_CHECK(hipDeviceSynchronize());
     auto toc = clock();
 
-    hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
-    hipFree(X);
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(X));
+
+    for(int s = 0; s < nstreams; ++s)
+    {
+        HIP_CHECK(hipStreamDestroy(streams[s]));
+    }
 
     return {toc - tic, move(z)};
 }
