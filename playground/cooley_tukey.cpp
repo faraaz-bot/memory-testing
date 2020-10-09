@@ -84,6 +84,18 @@ vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x)
 }
 
 //
+// FFTW backed FFT
+//
+vector<fftw_complex> fft_fftw_2d(vector<fftw_complex> const& x, int nx, int ny)
+{
+    auto z = copy(x);
+    auto p = fftw_plan_dft_2d(nx, ny, z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_execute(p);
+    fftw_destroy_plan(p);
+    return z;
+}
+
+//
 // Cooley-Tukey FFT
 //
 
@@ -233,7 +245,7 @@ gpu_result fft_gpu_ct_dit_01(vector<fftw_complex> const& x)
             swap(z[p], z[q]);
     }
 
-    return {toc-tic, move(z)};
+    return {toc - tic, move(z)};
 }
 
 //
@@ -242,11 +254,11 @@ gpu_result fft_gpu_ct_dit_01(vector<fftw_complex> const& x)
 // This version does a single element across all iterations;
 // bit-reverse done first.
 //
-__device__ void cooley_tukey_dit_02_(int N, hipDoubleComplex* x)
+__device__ void cooley_tukey_dit_02_(hipDoubleComplex* x, int N)
 {
     // note: i0 in [0, N/2]
     int i0 = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-    if(i0 >= N/2)
+    if(i0 >= N / 2)
         return;
 
     int P = N; // current number of blocks
@@ -258,7 +270,7 @@ __device__ void cooley_tukey_dit_02_(int N, hipDoubleComplex* x)
             __syncthreads();
 
         // convert i0 to i in [0, N]; skip odd blocks
-        int i = ((M-1) & i0) + ((~(M-1) & i0)<<1);
+        int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
         int j = i + M;
         int m = i % M;
 
@@ -281,18 +293,53 @@ __device__ void cooley_tukey_dit_02_(int N, hipDoubleComplex* x)
     }
 }
 
-__global__ void cooley_tukey_dit_02(int N, hipDoubleComplex* x_)
+__device__ void reorder1(hipDoubleComplex* x, int p, int n)
+{
+    int q = p;
+    int r = 0;
+    for(int i = 0; i < n; ++i)
+    {
+        r <<= 1;
+        r |= q & 1;
+        q >>= 1;
+    }
+    q = r;
+
+    if(p > q)
+    {
+        hipDoubleComplex t = x[p];
+        x[p]               = x[q];
+        x[q]               = t;
+    }
+}
+
+__device__ void reorder(hipDoubleComplex* x, int N)
+{
+    int p = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+
+    if(p >= N / 2)
+        return;
+
+    int log2n = (int) log2(N);
+    reorder1(x, p, log2n);
+    reorder1(x, p+N/2, log2n);
+}
+
+__global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, int offset, int stride)
 {
     __shared__ hipDoubleComplex x[1024];
 
     int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
-    x[i] = x_[i];
-    x[i+N/2] = x_[i+N/2];
-    cooley_tukey_dit_02_(N, x);
+    x[i]         = x_[offset + i * stride];
+    x[i + N / 2] = x_[offset + (i + N / 2) * stride];
     __syncthreads();
-    x_[i] = x[i];
-    x_[i+N/2] = x[i+N/2];
+    reorder(x, N);
+    __syncthreads();
+    cooley_tukey_dit_02_(x, N);
+    __syncthreads();
+    x_[offset + i * stride]           = x[i];
+    x_[offset + (i + N / 2) * stride] = x[i + N / 2];
 }
 
 gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
@@ -301,12 +348,6 @@ gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
     auto const log2N = (size_t)log2(N);
 
     auto z = copy(x);
-    for(size_t p = 0; p < N; ++p)
-    {
-        auto q = bitreverse(p, log2N);
-        if(p > q)
-            swap(z[p], z[q]);
-    }
 
     void* X;
     hipMalloc(&X, N * sizeof(fftw_complex));
@@ -315,14 +356,52 @@ gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
     auto tic     = clock();
     int  threads = N / 2;
     int  blocks  = 1;
-    cooley_tukey_dit_02<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
+    cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, N, 0, 1);
     hipDeviceSynchronize();
     auto toc = clock();
 
     hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
     hipFree(X);
 
-    return {toc-tic, move(z)};
+    return {toc - tic, move(z)};
+}
+
+gpu_result fft_gpu_ct_dit_2d_02(vector<fftw_complex> const& x, int nx, int ny)
+{
+    auto const N     = x.size();
+    auto const log2N = (size_t)log2(nx);
+
+    auto z = copy(x);
+
+    void* X;
+    hipMalloc(&X, N * sizeof(fftw_complex));
+    hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
+
+    auto tic = clock();
+
+    // contiguous
+    for(int i = 0; i < nx; ++i)
+    {
+        int threads = ny / 2;
+        int blocks  = 1;
+        cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, ny, i * ny, 1);
+    }
+
+    // strided
+    for(int j = 0; j < ny; ++j)
+    {
+        int threads = nx / 2;
+        int blocks  = 1;
+        cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, nx, j, nx);
+    }
+
+    hipDeviceSynchronize();
+    auto toc = clock();
+
+    hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
+    hipFree(X);
+
+    return {toc - tic, move(z)};
 }
 
 //
@@ -345,7 +424,7 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 // Some tests!
 //
-void test_ct()
+void test1d()
 {
     clock_t tic, toc;
 
@@ -365,23 +444,48 @@ void test_ct()
     cout << "ICT cycles: " << toc - tic << endl;
     cout << "ICT rel diff " << compare(z1, z2) << endl;
 
-    tic     = clock();
+    tic           = clock();
     auto [c3, z3] = fft_gpu_ct_dit_01(x); // this fails for n > 64
-    toc     = clock();
+    toc           = clock();
     cout << "GPU cycles: " << toc - tic << endl;
     cout << "GPU CT DIT 01 rel diff " << compare(z1, z3) << endl;
-    cout << "GPU CT DIT 01 time: " << c3 << "; " << double(c3) / CLOCKS_PER_SEC * 1000 << "ms" << "; " << toc - tic << endl;
+    cout << "GPU CT DIT 01 time: " << c3 << "; " << double(c3) / CLOCKS_PER_SEC * 1000 << "ms"
+         << "; " << toc - tic << endl;
 
-
-    tic     = clock();
+    tic           = clock();
     auto [c4, z4] = fft_gpu_ct_dit_02(x); // this fails for n > 1024
-    toc     = clock();
+    toc           = clock();
     cout << "GPU cycles: " << toc - tic << endl;
     cout << "GPU CT DIT 02 rel diff " << compare(z1, z4) << endl;
-    cout << "GPU CT DIT 02 time: " << c4 << "; " << double(c4) / CLOCKS_PER_SEC * 1000 << "ms" << "; " << toc - tic << endl;
+    cout << "GPU CT DIT 02 time: " << c4 << "; " << double(c4) / CLOCKS_PER_SEC * 1000 << "ms"
+         << "; " << toc - tic << endl;
+}
+
+void test2d()
+{
+    clock_t tic, toc;
+
+    size_t const n = (size_t)pow(2, 10);
+    auto         x = random_vector(n * n);
+
+    cout << "2d input length: " << n << "x" << n << endl;
+
+    tic     = clock();
+    auto z1 = fft_fftw_2d(x, n, n);
+    toc     = clock();
+    cout << "FFTW cycles: " << toc - tic << endl;
+
+    tic           = clock();
+    auto [c2, z2] = fft_gpu_ct_dit_2d_02(x, n, n);
+    toc           = clock();
+    cout << "GPU cycles: " << toc - tic << endl;
+    cout << "GPU CT DIT 02 rel diff " << compare(z1, z2) << endl;
+    cout << "GPU CT DIT 02 time: " << c2 << "; " << double(c2) / CLOCKS_PER_SEC * 1000 << "ms"
+         << "; " << toc - tic << endl;
 }
 
 int main(int argc, char* argv[])
 {
-    test_ct();
+    test1d();
+    test2d();
 }
