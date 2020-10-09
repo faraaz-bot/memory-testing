@@ -18,6 +18,7 @@
 #define PI 3.141592653589793238462643383279502884L
 
 using namespace std;
+using gpu_result = pair<size_t, vector<fftw_complex>>;
 
 //
 // Random inputs
@@ -168,76 +169,10 @@ vector<fftw_complex> fft_ict(vector<fftw_complex> const& x)
 //
 
 //
-// This version does one iteration at a time...
-//
-__global__ void cooley_tukey1(int a, int b, hipDoubleComplex* x)
-{
-    int l = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-    int k = hipBlockIdx_y * hipBlockDim_y + hipThreadIdx_y;
-
-    if(l >= b / 2)
-        return;
-    if(k >= a)
-        return;
-
-    double theta = -2 * PI * l / b;
-    double cost  = cos(theta);
-    double sint  = sin(theta);
-
-    int p = l + k * b;
-    int q = p + b / 2;
-
-    hipDoubleComplex xp = x[p];
-    hipDoubleComplex xq = x[q];
-
-    x[p]   = xp + xq;
-    x[q].x = cost * (xp.x - xq.x) - sint * (xp.y - xq.y);
-    x[q].y = cost * (xp.y - xq.y) + sint * (xp.x - xq.x);
-}
-
-vector<fftw_complex> fft_gpu1(vector<fftw_complex> const& x)
-{
-    auto const N     = x.size();
-    auto const log2N = (size_t)log2(N);
-
-    void* X;
-    hipMalloc(&X, N * sizeof(fftw_complex));
-    hipMemcpy(X, x.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice);
-
-    auto tic = clock();
-    for(int s = 0; s < log2N; ++s)
-    {
-        auto a = (size_t)pow(2, s);
-        auto b = N / a;
-        dim3 threads(16, 16);
-        dim3 blocks(max(1, b / 32), max(1, a / 16));
-        cooley_tukey1<<<blocks, threads>>>(a, b, (hipDoubleComplex*)X);
-    }
-    hipDeviceSynchronize();
-    auto toc = clock();
-
-    cout << "GPU time (inner): " << double(toc - tic) / CLOCKS_PER_SEC * 1000 << "ms"
-         << endl; // echoing this here is kinda gross...
-
-    vector<fftw_complex> z(N);
-    hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
-    hipFree(X);
-
-    for(size_t p = 0; p < N; ++p)
-    {
-        auto q = bitreverse(p, log2N);
-        if(p > q)
-            swap(z[p], z[q]);
-    }
-
-    return z;
-}
-
-//
 // This version does a single element across all iterations.  It
 // doesn't synchronise properly so will fail for large N.
 //
-__global__ void cooley_tukey2(int N, hipDoubleComplex* x)
+__global__ void cooley_tukey_dit_01(int N, hipDoubleComplex* x)
 {
     int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -271,7 +206,7 @@ __global__ void cooley_tukey2(int N, hipDoubleComplex* x)
     }
 }
 
-vector<fftw_complex> fft_gpu2(vector<fftw_complex> const& x)
+gpu_result fft_gpu_ct_dit_01(vector<fftw_complex> const& x)
 {
     auto const N     = x.size();
     auto const log2N = (size_t)log2(N);
@@ -283,12 +218,9 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const& x)
     auto tic     = clock();
     int  threads = N;
     int  blocks  = 1;
-    cooley_tukey2<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
+    cooley_tukey_dit_01<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
     hipDeviceSynchronize();
     auto toc = clock();
-
-    cout << "GPU time (inner): " << double(toc - tic) / CLOCKS_PER_SEC * 1000 << "ms"
-         << endl; // echoing this here is kinda gross...
 
     vector<fftw_complex> z(N);
     hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
@@ -301,14 +233,16 @@ vector<fftw_complex> fft_gpu2(vector<fftw_complex> const& x)
             swap(z[p], z[q]);
     }
 
-    return z;
+    return {toc-tic, move(z)};
 }
 
+//
+// Cooley-Tukey, re-order first, FFT on the GPU
 //
 // This version does a single element across all iterations;
 // bit-reverse done first.
 //
-__device__ void cooley_tukey3_(int N, hipDoubleComplex* x)
+__device__ void cooley_tukey_dit_02_(int N, hipDoubleComplex* x)
 {
     // note: i0 in [0, N/2]
     int i0 = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
@@ -347,7 +281,7 @@ __device__ void cooley_tukey3_(int N, hipDoubleComplex* x)
     }
 }
 
-__global__ void cooley_tukey3(int N, hipDoubleComplex* x_)
+__global__ void cooley_tukey_dit_02(int N, hipDoubleComplex* x_)
 {
     __shared__ hipDoubleComplex x[1024];
 
@@ -355,13 +289,13 @@ __global__ void cooley_tukey3(int N, hipDoubleComplex* x_)
 
     x[i] = x_[i];
     x[i+N/2] = x_[i+N/2];
-    cooley_tukey3_(N, x);
+    cooley_tukey_dit_02_(N, x);
     __syncthreads();
     x_[i] = x[i];
     x_[i+N/2] = x[i+N/2];
 }
 
-vector<fftw_complex> fft_gpu3(vector<fftw_complex> const& x)
+gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
 {
     auto const N     = x.size();
     auto const log2N = (size_t)log2(N);
@@ -381,17 +315,14 @@ vector<fftw_complex> fft_gpu3(vector<fftw_complex> const& x)
     auto tic     = clock();
     int  threads = N / 2;
     int  blocks  = 1;
-    cooley_tukey3<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
+    cooley_tukey_dit_02<<<blocks, threads>>>(N, (hipDoubleComplex*)X);
     hipDeviceSynchronize();
     auto toc = clock();
-
-    cout << "GPU time (inner): " << double(toc - tic) / CLOCKS_PER_SEC * 1000 << "ms"
-         << endl; // echoing this here is kinda gross...
 
     hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost);
     hipFree(X);
 
-    return z;
+    return {toc-tic, move(z)};
 }
 
 //
@@ -428,35 +359,26 @@ void test_ct()
     toc     = clock();
     cout << "FFTW cycles: " << toc - tic << endl;
 
-    // tic = clock();
-    // auto z2 = fft_naive(x);
-    // toc = clock();
-    // cout << "NAIVE time: " << toc - tic << endl;
-
     tic     = clock();
-    auto z3 = fft_ict(x);
+    auto z2 = fft_ict(x);
     toc     = clock();
     cout << "ICT cycles: " << toc - tic << endl;
+    cout << "ICT rel diff " << compare(z1, z2) << endl;
 
     tic     = clock();
-    auto z4 = fft_gpu1(x);
+    auto [c3, z3] = fft_gpu_ct_dit_01(x); // this fails for n > 64
     toc     = clock();
     cout << "GPU cycles: " << toc - tic << endl;
+    cout << "GPU CT DIT 01 rel diff " << compare(z1, z3) << endl;
+    cout << "GPU CT DIT 01 time: " << c3 << "; " << double(c3) / CLOCKS_PER_SEC * 1000 << "ms" << "; " << toc - tic << endl;
+
 
     tic     = clock();
-    auto z5 = fft_gpu2(x); // this fails for large n
+    auto [c4, z4] = fft_gpu_ct_dit_02(x); // this fails for n > 1024
     toc     = clock();
     cout << "GPU cycles: " << toc - tic << endl;
-
-    tic     = clock();
-    auto z6 = fft_gpu3(x); // this fails for large n
-    toc     = clock();
-    cout << "GPU cycles: " << toc - tic << endl;
-
-    cout << "ICT rel diff " << compare(z1, z3) << endl;
-    cout << "GPU1 rel diff " << compare(z1, z4) << endl;
-    cout << "GPU2 rel diff " << compare(z1, z5) << endl;
-    cout << "GPU3 rel diff " << compare(z1, z6) << endl;
+    cout << "GPU CT DIT 02 rel diff " << compare(z1, z4) << endl;
+    cout << "GPU CT DIT 02 time: " << c4 << "; " << double(c4) / CLOCKS_PER_SEC * 1000 << "ms" << "; " << toc - tic << endl;
 }
 
 int main(int argc, char* argv[])

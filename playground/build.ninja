@@ -1,5 +1,5 @@
 
-hflags = -Wall -I/usr/include
+hflags = -std=c++17 -Wall -I/usr/include
 
 rule hipcc
   command = hipcc $hflags -c $in -o $out
@@ -9,4 +9,4 @@ rule link
 
 build cooley_tukey.o: hipcc cooley_tukey.cpp
 build cooley_tukey: link cooley_tukey.o
-  libs = -lfftw3
+  libs = -lfftw3 -lfftw3f
