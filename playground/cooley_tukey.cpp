@@ -86,13 +86,19 @@ vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x)
     return z;
 }
 
-//
-// FFTW backed FFT
-//
 vector<fftw_complex> fft_fftw_2d(vector<fftw_complex> const& x, int nx, int ny)
 {
     auto z = copy(x);
     auto p = fftw_plan_dft_2d(nx, ny, z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_execute(p);
+    fftw_destroy_plan(p);
+    return z;
+}
+
+vector<fftw_complex> fft_fftw_3d(vector<fftw_complex> const& x, int nx, int ny, int nz)
+{
+    auto z = copy(x);
+    auto p = fftw_plan_dft_3d(nx, ny, nz, z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(p);
     fftw_destroy_plan(p);
     return z;
@@ -420,6 +426,75 @@ gpu_result fft_gpu_ct_dit_2d_02(vector<fftw_complex> const& x, int nx, int ny)
     return {toc - tic, move(z)};
 }
 
+gpu_result fft_gpu_ct_dit_3d_02(vector<fftw_complex> const& x, int nx, int ny, int nz)
+{
+    auto const N = x.size();
+
+    auto z = copy(x);
+
+    void* X;
+    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
+    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
+
+    int const           nstreams = 32;
+    vector<hipStream_t> streams(nstreams);
+    for(int s = 0; s < nstreams; ++s)
+    {
+        HIP_CHECK(hipStreamCreateWithFlags(&streams[s], hipStreamNonBlocking));
+    }
+
+    auto tic = clock();
+
+    for(int i = 0; i < nx; ++i)
+    {
+      for(int j = 0; j < ny; ++j)
+        {
+          int threads = nz / 2;
+          int blocks  = 1;
+          cooley_tukey_dit_02<<<blocks, threads, 0, streams[j % nstreams]>>>(
+                     (hipDoubleComplex*)X, nz, i * ny * nz + j * nz, 1);
+        }
+    }
+    HIP_CHECK(hipDeviceSynchronize());
+
+    for(int i = 0; i < nx; ++i)
+    {
+      for(int k = 0; k < nz; ++k)
+        {
+          int threads = ny / 2;
+          int blocks  = 1;
+          cooley_tukey_dit_02<<<blocks, threads, 0, streams[k % nstreams]>>>(
+                     (hipDoubleComplex*)X, ny, i * ny * nz + k, nz);
+        }
+    }
+    HIP_CHECK(hipDeviceSynchronize());
+
+    for(int j = 0; j < ny; ++j)
+    {
+      for(int k = 0; k < nz; ++k)
+        {
+          int threads = nx / 2;
+          int blocks  = 1;
+          cooley_tukey_dit_02<<<blocks, threads, 0, streams[k % nstreams]>>>(
+                     (hipDoubleComplex*)X, nx, j*nz + k, ny * nz);
+        }
+    }
+
+    HIP_CHECK(hipDeviceSynchronize());
+    auto toc = clock();
+
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(X));
+
+    for(int s = 0; s < nstreams; ++s)
+    {
+        HIP_CHECK(hipStreamDestroy(streams[s]));
+    }
+
+    return {toc - tic, move(z)};
+}
+
+
 //
 // Relative difference
 //
@@ -500,8 +575,32 @@ void test2d()
          << "; " << toc - tic << endl;
 }
 
+void test3d()
+{
+    clock_t tic, toc;
+
+    size_t const n = (size_t)pow(2, 7);
+    auto         x = random_vector(n * n * n);
+
+    cout << "3d input length: " << n << "x" << n << "x" << n << endl;
+
+    tic     = clock();
+    auto z1 = fft_fftw_3d(x, n, n, n);
+    toc     = clock();
+    cout << "FFTW cycles: " << toc - tic << endl;
+
+    tic           = clock();
+    auto [c2, z2] = fft_gpu_ct_dit_3d_02(x, n, n, n);
+    toc           = clock();
+    cout << "GPU cycles: " << toc - tic << endl;
+    cout << "GPU CT DIT 02 rel diff " << compare(z1, z2) << endl;
+    cout << "GPU CT DIT 02 time: " << c2 << "; " << double(c2) / CLOCKS_PER_SEC * 1000 << "ms"
+         << "; " << toc - tic << endl;
+}
+
 int main(int argc, char* argv[])
 {
-    test1d();
-    test2d();
+    // test1d();
+    // test2d();
+    test3d();
 }
