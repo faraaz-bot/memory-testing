@@ -333,7 +333,7 @@ __device__ void reorder(hipDoubleComplex* x, int i, int N)
 
 __global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, dim3 bstrides, int tstride)
 {
-    __shared__ hipDoubleComplex x[1024];
+    __shared__ hipDoubleComplex x[2048+64];
 
     int offset = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
     int i = hipThreadIdx_x;
@@ -443,7 +443,7 @@ void test1d()
 {
     clock_t tic, toc;
 
-    size_t const n = (size_t)pow(2, 10);
+    size_t const n = (size_t)pow(2, 11);
     auto         x = random_vector(n);
 
     cout << "1d input length: " << n << endl;
