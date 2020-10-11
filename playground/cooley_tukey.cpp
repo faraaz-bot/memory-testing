@@ -263,10 +263,9 @@ gpu_result fft_gpu_ct_dit_01(vector<fftw_complex> const& x)
 // This version does a single element across all iterations;
 // bit-reverse done first.
 //
-__device__ void cooley_tukey_dit_02_(hipDoubleComplex* x, int N)
+__device__ void cooley_tukey_dit_02_(hipDoubleComplex* x, int i0, int N)
 {
     // note: i0 in [0, N/2]
-    int i0 = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
     if(i0 >= N / 2)
         return;
 
@@ -322,33 +321,32 @@ __device__ void reorder1(hipDoubleComplex* x, int p, int n)
     }
 }
 
-__device__ void reorder(hipDoubleComplex* x, int N)
+__device__ void reorder(hipDoubleComplex* x, int i, int N)
 {
-    int p = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
-
-    if(p >= N / 2)
+    if(i >= N / 2)
         return;
 
     int log2n = (int)log2(N);
-    reorder1(x, p, log2n);
-    reorder1(x, p + N / 2, log2n);
+    reorder1(x, i, log2n);
+    reorder1(x, i + N / 2, log2n);
 }
 
-__global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, int offset, int stride)
+__global__ void cooley_tukey_dit_02(hipDoubleComplex* x_, int N, dim3 bstrides, int tstride)
 {
     __shared__ hipDoubleComplex x[1024];
 
-    int i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int offset = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
+    int i = hipThreadIdx_x;
 
-    x[i]         = x_[offset + i * stride];
-    x[i + N / 2] = x_[offset + (i + N / 2) * stride];
+    x[i]         = x_[offset + i * tstride];
+    x[i + N / 2] = x_[offset + (i + N / 2) * tstride];
     __syncthreads();
-    reorder(x, N);
+    reorder(x, i, N);
     __syncthreads();
-    cooley_tukey_dit_02_(x, N);
+    cooley_tukey_dit_02_(x, i, N);
     __syncthreads();
-    x_[offset + i * stride]           = x[i];
-    x_[offset + (i + N / 2) * stride] = x[i + N / 2];
+    x_[offset + i * tstride]           = x[i];
+    x_[offset + (i + N / 2) * tstride] = x[i + N / 2];
 }
 
 gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
@@ -361,11 +359,12 @@ gpu_result fft_gpu_ct_dit_02(vector<fftw_complex> const& x)
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    auto tic     = clock();
-    int  threads = N / 2;
-    int  blocks  = 1;
-    cooley_tukey_dit_02<<<blocks, threads>>>((hipDoubleComplex*)X, N, 0, 1);
+    auto tic = clock();
+
+    dim3 strides(N);
+    cooley_tukey_dit_02<<<1, N/2>>>((hipDoubleComplex*)X, N, strides, 1);
     HIP_CHECK(hipDeviceSynchronize());
+
     auto toc = clock();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
@@ -384,44 +383,14 @@ gpu_result fft_gpu_ct_dit_2d_02(vector<fftw_complex> const& x, int nx, int ny)
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    int const           nstreams = 32;
-    vector<hipStream_t> streams(nstreams);
-    for(int s = 0; s < nstreams; ++s)
-    {
-        HIP_CHECK(hipStreamCreateWithFlags(&streams[s], hipStreamNonBlocking));
-    }
-
     auto tic = clock();
-
-    // contiguous
-    for(int i = 0; i < nx; ++i)
-    {
-        int threads = ny / 2;
-        int blocks  = 1;
-        cooley_tukey_dit_02<<<blocks, threads, 0, streams[i % nstreams]>>>(
-            (hipDoubleComplex*)X, ny, i * ny, 1);
-    }
-    HIP_CHECK(hipDeviceSynchronize());
-
-    // strided
-    for(int j = 0; j < ny; ++j)
-    {
-        int threads = nx / 2;
-        int blocks  = 1;
-        cooley_tukey_dit_02<<<blocks, threads, 0, streams[j % nstreams]>>>(
-            (hipDoubleComplex*)X, nx, j, nx);
-    }
-
+    cooley_tukey_dit_02<<<nx, ny/2>>>((hipDoubleComplex*)X, ny, dim3(ny), 1);
+    cooley_tukey_dit_02<<<ny, nx/2>>>((hipDoubleComplex*)X, nx, dim3(1), ny);
     HIP_CHECK(hipDeviceSynchronize());
     auto toc = clock();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
-
-    for(int s = 0; s < nstreams; ++s)
-    {
-        HIP_CHECK(hipStreamDestroy(streams[s]));
-    }
 
     return {toc - tic, move(z)};
 }
@@ -436,60 +405,15 @@ gpu_result fft_gpu_ct_dit_3d_02(vector<fftw_complex> const& x, int nx, int ny, i
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    int const           nstreams = 32;
-    vector<hipStream_t> streams(nstreams);
-    for(int s = 0; s < nstreams; ++s)
-    {
-        HIP_CHECK(hipStreamCreateWithFlags(&streams[s], hipStreamNonBlocking));
-    }
-
     auto tic = clock();
-
-    for(int i = 0; i < nx; ++i)
-    {
-      for(int j = 0; j < ny; ++j)
-        {
-          int threads = nz / 2;
-          int blocks  = 1;
-          cooley_tukey_dit_02<<<blocks, threads, 0, streams[j % nstreams]>>>(
-                     (hipDoubleComplex*)X, nz, i * ny * nz + j * nz, 1);
-        }
-    }
-    HIP_CHECK(hipDeviceSynchronize());
-
-    for(int i = 0; i < nx; ++i)
-    {
-      for(int k = 0; k < nz; ++k)
-        {
-          int threads = ny / 2;
-          int blocks  = 1;
-          cooley_tukey_dit_02<<<blocks, threads, 0, streams[k % nstreams]>>>(
-                     (hipDoubleComplex*)X, ny, i * ny * nz + k, nz);
-        }
-    }
-    HIP_CHECK(hipDeviceSynchronize());
-
-    for(int j = 0; j < ny; ++j)
-    {
-      for(int k = 0; k < nz; ++k)
-        {
-          int threads = nx / 2;
-          int blocks  = 1;
-          cooley_tukey_dit_02<<<blocks, threads, 0, streams[k % nstreams]>>>(
-                     (hipDoubleComplex*)X, nx, j*nz + k, ny * nz);
-        }
-    }
-
+    cooley_tukey_dit_02<<<dim3(nx,ny), nz/2>>>((hipDoubleComplex*)X, nz, dim3(ny*nz, nz), 1);
+    cooley_tukey_dit_02<<<dim3(nx,nz), ny/2>>>((hipDoubleComplex*)X, ny, dim3(ny*nz, 1), nz);
+    cooley_tukey_dit_02<<<dim3(ny,nz), nx/2>>>((hipDoubleComplex*)X, nx, dim3(nz, 1), ny*nz);
     HIP_CHECK(hipDeviceSynchronize());
     auto toc = clock();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
-
-    for(int s = 0; s < nstreams; ++s)
-    {
-        HIP_CHECK(hipStreamDestroy(streams[s]));
-    }
 
     return {toc - tic, move(z)};
 }
@@ -579,7 +503,7 @@ void test3d()
 {
     clock_t tic, toc;
 
-    size_t const n = (size_t)pow(2, 7);
+    size_t const n = (size_t)pow(2, 9);
     auto         x = random_vector(n * n * n);
 
     cout << "3d input length: " << n << "x" << n << "x" << n << endl;
@@ -600,7 +524,7 @@ void test3d()
 
 int main(int argc, char* argv[])
 {
-    // test1d();
-    // test2d();
+    test1d();
+    test2d();
     test3d();
 }
