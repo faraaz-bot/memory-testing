@@ -274,7 +274,7 @@ __device__ void cooley_tukey_dit_02_(hipDoubleComplex* x, int i0, int N)
 
     while(M < N)
     {
-        if(M > 64)
+        if(M > 256)
             __syncthreads();
 
         // convert i0 to i in [0, N]; skip odd blocks
