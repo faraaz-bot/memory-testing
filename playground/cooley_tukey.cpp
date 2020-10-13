@@ -303,16 +303,7 @@ __device__ void cooley_tukey_dit_02_(hipDoubleComplex* x, int i0, int N)
 
 __device__ void reorder1(hipDoubleComplex* x, int p, int n)
 {
-    int q = p;
-    int r = 0;
-    for(int i = 0; i < n; ++i)
-    {
-        r <<= 1;
-        r |= q & 1;
-        q >>= 1;
-    }
-    q = r;
-
+    int q = __brev(p) >> (32 - n);
     if(p > q)
     {
         hipDoubleComplex t = x[p];
