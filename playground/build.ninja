@@ -1,11 +1,12 @@
 
-hflags = -std=c++17 -Wall -I/usr/include
+hflags = -fopenmp -std=c++17 -Wall -I/usr/include
+ldflags = -fopenmp
 
 rule hipcc
   command = hipcc $hflags -c $in -o $out
 
 rule link
-  command = hipcc $in -o $out $libs
+  command = hipcc $ldflags $in -o $out $libs
 
 build cooley_tukey.o: hipcc cooley_tukey.cpp
 build cooley_tukey: link cooley_tukey.o
