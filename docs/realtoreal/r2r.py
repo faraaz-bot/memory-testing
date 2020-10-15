@@ -28,10 +28,11 @@ print(np.max(np.abs(X0 - X1)))
 
 
 
-print("DST-II")
+print("\nDST-II")
 X0 = scipy.fft.dst(x, type=2) / 2
 print(X0)
 
+# Direct:
 X2 = np.empty(N)
 for k in range(N):
     X2[k] = 0.0
@@ -40,7 +41,7 @@ for k in range(N):
 print(X2)
 print(np.max(np.abs(X0 - X2)))
 
-
+# Long FFT:
 xtilde = np.zeros(4*N)
 for n in range(N):
     xtilde[2*n] = 0.0
@@ -73,7 +74,7 @@ print(np.max(np.abs(X0 - X3)))
 
 
 
-print("DCT-I")
+print("\nDCT-I")
 
 X0 = scipy.fft.dct(x, type=1) / 2
 print(X0)
@@ -103,7 +104,7 @@ print(np.max(np.abs(X0 - X2)))
 
 
 
-print("DCT-II")
+print("\nDCT-II")
 
 X0 = scipy.fft.dct(x, type=2) / 2
 print(X0)
@@ -143,3 +144,46 @@ for k in range(1, N // 2):
 X3[N // 2] = Z[N // 2].real / np.sqrt(2)
 print(X3)
 print(np.max(np.abs(X0 - X3)))
+
+print("\nDCT-III")
+
+X0 = scipy.fft.dct(x, type=3) / 2
+print(X0)
+
+# Direct:
+
+
+
+print("\nDST-III")
+
+X0 = scipy.fft.dst(x, type=3)  / 2
+print(X0)
+
+# Direct:
+print("Direct:")
+X1 = np.empty(N)
+for k in range(N):
+    X1[k] = x[N - 1] * 0.5 * (-1)**k
+    fact = np.pi / N
+    for n in range(N - 1):
+        X1[k] += x[n] * np.sin( fact * (n + 1.0) * (k + 0.5) )
+print(X1)
+print(np.max(np.abs(X0 - X1)))
+
+
+
+print("\nDST-IV")
+
+X0 = scipy.fft.dst(x, type=4) / 2
+print(X0)
+
+# Direct:
+print("Direct:")
+X1 = np.empty(N)
+for k in range(N):
+    X1[k] = 0
+    fact = np.pi / N
+    for n in range(N):
+        X1[k] += x[n] * np.sin(fact * (n + 0.5) * (k + 0.5))
+print(X1)
+print(np.max(np.abs(X0 - X1)))
