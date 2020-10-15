@@ -1,0 +1,56 @@
+\begin{thebibliography}{9}
+  @Article{FFTW05,
+    author = 	 {Frigo, Matteo and Johnson, Steven~G.},
+    title = 	 {The Design and Implementation of {FFTW3}},
+    journal = 	 {Proceedings of the IEEE},
+    year = 	 2005,
+    volume =	 93,
+    number =	 2,
+    pages =	 {216--231},
+    note =	 {Special issue on ``Program Generation, Optimization, and Platform Adaptation''}
+  }
+  
+@article{shaojohnsondst23,
+title = "Type-II/III DCT/DST algorithms with reduced number of arithmetic operations",
+journal = "Signal Processing",
+volume = "88",
+number = "6",
+pages = "1553 - 1564",
+year = "2008",
+issn = "0165-1684",
+doi = "https://doi.org/10.1016/j.sigpro.2008.01.004",
+url = "http://www.sciencedirect.com/science/article/pii/S016516840800008X",
+author = "Xuancheng Shao and Steven G. Johnson",
+keywords = "Discrete cosine transform, Fast Fourier transform, Arithmetic complexity",
+abstract = "We present algorithms for the discrete cosine transform (DCT) and discrete sine transform (DST), of types II and III, that achieve a lower count of real multiplications and additions than previously published algorithms, without sacrificing numerical accuracy. Asymptotically, the operation count is reduced from 2Nlog2N+O(N) to 179Nlog2N+O(N) for a power-of-two transform size N. Furthermore, we show that an additional N multiplications may be saved by a certain rescaling of the inputs or outputs, generalizing a well-known technique for N=8 by Arai et al. These results are derived by considering the DCT to be a special case of a DFT of length 4N, with certain symmetries, and then pruning redundant operations from a recent improved fast Fourier transform algorithm (based on a recursive rescaling of the conjugate-pair split-radix algorithm). The improved algorithms for the DCT-III, DST-II, and DST-III follow immediately from the improved count for the DCT-II."
+}
+
+@article{shaojohnsondst4,
+title = "Type-IV DCT, DST, and MDCT algorithms with reduced numbers of arithmetic operations",
+journal = "Signal Processing",
+volume = "88",
+number = "6",
+pages = "1313 - 1326",
+year = "2008",
+issn = "0165-1684",
+doi = "https://doi.org/10.1016/j.sigpro.2007.11.024",
+url = "http://www.sciencedirect.com/science/article/pii/S0165168407003829",
+author = "Xuancheng Shao and Steven G. Johnson",
+keywords = "Discrete cosine transform, Lapped transform, Fast Fourier transform, Arithmetic complexity",
+abstract = "We present algorithms for the type-IV discrete cosine transform (DCT-IV) and discrete sine transform (DST-IV), as well as for the modified discrete cosine transform (MDCT) and its inverse, that achieve a lower count of real multiplications and additions than previously published algorithms, without sacrificing numerical accuracy. Asymptotically, the operation count is reduced from 2Nlog2N+O(N) to 179Nlog2N+O(N) for a power-of-two transform size N, and the exact count is strictly lowered for all N⩾8. These results are derived by considering the DCT to be a special case of a DFT of length 8N, with certain symmetries, and then pruning redundant operations from a recent improved fast Fourier transform algorithm (based on a recursive rescaling of the conjugate-pair split-radix algorithm). The improved algorithms for DST-IV and MDCT follow immediately from the improved count for the DCT-IV."
+}
+
+@incollection{vectorzingffts,
+title = "Vectorizing the FFTs**This chapter was written while the author was visiting the Scientific Computing Division at the National Bureau of Standards.",
+editor = "GARRY RODRIGUE",
+booktitle = "Parallel Computations",
+publisher = "Academic Press",
+pages = "51 - 83",
+year = "1982",
+isbn = "978-0-12-592101-5",
+doi = "https://doi.org/10.1016/B978-0-12-592101-5.50007-5",
+url = "http://www.sciencedirect.com/science/article/pii/B9780125921015500075",
+author = "Paul N. Swarztrauber",
+abstract = "Publisher Summary
+This chapter provides an overview on vectorizing the FFTs. The fast Fourier transform (FFT) is the most well known of all algorithms. It is superior to the slow transform and has applications in all areas of scientific computing. The term FFT was applied to a specific algorithm for the rapid computation of the discrete complex Fourier transform; however, it has become a generic term that is applied to any one of a large number of algorithms that compute the complex as well as other Fourier transforms. Many algorithms exist for a given Fourier transform, and when they are applied to a particular sequence, the result is the same. However, the algorithms differ in the ways that intermediate results are computed and stored. It is these important differences that provide the algorithms with unique properties that make one or the other more attractive for a particular application."
+}

@@ -64,6 +64,25 @@ with $\omega_N=e^{\frac{-2 \pi i}{N}}$.
 
 \section{DST}
 
+\subsection{DCT-I}
+
+\begin{dmath}
+  X_k = \frac{1}{2}\( x_0 + \(-1\)^k x_{N-1}\)
+  + \sum_{n=1}^{N-2} x_n \cos\left[ \frac{\pi}{N-1} n k \right]
+\end{dmath}
+
+This can be computed via FFT on inputs of length $4N-4$ with
+\begin{align}
+  \tilde{x}_0 &= 0 \\
+  \tilde{x}_n &= x_n, \qquad n = 1, \dots, N-2\\
+  \tilde{x}_{N-1} &= x_{N-1}\\
+  \tilde{x}_{2N-2-n} &= x_n, \qquad n = 1, \dots, N-2\\
+  \tilde{x}_{2N-2} &= x_{0}\\
+  \tilde{x}_{2 N - 2 + n} &= x_n, \qquad n = 1, \dots, N-2 \\
+  \tilde{x}_{3N-3} &= x_{N-1}\\
+  \tilde{x}_{4  N - 4 - n} &= x_n, \qquad n = 1, \dots, N-2
+\end{align}
+and taking the real part of the output first $N$ even-indexed outputs.
 
 \subsection{DST-I}
 
@@ -72,8 +91,6 @@ Given $\{x_n\}_{n=0}^{N-1}$,
 \begin{dmath}
   X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}(n+1)(k+1)\right]
 \end{dmath}
-It would appear that this can be computed from a FFT of length $N$
-with pre/post-processing.
 
 This is equivalent to the negative imaginary part of the DFT of the
 length-$2N+2$ sequence
@@ -89,26 +106,68 @@ length-$2N+2$ sequence
   \end{array}
   \right.
 \end{dmath}
-and taking output indices $1,\dots,N$.
+and taking the imaginary part of the output indices $1,\dots,N$.
 
-Consider
+From \cite{FFTW05}, FFTW uses the length-$2N+$ method for computing
+the DST-I and DCT-I.  This can be observed in practice with FFTW 3.3.8
+by looking at the memory use for the type-I transform as compared to
+the memory use for type-II transforms.  If $N$ is odd, it may be
+posible to use the standard half-folding algorithm to improve this.
+In particular, it seems that $N=2^M-1$ is amenable to attack.
+
+The algorithm given in \cite{vectorzingffts} has poor numerical
+properties and involves a recursion relationship for computing the
+outputs, which would have poor performance on the GPU.
+
+%% Consider
+%% \begin{dmath}
+%%   \sum_{n=0}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+%%   =
+%%   \cancelto{0}{\tilde{x}_0 \omega_{2N+2}^{nk}}\quad
+%%   + \sum_{n=1}^{N} \tilde{x}_n \omega_{2N+2}^{nk}
+%%   + \cancelto{0}{\tilde{x}_{N+1} \omega_{2N+2}^{(N+1)k}}\quad
+%%   + \sum_{n=N+2}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+%%   =
+%%   \sum_{n=1}^{N} x_{n-1} \omega_{2N+2}^{nk}
+%%   + \sum_{n=N+2}^{2N+1} x_{2N-n+1} \omega_{2N+2}^{nk}
+%%   =
+%%   \sum_{n=0}^{N-1} x_{n} \omega_{2N+2}^{(n+1)k}
+%%   + \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N+2}^{(n + N + 2)k}
+%%   =
+%%   \sum_{n=0}^{N-1} \(\omega_{2N+2}^{k}x_n - \omega_{2N+2}^{N +2k} x_{N-n-1}  \)
+%%   \omega_{2N+2}^{nk}
+%% \end{dmath}
+
+
+\subsection{DCT-II}
+
 \begin{dmath}
-  \sum_{n=0}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
-  =
-  \cancelto{0}{\tilde{x}_0 \omega_{2N+2}^{nk}}\quad
-  + \sum_{n=1}^{N} \tilde{x}_n \omega_{2N+2}^{nk}
-  + \cancelto{0}{\tilde{x}_{N+1} \omega_{2N+2}^{(N+1)k}}\quad
-  + \sum_{n=N+2}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
-  =
-  \sum_{n=1}^{N} x_{n-1} \omega_{2N+2}^{nk}
-  + \sum_{n=N+2}^{2N+1} x_{2N-n+1} \omega_{2N+2}^{nk}
-  =
-  \sum_{n=0}^{N-1} x_{n} \omega_{2N+2}^{(n+1)k}
-  + \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N+2}^{(n + N + 2)k}
-  =
-  \sum_{n=0}^{N-1} \(\omega_{2N+2}^{k}x_n - \omega_{2N+2}^{N +2k} x_{N-n-1}  \) \omega_{2N+2}^{nk}
+  X_k = \sum_{n=0}^{N-1} x_n \cos\left[\frac{\pi}{N} \(N + \frac{1}{2}\) k\right]
 \end{dmath}
 
+This can be computd by taking via a length-$4N$ FFT with input, for
+$n=0,\dots,N-1$,
+\begin{align}
+  \tilde{x}_{2n} &= 0 \\
+  \tilde{x}_{4N -2n -2} &= 0.0\\
+  \tilde{x}_{2n + 1} &= x_n\\
+  \tilde{x}_{4N -(2n + 1)} &= x[n]
+\end{align}
+
+From \cite{shaojohnsondst23}, this can be computed via a length $N$
+real/complex FFT for even $N$.  Define
+$\left\{y_n\right\}_{n=0}^{N-1}$ via
+\begin{align}
+  y_n &= x_{2 n} \\
+  y_{N - 1 -n} &= x_{2 n + 1}
+\end{align}
+for $n = 0, \dots, N/2 -1 $ and let $Y=\mathcal{F}\left[y\right]$.  Then,
+\begin{align}
+  X_{0} &= \Re{Y_0} \\
+  X_{k} &= \Re{\omega_{4N}^k Y_k}, \qquad k = 1,\dots, N/2-1 \\
+  X_{N-k} &= -\Im{\omega_{4N}^k Y_k}, \qquad k = 1,\dots, N/2-1 \\
+  X_{N / 2} &= \Re{Y_{N/2}}/\sqrt(2)
+\end{align}
 
 \subsection{DST-II}
 
@@ -126,35 +185,75 @@ That is, for $0\leq n < N$,
   \tilde{x}_{2n + 1} &= x_n \\
   \tilde{x}_{4N - (2n + 1)} &= -x_n.
 \end{eqnarray}
+and take the negative of the imaginary part of the result of the
+Fourier transform for indices $1,\dots,N$.
 
-Consider
+From From \cite{shaojohnsondst23}, this can be computed from by taking
+\begin{align}
+  y_n &= x_{2 n} \\
+  y_{N - 1 -n} &= -x_{2 n + 1}
+\end{align}
+computing
+\begin{align}
+  X_{0} &= \Re{Y_0} \\
+  X_{k} &= \Re{\omega_{4N}^k Y_k}, \qquad k = 1,\dots, N/2-1 \\
+  X_{N-k} &= -\Im{\omega_{4N}^k Y_k}, \qquad k = 1,\dots, N/2-1 \\
+  X_{N / 2} &= \Re{Y_{N/2}}/\sqrt(2)
+\end{align}
+and then reversing the array.  This can probably be simplified, ie
+it's not necessary to reverse the array as a separate stage.
+
+%% Consider
+%% \begin{dmath}
+%%   \sum_{n=0}^{4N-1} \tilde{x}_n \omega_{4N}^{nk}
+%%   =
+%%   \cancelto{0}{\sum_{n=0}^{2N-1} \tilde{x}_{2n} \omega_{4N}^{2nk}}\quad
+%%   +
+%%   \sum_{n=0}^{2N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
+%%   =
+%%   \sum_{n=0}^{N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
+%%   +
+%%   \sum_{n=0}^{N-1} \tilde{x}_{2n+2N+1} \omega_{4N}^{(2n+2N+1)k}
+%%   =
+%%   \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+%%   +
+%%   \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{4N}^{(2n+2N+1)k}
+%%   =
+%%   \omega_{4N}^{k} \sum_{n=0}^{N-1} x_n \omega_{2N}^{nk} 
+%%   +
+%%   \cancelto{\(-1\)^k}{\omega_{2}^{k} }\qquad  \omega_{4N}^{k}
+%%   \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N}^{nk}
+%%   =
+%%   \omega_{4N}^{k}
+%%   \(
+%%   \sum_{n=0}^{N-1} \(x_n -\(-1\)^k x_{N-n-1} \) \omega_{2N}^{nk}
+%%   \).
+%% \end{dmath}
+%% To transform $\omega_{2N}$ to $\omega_{N}$, we divide the sum into
+%% even and odd parts.  Q: what to do about the $(-1)^k$?
+
+\subsection{DCT-III}
+
 \begin{dmath}
-  \sum_{n=0}^{4N-1} \tilde{x}_n \omega_{4N}^{nk}
-  =
-  \cancelto{0}{\sum_{n=0}^{2N-1} \tilde{x}_{2n} \omega_{4N}^{2nk}}\quad
-  +
-  \sum_{n=0}^{2N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
-  =
-  \sum_{n=0}^{N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
-  +
-  \sum_{n=0}^{N-1} \tilde{x}_{2n+2N+1} \omega_{4N}^{(2n+2N+1)k}
-  =
-  \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
-  +
-  \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{4N}^{(2n+2N+1)k}
-  =
-  \omega_{4N}^{k} \sum_{n=0}^{N-1} x_n \omega_{2N}^{nk} 
-  +
-  \cancelto{\(-1\)^k}{\omega_{2}^{k} }\qquad  \omega_{4N}^{k}
-  \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N}^{nk}
-  =
-  \omega_{4N}^{k}
-  \(
-  \sum_{n=0}^{N-1} \(x_n -\(-1\)^k x_{N-n-1} \) \omega_{2N}^{nk}
-  \).
+  X_k = \frac{1}{2}x_0
+  +\sum_{n=1}^{N-1}x_n \cos\left[\frac{\pi}{N}n\(k+\frac{1}{2}\)\right]
 \end{dmath}
-To transform $\omega_{2N}$ to $\omega_{N}$, we divide the sum into
-even and odd parts.  Q: what to do about the $(-1)^k$?
+
+This can be computed via a length-$4N$ transform on
+\begin{align}
+  \tilde{x}_n &= x_n, \qquad n = 0,\dots, N-1 \\
+  \tilde{x}_N &= 0\\
+  \tilde{x}_{N+1+n} &= -x_{N - n - 1}, \qquad n = 1,\dots, N-1 \\
+  \tilde{x}_{2 N + n} &= -x_n, \qquad n = 0,\dots, N-1 \\
+  \tilde{x}_{3N} &= 0\\
+  \tilde{x}_{3 N + n} &= -x_{N-n}, \qquad n = 1,\dots, N-1
+\end{align}
+and then taking $1/4$ of the real parts of the odd-indexed outputs
+from index 1 to $2N$.
+
+From \cite{shaojohnsondst23}, this can be computed more efficiently
+via a length-$N$ real/complex FFT.
+
 
 \subsection{DST-III}
 
@@ -163,13 +262,62 @@ even and odd parts.  Q: what to do about the $(-1)^k$?
   +\sum_{n=0}^{N-2}x_n \sin\left[\frac{\pi}{N}\(n+1\)\(k+\frac{1}{2}\)\right]
 \end{dmath}
 
+This can be computed via a length-$4N$ real/complex FFT with input
+\begin{align}
+  \tilde{x}_0 &= 0\\
+  \tilde{x}_n &= x_n, \qquad n = 1,\dots, N-1 \\
+  \tilde{x}_N &= x_{N-1}\\
+  \tilde{x}_{N + n + 1} &= x_{N - n - 2}, \qquad n = 1,\dots, N-1 \\
+  \tilde{x}_{2N} &= 0\\
+  \tilde{x}_{2 N + n + 1} &= -x_n, \qquad n = 1,\dots, N-1 \\
+  \tilde{x}_{3N} &= -x_{N-1}\\
+  \tilde{x}_{3 N + n + 1} &= -x_{N - n - 2}, \qquad n = 1,\dots, N-1 \\
+\end{align}
+and taking $1/4$ times the imaginary part of the first $N$ outputs
+with odd index.
+
+
+From \cite{shaojohnsondst23}, this can be computed more efficiently.
+
+\subsection{DCT-IV}
+
+\begin{dmath}
+  X_k = \sum_{n=0}^{N-1} x_n \cos\left[\frac{\pi}{N}\(n + \frac{1}{2}\) \(k + \frac{1}{2}\) \right]
+\end{dmath}
+
+This can be computed via a length-$8N$ real/complex FFT with 
+\begin{align}
+  \tilde{x}_{2 n + 1} &= x[n] \\
+  \tilde{x}_{4 N - (2 n + 1)} &= -x_n \\
+  \tilde{x}_{4 N + 2 n + 1} &= -x_n \\
+  \tilde{x}_{8 N - (2 n + 1)} &= x_n
+\end{align}
+for $n=0, \dots, N-1$, and zero elsewhere.  One then takes $1/4$ times
+the real part of the first $N$ values with odd index.
+
+\cite{shaojohnsondst4}, this can be computed more efficiently.
+
 \subsection{DST-IV}
 
 Given $\{x_n\}_{n=0}^{N-1}$,
 \begin{dmath}
   X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}\(n+\frac{1}{2}\)\(k+\frac{1}{2}\)\right]
 \end{dmath}
-It would appear that this can be computed from a FFT of length $N$
-with pre/post-processing.
+
+This can be computed via a length-$8N$ real/complex FFT with 
+\begin{align}
+  \tilde{x}_{2 n + 1} &= x[n] \\
+  \tilde{x}_{4 N - (2 n + 1)} &= x_n \\
+  \tilde{x}_{4 N + 2 n + 1} &= -x_n \\
+  \tilde{x}_{8 N - (2 n + 1)} &= -x_n
+\end{align}
+for $n=0, \dots, N-1$, and zero elsewhere.  One then takes $1/4$ times
+the imaginary part of the first $N$ values with odd index.
+
+
+\cite{shaojohnsondst4}, this can be computed more efficiently.
+
+\bibliographystyle{unsrt}
+\bibliography{../refs}
 
 \end{document}
