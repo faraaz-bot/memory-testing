@@ -7,10 +7,12 @@
 \DeclarePairedDelimiter\ceil{\lceil}{\rceil}
 \DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
 
+\usepackage{hyperref}
 
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
+\usepackage{bigfoot}
 
 \usepackage{cancel}
 
@@ -113,11 +115,20 @@ the DST-I and DCT-I.  This can be observed in practice with FFTW 3.3.8
 by looking at the memory use for the type-I transform as compared to
 the memory use for type-II transforms.  If $N$ is odd, it may be
 posible to use the standard half-folding algorithm to improve this.
-In particular, it seems that $N=2^M-1$ is amenable to attack.
+In particular, it seems that $N=2^M-1$ is amenable to attack.\footnote{\href{https://github.com/FFTW/fftw3/blob/16164a7bf3257376f22ddeda0842805d1c456b01/reodft/reodft00e-splitradix.c#L22-L32}{FFTW comment on recursive DST-I.}}
 
 The algorithm given in \cite{vectorzingffts} has poor numerical
-properties and involves a recursion relationship for computing the
-outputs, which would have poor performance on the GPU.
+properties\footnote{
+  \href{https://github.com/FFTW/fftw3/blob/master/reodft/rodft00e-r2hc.c#L22-L40}{FFTW
+    comment on numerical precision.}}  and involves a recursion
+relationship for computing the outputs, which would have poor
+performance on the GPU.
+
+From
+\href{https://github.com/FFTW/fftw3/blob/master/reodft/reodft00e-splitradix.c#L22}{github.com/FFTW/fftw3/blob/master/reodft/reodft00e-splitradix.c},
+this can be computed recursively as a DST-I when the problem length
+$N=2^m-1$.
+
 
 %% Consider
 %% \begin{dmath}
