@@ -184,6 +184,53 @@ for $n = 0, \dots, N/2 -1 $ and let $Y=\mathcal{F}\left[y\right]$.  Then,
   X_{N / 2} &= \Re{Y_{N/2}}/\sqrt(2)
 \end{align}
 
+To show this, we note that, for real $x_n$,
+\begin{dmath}
+  \(X_k\)^*
+  = \(\sum_{n=0}^{N-1} x_n \omega_N^{nk} \)^*
+  = \sum_{n=0}^{N-1} x_n \omega_N^{-nk}
+  = \sum_{n=0}^{N-1} x_{N-1-n} \omega_N^{nk}.
+\end{dmath}
+Then, 
+\begin{dmath}
+  \sum_{n=0}^{4N-1} \tilde{x}_n \omega_{4N}^{nk}
+  = \sum_{n=0}^{2N-1} \cancelto{0}{\tilde{x}_{2n}}\quad \omega_{4N}^{2nk}
+  + \sum_{n=0}^{2N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
+  %% = \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+  %% + \sum_{n=N}^{2N-1} x_{N-n-1} \omega_{4N}^{(2n+1)k}
+  = \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+  + \sum_{n=0}^{N-1} x_{N-n-1} \omega_{4N}^{(2(n+N)+1)k}
+  =
+  \omega_{4N}^{k}
+  \left[
+  \sum_{n=0}^{N-1} x_n \omega_{2N}^{nk}
+  + \sum_{n=0}^{N-1} x_{n} \omega_{2N}^{-nk}
+  \right]
+  =
+  \omega_{4N}^{k}
+  \left[
+  \sum_{n=0}^{N-1} x_n \(\omega_{2N}^{nk} + \omega_{2N}^{-nk} \)
+  \right]
+  =
+  \omega_{4N}^{k}
+  \left[
+  \sum_{n=0}^{N-1} x_n 2\cos\(\frac{2 \pi nk}{2N} \)
+  \right]
+\end{dmath}
+
+
+Following \cite{shaojohnsondst23}, we have
+\begin{dmath}
+  X_k
+  =
+  \sum_{n=0}^{N/2 - 1} X_{2n} \omega_{N/2}^{nk}
+  + \omega_N^{k} \sum_{n=0}^{N/4 - 1}x_{4n + 1} \omega_{N/4}^{nk}
+  + \omega_N^{-k} \sum_{n=0}^{N/4 - 1}x_{4n - 1} \omega_{N/4}^{nk}
+\end{dmath}
+and then we notes that the first sum is zero, the second sum is the
+transform of $\tilde{y}$, and the third sum is the same as the second
+sum in reverse order.
+
 \subsection{DST-II}
 
 \begin{dmath}
