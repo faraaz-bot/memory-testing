@@ -18,7 +18,7 @@ def bluestein(x):
     A = np.zeros(M, x.dtype)
     A[:N] = x * a
 
-    # B = exp(); B is indexed by k-n
+    # B = exp() term; B is indexed by k-n
     b = np.exp(1j * np.pi / N * n**2)
     B = np.zeros(M, x.dtype)
     B[0] = b[0]
@@ -34,7 +34,7 @@ def compare(y, f1, f2):
     k1, k2 = f1(y1), f2(y2)
     return la.norm(k1-k2) / la.norm(k1)
 
-N = 16
+N = 13
 y = nr.rand(N) + 1j * nr.rand(N)
 
 print('rel error', compare(y, fft, bluestein))
