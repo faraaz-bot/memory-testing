@@ -14,6 +14,8 @@
 \usepackage{amssymb}
 \usepackage{bigfoot}
 
+\usepackage[]{algorithm2e}
+
 \usepackage{cancel}
 
 \usepackage{listings}
@@ -91,6 +93,7 @@ and taking the real part of the output first $N$ even-indexed outputs.
 
 Given $\{x_n\}_{n=0}^{N-1}$,
 \begin{dmath}
+  \label{dst1}
   X_k = \sum_{n=0}^{N-1}x_n \sin\left[\frac{\pi}{N+1}(n+1)(k+1)\right]
 \end{dmath}
 
@@ -132,6 +135,17 @@ $N=2^m-1$.
 One other possibly route of attack would be to use a paired-type
 algorithm, using the linearity of the FFT.  I was unable to find
 references to this in the literature.
+
+From Van Loan (equqation 4.4.2, p 229), we have ``the'' DST:
+\begin{dmath}
+  y_k = \sum_{j=1}^{m-1} x_j \sin\frac{k j \pi}{m}
+\end{dmath}
+for $\{x_j\}_{j=1}^{m-1}$, $\{y_k\}_{k=1}^{m-1}$.  We can re-index
+from $0$ to $N-1$ and we do end up with equation~\eqref{dst1}.
+Algorithm 4.4.2 on page 238 uses a paired real/complex transform to
+compute this, and then post-processes the result by dividing by sines.
+This algorithm requires $2.5 N \log N$ flops; roughly the same cost as
+a real-to-complex FFT of length $N$.
 
 
 %% Consider
