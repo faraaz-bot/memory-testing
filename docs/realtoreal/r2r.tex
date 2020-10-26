@@ -113,6 +113,29 @@ length-$2N+2$ sequence
 \end{dmath}
 and taking the imaginary part of the output indices $1,\dots,N$.
 
+Then,
+\begin{dmath}
+  \sum_{n=0}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+  =
+  \cancelto{0}{\tilde{x}_0 \omega_{2N+2}^{0k}}\quad
+  + \sum_{n=1}^{N} \tilde{x}_n \omega_{2N+2}^{nk}
+  + \cancelto{0}{\tilde{x}_{N+1} \omega_{2N+2}^{(N+1)k}} \quad
+  + \sum_{n=N+1}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+  =
+  \sum_{n=0}^{N-1}x_n \omega_{2N+2}^{(n+1)k}
+  - \sum_{n=0}^{N-1}x_{N-n-1} \omega_{2N+2}^{(n+N+2)k}
+  =
+  \sum_{n=0}^{N-1}x_n \omega_{2N+2}^{(n+1)k}
+  - \sum_{n=0}^{N-1}x_{n} \omega_{2N+2}^{(2N-n+1)k}
+  =
+  \sum_{n=0}^{N-1}x_n \(\omega_{2N+2}^{(n+1)k} - \omega_{2N+2}^{(2N+2 -n-1)k}\)
+  =
+  \sum_{n=0}^{N-1}x_n \(\omega_{2N+2}^{(n+1)k} - \omega_{2N+2}^{(-n-1)k}\)
+  =
+  \sum_{n=0}^{N-1}x_n 2 i \sin\frac{(N+1)k}{N+1}
+\end{dmath}
+
+
 From \cite{FFTW05}, FFTW uses the length-$2N+$ method for computing
 the DST-I and DCT-I.  This can be observed in practice with FFTW 3.3.8
 by looking at the memory use for the type-I transform as compared to
@@ -147,25 +170,34 @@ compute this, and then post-processes the result by dividing by sines.
 This algorithm requires $2.5 N \log N$ flops; roughly the same cost as
 a real-to-complex FFT of length $N$.
 
+This is basically the same as from Numerical Recipes chapter 12,
+equation 12.3.7, which is also indexed from 1.  In particular, the
+input is $\{x_j\}_{j=0}^{N-1}$, but $x_0$ is zero.  The algorithm
+requires that $N$ be even; this is equivalent to an odd-length input.
+This also requires a recursion relationship, which isn't particularly
+fun on the GPU.
 
-%% Consider
-%% \begin{dmath}
-%%   \sum_{n=0}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
-%%   =
-%%   \cancelto{0}{\tilde{x}_0 \omega_{2N+2}^{nk}}\quad
-%%   + \sum_{n=1}^{N} \tilde{x}_n \omega_{2N+2}^{nk}
-%%   + \cancelto{0}{\tilde{x}_{N+1} \omega_{2N+2}^{(N+1)k}}\quad
-%%   + \sum_{n=N+2}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
-%%   =
-%%   \sum_{n=1}^{N} x_{n-1} \omega_{2N+2}^{nk}
-%%   + \sum_{n=N+2}^{2N+1} x_{2N-n+1} \omega_{2N+2}^{nk}
-%%   =
-%%   \sum_{n=0}^{N-1} x_{n} \omega_{2N+2}^{(n+1)k}
-%%   + \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N+2}^{(n + N + 2)k}
-%%   =
-%%   \sum_{n=0}^{N-1} \(\omega_{2N+2}^{k}x_n - \omega_{2N+2}^{N +2k} x_{N-n-1}  \)
-%%   \omega_{2N+2}^{nk}
-%% \end{dmath}
+
+
+
+Consider
+\begin{dmath}
+  \sum_{n=0}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+  =
+  \cancelto{0}{\tilde{x}_0 \omega_{2N+2}^{nk}}\quad
+  + \sum_{n=1}^{N} \tilde{x}_n \omega_{2N+2}^{nk}
+  + \cancelto{0}{\tilde{x}_{N+1} \omega_{2N+2}^{(N+1)k}}\quad
+  + \sum_{n=N+2}^{2N+1} \tilde{x}_n \omega_{2N+2}^{nk}
+  =
+  \sum_{n=1}^{N} x_{n-1} \omega_{2N+2}^{nk}
+  + \sum_{n=N+2}^{2N+1} x_{2N-n+1} \omega_{2N+2}^{nk}
+  =
+  \sum_{n=0}^{N-1} x_{n} \omega_{2N+2}^{(n+1)k}
+  + \sum_{n=0}^{N-1} -x_{N -n -1} \omega_{2N+2}^{(n + N + 2)k}
+  =
+  \sum_{n=0}^{N-1} \(\omega_{2N+2}^{k}x_n - \omega_{2N+2}^{N +2k} x_{N-n-1}  \)
+  \omega_{2N+2}^{nk}
+\end{dmath}
 
 
 \subsection{DCT-II}
@@ -180,7 +212,7 @@ $n=0,\dots,N-1$,
   \tilde{x}_{2n} &= 0 \\
   \tilde{x}_{4N -2n -2} &= 0.0\\
   \tilde{x}_{2n + 1} &= x_n\\
-  \tilde{x}_{4N -(2n + 1)} &= x[n]
+  \tilde{x}_{4N -(2n + 1)} &= x_n
 \end{align}
 
 From \cite{shaojohnsondst23}, this can be computed via a length $N$
@@ -205,31 +237,27 @@ To show this, we note that, for real $x_n$,
   = \sum_{n=0}^{N-1} x_n \omega_N^{-nk}
   = \sum_{n=0}^{N-1} x_{N-1-n} \omega_N^{nk}.
 \end{dmath}
-Then, 
+Then,
 \begin{dmath}
   \sum_{n=0}^{4N-1} \tilde{x}_n \omega_{4N}^{nk}
-  = \sum_{n=0}^{2N-1} \cancelto{0}{\tilde{x}_{2n}}\quad \omega_{4N}^{2nk}
+  = \sum_{n=0}^{2N-1}
+  \cancelto{0}{\tilde{x}_{2n}}\quad \omega_{4N}^{2nk}
   + \sum_{n=0}^{2N-1} \tilde{x}_{2n+1} \omega_{4N}^{(2n+1)k}
-  %% = \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
-  %% + \sum_{n=N}^{2N-1} x_{N-n-1} \omega_{4N}^{(2n+1)k}
-  = \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+  =
+  \sum_{n=0}^{N-1} x_n \omega_{4N}^{(2n+1)k}
+  + \sum_{n=N}^{2N-1}  x_{N-n-1} \omega_{4N}^{(2n+1)k}
+  = \sum_{n=0}^{N-1} x_n  \omega_{4N}^{(2n+1)k}
   + \sum_{n=0}^{N-1} x_{N-n-1} \omega_{4N}^{(2(n+N)+1)k}
-  =
-  \omega_{4N}^{k}
-  \left[
-  \sum_{n=0}^{N-1} x_n \omega_{2N}^{nk}
-  + \sum_{n=0}^{N-1} x_{n} \omega_{2N}^{-nk}
-  \right]
-  =
-  \omega_{4N}^{k}
-  \left[
-  \sum_{n=0}^{N-1} x_n \(\omega_{2N}^{nk} + \omega_{2N}^{-nk} \)
-  \right]
-  =
-  \omega_{4N}^{k}
-  \left[
-  \sum_{n=0}^{N-1} x_n 2\cos\(\frac{2 \pi nk}{2N} \)
-  \right]
+  = \omega_{4N}^{k}
+  \left[ \sum_{n=0}^{N-1}
+    x_n \omega_{2N}^{nk} + \sum_{n=0}^{N-1} x_{n} \omega_{2N}^{-nk}
+    \right] = \omega_{4N}^{k} \left[ \sum_{n=0}^{N-1} x_n
+    \(\omega_{2N}^{nk} + \omega_{2N}^{-nk} \)
+    \right]
+  = \omega_{4N}^{k}
+  \left[ \sum_{n=0}^{N-1} x_n 2\cos\(\frac{2 \pi
+      nk}{2N} \)
+    \right]
 \end{dmath}
 
 
