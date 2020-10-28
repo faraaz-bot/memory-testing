@@ -16,13 +16,15 @@
 #include <hip/hip_complex.h>
 #include <hip/hip_runtime.h>
 
+#include "timer.h"
+
 #define PI 3.141592653589793238462643383279502884L
 #define HIP_CHECK(r)    \
     if(r != hipSuccess) \
         return {};
 
 using namespace std;
-using gpu_result = pair<double, vector<fftw_complex>>;
+using gpu_result = pair<float, vector<fftw_complex>>;
 
 //
 // Random inputs
@@ -33,7 +35,7 @@ vector<fftw_complex> random_vector(size_t n)
     random_device                     rd;
     mt19937                           gen(rd());
     uniform_real_distribution<double> dis(0.0, 1.0);
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t i = 0; i < n; ++i)
     {
         x[i][0] = dis(gen);
@@ -54,13 +56,6 @@ vector<fftw_complex> copy(vector<fftw_complex> const& x)
         z[i][1] = x[i][1];
     }
     return z;
-}
-
-double milliseconds(std::chrono::time_point<std::chrono::steady_clock> tic,
-                    std::chrono::time_point<std::chrono::steady_clock> toc)
-{
-    std::chrono::duration<double, std::milli> diff = toc - tic;
-    return diff.count();
 }
 
 //
@@ -198,6 +193,25 @@ vector<fftw_complex> fft_ict(vector<fftw_complex> const& x)
 // This is the idea behind Cooley-Tukey.
 //
 
+#define AVOID_BANK_CONFLICTS
+
+#ifdef AVOID_BANK_CONFLICTS
+// 256
+// #define LCLMASK 255
+// #define BNK(i) (((i)>>8)*257+(i&LCLMASK))
+// 128
+#define LCLMASK 127
+#define BNK(i) (((i)>>7)*129+(i&LCLMASK))
+// 64
+// #define LCLMASK 63
+// #define BNK(i) (((i)>>6)*65+(i&LCLMASK))
+// 32
+// #define LCLMASK 31
+// #define BNK(i) (((i)>>5)*33+(i&LCLMASK))
+#else
+#define BNK(i) (i)
+#endif
+
 //
 // Cooley-Tukey, re-order first, FFT on the GPU
 //
@@ -223,19 +237,18 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
         int j = i + M;
         int m = i % M;
 
-        double theta = -PI * m / M;
-        double cost  = cos(theta);
-        double sint  = sin(theta);
+        double cost, sint;
+        sincospi(-double(m) / M, &sint, &cost);
 
-        hipDoubleComplex xi = x[i];
-        hipDoubleComplex xj = x[j];
+        hipDoubleComplex xi = x[BNK(i)];
+        hipDoubleComplex xj = x[BNK(j)];
         hipDoubleComplex d;
 
         d.x = cost * xj.x - sint * xj.y;
         d.y = sint * xj.x + cost * xj.y;
 
-        x[i] = xi + d;
-        x[j] = xi - d;
+        x[BNK(i)] = xi + d;
+        x[BNK(j)] = xi - d;
 
         M <<= 1;
         P >>= 1;
@@ -247,9 +260,9 @@ __device__ void reorder1(hipDoubleComplex* x, int p, int n)
     int q = __brev(p) >> (32 - n);
     if(p > q)
     {
-        hipDoubleComplex t = x[p];
-        x[p]               = x[q];
-        x[q]               = t;
+        hipDoubleComplex t = x[BNK(p)];
+        x[BNK(p)]          = x[BNK(q)];
+        x[BNK(q)]          = t;
     }
 }
 
@@ -265,21 +278,21 @@ __device__ void reorder(hipDoubleComplex* x, int i, int N)
 
 __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, dim3 bstrides, int tstride)
 {
-    __shared__ hipDoubleComplex x[2048 + 64];
+    __shared__ hipDoubleComplex x[4096];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
     int i = hipThreadIdx_x;
 
-    x[i]         = x_[offset + i * tstride];
-    x[i + N / 2] = x_[offset + (i + N / 2) * tstride];
+    x[BNK(i)]         = x_[offset + i * tstride];
+    x[BNK(i + N / 2)] = x_[offset + (i + N / 2) * tstride];
     __syncthreads();
     reorder(x, i, N);
     __syncthreads();
     cooley_tukey_dif__(x, i, N);
     __syncthreads();
-    x_[offset + i * tstride]           = x[i];
-    x_[offset + (i + N / 2) * tstride] = x[i + N / 2];
+    x_[offset + i * tstride]           = x[BNK(i)];
+    x_[offset + (i + N / 2) * tstride] = x[BNK(i + N / 2)];
 }
 
 gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x)
@@ -292,18 +305,16 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x)
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    auto tic = chrono::steady_clock::now();
-
+    CPUTimer timer;
+    timer.tic();
     dim3 strides(N);
     cooley_tukey_dif<<<1, N / 2>>>((hipDoubleComplex*)X, N, strides, 1);
-    HIP_CHECK(hipDeviceSynchronize());
-
-    auto toc = chrono::steady_clock::now();
+    timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
-    return {milliseconds(tic, toc), move(z)};
+    return {timer.elapsed(), move(z)};
 }
 
 gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
@@ -316,16 +327,16 @@ gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    auto tic = chrono::steady_clock::now();
+    GPUTimer timer;
+    timer.tic();
     cooley_tukey_dif<<<nx, ny / 2>>>((hipDoubleComplex*)X, ny, dim3(ny), 1);
     cooley_tukey_dif<<<ny, nx / 2>>>((hipDoubleComplex*)X, nx, dim3(1), ny);
-    HIP_CHECK(hipDeviceSynchronize());
-    auto toc = chrono::steady_clock::now();
+    timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
-    return {milliseconds(tic, toc), move(z)};
+    return {timer.elapsed(), move(z)};
 }
 
 gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int nz)
@@ -338,17 +349,17 @@ gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int 
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    auto tic = chrono::steady_clock::now();
+    GPUTimer timer;
+    timer.tic();
     cooley_tukey_dif<<<dim3(nx, ny), nz / 2>>>((hipDoubleComplex*)X, nz, dim3(ny * nz, nz), 1);
     cooley_tukey_dif<<<dim3(nx, nz), ny / 2>>>((hipDoubleComplex*)X, ny, dim3(ny * nz, 1), nz);
     cooley_tukey_dif<<<dim3(ny, nz), nx / 2>>>((hipDoubleComplex*)X, nx, dim3(nz, 1), ny * nz);
-    HIP_CHECK(hipDeviceSynchronize());
-    auto toc = chrono::steady_clock::now();
+    timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
-    return {milliseconds(tic, toc), move(z)};
+    return {timer.elapsed(), move(z)};
 }
 
 //
@@ -373,82 +384,76 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 void test1d()
 {
-    std::chrono::time_point<std::chrono::steady_clock> tic, toc;
-
     size_t const n = (size_t)pow(2, 11);
     auto         x = random_vector(n);
+
+    CPUTimer timer;
 
     cout << "# 1d test" << endl;
     cout << "1d input length: " << n << endl;
 
-    tic     = std::chrono::steady_clock::now();
+    timer.tic();
     auto z1 = fft_fftw(x);
-    toc     = std::chrono::steady_clock::now();
-    cout << "FFTW time:       " << milliseconds(tic, toc) << "ms" << endl;
+    timer.toc();
+    cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
 
-    tic     = std::chrono::steady_clock::now();
+    timer.tic();
     auto z2 = fft_ict(x);
-    toc     = std::chrono::steady_clock::now();
-    cout << "ICT time:        " << milliseconds(tic, toc) << "ms" << endl;
+    timer.toc();
+    cout << "ICT time:        " << timer.elapsed() << "ms" << endl;
     cout << "ICT rel diff:    " << compare(z1, z2) << endl;
 
-    tic           = std::chrono::steady_clock::now();
-    auto [c4, z4] = fft_gpu_ct_dif(x); // this fails for n > 1024
-    toc           = std::chrono::steady_clock::now();
-    cout << "GPU time:        " << milliseconds(tic, toc) << "ms" << endl;
+    auto [c4, z4] = fft_gpu_ct_dif(x);
     cout << "GPU rel diff:    " << compare(z1, z4) << endl;
     cout << "GPU kernel time: " << c4 << "ms" << endl;
 }
 
 void test2d()
 {
-    std::chrono::time_point<std::chrono::steady_clock> tic, toc;
-
     size_t const n = (size_t)pow(2, 10);
     auto         x = random_vector(n * n);
 
     cout << "# 2d test" << endl;
     cout << "2d input length: " << n << "x" << n << endl;
 
-    tic     = std::chrono::steady_clock::now();
-    auto z1 = fft_fftw_2d(x, n, n);
-    toc     = std::chrono::steady_clock::now();
-    cout << "FFTW time:       " << milliseconds(tic, toc) << "ms" << endl;
+    CPUTimer timer;
 
-    tic           = std::chrono::steady_clock::now();
+    timer.tic();
+    auto z1 = fft_fftw_2d(x, n, n);
+    timer.toc();
+    cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
+
     auto [c2, z2] = fft_gpu_ct_dif_2d(x, n, n);
-    toc           = std::chrono::steady_clock::now();
-    cout << "GPU time:        " << milliseconds(tic, toc) << "ms" << endl;
     cout << "GPU rel diff:    " << compare(z1, z2) << endl;
     cout << "GPU kernel time: " << c2 << "ms" << endl;
 }
 
 void test3d()
 {
-    std::chrono::time_point<std::chrono::steady_clock> tic, toc;
-
     size_t const n = (size_t)pow(2, 9);
     auto         x = random_vector(n * n * n);
 
     cout << "# 3d text" << endl;
     cout << "3d input length: " << n << "x" << n << "x" << n << endl;
 
-    tic     = std::chrono::steady_clock::now();
-    auto z1 = fft_fftw_3d(x, n, n, n);
-    toc     = std::chrono::steady_clock::now();
-    cout << "FFTW time:       " << milliseconds(tic, toc) << "ms" << endl;
+    CPUTimer timer;
 
-    tic           = std::chrono::steady_clock::now();
+    timer.tic();
+    auto z1 = fft_fftw_3d(x, n, n, n);
+    timer.toc();
+    cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
+
     auto [c2, z2] = fft_gpu_ct_dif_3d(x, n, n, n);
-    toc           = std::chrono::steady_clock::now();
-    cout << "GPU time:        " << milliseconds(tic, toc) << "ms" << endl;
     cout << "GPU rel diff:    " << compare(z1, z2) << endl;
     cout << "GPU kernel:      " << c2 << "ms" << endl;
 }
 
 int main(int argc, char* argv[])
 {
+#ifdef AVOID_BANK_CONFLICTS
+    cout << "TRYING TO AVOID BANK CONFLICTS" << endl;
+#endif
     test1d();
-    test2d();
-    test3d();
+    // test2d();
+    //    test3d();
 }
