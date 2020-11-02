@@ -81,10 +81,13 @@ vector<fftw_complex> fft_naive(vector<fftw_complex> const& x)
 //
 // FFTW backed FFT
 //
-vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x)
+vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
-    auto p = fftw_plan_dft_1d(z.size(), z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    auto p = fftw_plan_many_dft(1, &nx, nbatch,
+                                z.data(), nullptr, 1, nx,
+                                z.data(), nullptr, 1, nx,
+                                FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(p);
     fftw_destroy_plan(p);
     return z;
@@ -295,23 +298,30 @@ __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, dim3 bstrides, int
     x_[offset + (i + N / 2) * tstride] = x[BNK(i + N / 2)];
 }
 
-gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x)
+gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
 {
-    auto const N = x.size();
-
     auto z = copy(x);
 
+    // // re-order on CPU...
+    // auto const log2N = (size_t)log2(N);
+    // for(size_t p = 0; p < N; ++p)
+    // {
+    //     auto q = bitreverse(p, log2N);
+    //     if(p > q)
+    //         swap(z[p], z[q]);
+    // }
+
     void* X;
-    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
-    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(fftw_complex)));
+    HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
     CPUTimer timer;
     timer.tic();
-    dim3 strides(N);
-    cooley_tukey_dif<<<1, N / 2>>>((hipDoubleComplex*)X, N, strides, 1);
+    dim3 strides(nx);
+    cooley_tukey_dif<<<nbatch, nx / 2>>>((hipDoubleComplex*)X, nx, strides, 1);
     timer.toc();
 
-    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
     return {timer.elapsed(), move(z)};
@@ -385,25 +395,26 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 void test1d()
 {
     size_t const n = (size_t)pow(2, 11);
-    auto         x = random_vector(n);
+    size_t const nbatch = 4096;
+    auto         x = random_vector(n*nbatch);
 
     CPUTimer timer;
 
     cout << "# 1d test" << endl;
-    cout << "1d input length: " << n << endl;
+    cout << "1d input length: " << n << " (" << nbatch << ")" << endl;
 
     timer.tic();
-    auto z1 = fft_fftw(x);
+    auto z1 = fft_fftw(x, n, nbatch);
     timer.toc();
     cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
 
-    timer.tic();
-    auto z2 = fft_ict(x);
-    timer.toc();
-    cout << "ICT time:        " << timer.elapsed() << "ms" << endl;
-    cout << "ICT rel diff:    " << compare(z1, z2) << endl;
+    // timer.tic();
+    // auto z2 = fft_ict(x);
+    // timer.toc();
+    // cout << "ICT time:        " << timer.elapsed() << "ms" << endl;
+    // cout << "ICT rel diff:    " << compare(z1, z2) << endl;
 
-    auto [c4, z4] = fft_gpu_ct_dif(x);
+    auto [c4, z4] = fft_gpu_ct_dif(x, n, nbatch);
     cout << "GPU rel diff:    " << compare(z1, z4) << endl;
     cout << "GPU kernel time: " << c4 << "ms" << endl;
 }
