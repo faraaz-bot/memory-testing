@@ -261,13 +261,14 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
     }
 }
 
-__device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N)
+__device__ void
+    cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N)
 {
     // note: i0 in [0, N/2]
     if(i0 >= N / 2)
         return;
 
-    int P = N;
+    int P = N >> 1;
     int M = 1; // size of current block
 
     while(M < N)
@@ -280,7 +281,7 @@ __device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleCompl
         int j = i + M;
         int m = i % M;
 
-        hipDoubleComplex t = T[m*P];
+        hipDoubleComplex t = T[m * P];
 
         hipDoubleComplex xi = x[BNK(i)];
         hipDoubleComplex xj = x[BNK(j)];
@@ -318,7 +319,7 @@ __device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
 }
 
 __global__ void cooley_tukey_dif(
-                                 hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
+    hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
 {
     __shared__ hipDoubleComplex x[2048];
 
@@ -362,8 +363,13 @@ __global__ void cooley_tukey_dif(
     tic = toc;
 }
 
-__global__ void cooley_tukey_dif_wtwiddles(
-                                           hipDoubleComplex* x_, hipDoubleComplex* T, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
+__global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex*  x_,
+                                           hipDoubleComplex*  T,
+                                           int                N,
+                                           int                log2N,
+                                           dim3               bstrides,
+                                           int                tstride,
+                                           CooleyTukeyClocks* clocks)
 {
     __shared__ hipDoubleComplex x[2048];
 
@@ -429,7 +435,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
     hipDoubleComplex* T;
-    HIP_CHECK(hipMalloc(&T, nx * sizeof(fftw_complex)));
+    HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(fftw_complex)));
 
     CooleyTukeyClocks* d_clocks;
     HIP_CHECK(hipMalloc(&d_clocks, sizeof(CooleyTukeyClocks)));
@@ -437,7 +443,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     GPUTimer timer;
     timer.tic();
     dim3 strides(nx);
-    cooley_tukey_twiddles<<<(nx+255)/256,256>>>(T, nx);
+    cooley_tukey_twiddles<<<(nx / 2 + 255) / 256, 256>>>(T, nx / 2);
     cooley_tukey_dif_wtwiddles<<<nbatch, nx / 2>>>(X, T, nx, log2(nx), strides, 1, d_clocks);
     timer.toc();
 
