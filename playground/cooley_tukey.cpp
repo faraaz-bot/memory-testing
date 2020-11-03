@@ -236,7 +236,7 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
 
     while(M < N)
     {
-        if(M > 256)
+        if(M > 64)
             __syncthreads();
 
         // convert i0 to i in [0, N]; skip odd blocks
@@ -246,7 +246,6 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
 
         double cost, sint;
         sincospi(-double(m) / M, &sint, &cost);
-        // T[m*P];
 
         hipDoubleComplex xi = x[BNK(i)];
         hipDoubleComplex xj = x[BNK(j)];
@@ -273,7 +272,7 @@ __device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleCompl
 
     while(M < N)
     {
-        if(M > 256)
+        if(M > 64)
             __syncthreads();
 
         // convert i0 to i in [0, N]; skip odd blocks
@@ -309,18 +308,17 @@ __device__ void reorder1(hipDoubleComplex* x, int p, int n)
     }
 }
 
-__device__ void reorder(hipDoubleComplex* x, int i, int N)
+__device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
 {
     if(i >= N / 2)
         return;
 
-    int log2n = (int)log2(N);
     reorder1(x, i, log2n);
     reorder1(x, i + N / 2, log2n);
 }
 
 __global__ void cooley_tukey_dif(
-    hipDoubleComplex* x_, int N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
+                                 hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
 {
     __shared__ hipDoubleComplex x[2048];
 
@@ -341,7 +339,7 @@ __global__ void cooley_tukey_dif(
         clocks->pull = toc - tic;
     tic = toc;
 
-    reorder(x, i, N);
+    reorder(x, i, N, log2N);
     __syncthreads();
     toc = clock();
     if(set_clock)
@@ -365,7 +363,7 @@ __global__ void cooley_tukey_dif(
 }
 
 __global__ void cooley_tukey_dif_wtwiddles(
-                                           hipDoubleComplex* x_, hipDoubleComplex* T, int N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
+                                           hipDoubleComplex* x_, hipDoubleComplex* T, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
 {
     __shared__ hipDoubleComplex x[2048];
 
@@ -386,7 +384,7 @@ __global__ void cooley_tukey_dif_wtwiddles(
         clocks->pull = toc - tic;
     tic = toc;
 
-    reorder(x, i, N);
+    reorder(x, i, N, log2N);
     __syncthreads();
     toc = clock();
     if(set_clock)
@@ -440,7 +438,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     timer.tic();
     dim3 strides(nx);
     cooley_tukey_twiddles<<<(nx+255)/256,256>>>(T, nx);
-    cooley_tukey_dif_wtwiddles<<<nbatch, nx / 2>>>(X, T, nx, strides, 1, d_clocks);
+    cooley_tukey_dif_wtwiddles<<<nbatch, nx / 2>>>(X, T, nx, log2(nx), strides, 1, d_clocks);
     timer.toc();
 
     CooleyTukeyClocks clocks;
@@ -473,8 +471,8 @@ gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
 
     GPUTimer timer;
     timer.tic();
-    cooley_tukey_dif<<<nx, ny / 2>>>(X, ny, dim3(ny), 1, d_clocks);
-    cooley_tukey_dif<<<ny, nx / 2>>>(X, nx, dim3(1), ny, d_clocks);
+    cooley_tukey_dif<<<nx, ny / 2>>>(X, ny, log2(ny), dim3(ny), 1, d_clocks);
+    cooley_tukey_dif<<<ny, nx / 2>>>(X, nx, log2(nx), dim3(1), ny, d_clocks);
     timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
@@ -499,9 +497,9 @@ gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int 
 
     GPUTimer timer;
     timer.tic();
-    cooley_tukey_dif<<<dim3(nx, ny), nz / 2>>>(X, nz, dim3(ny * nz, nz), 1, d_clocks);
-    cooley_tukey_dif<<<dim3(nx, nz), ny / 2>>>(X, ny, dim3(ny * nz, 1), nz, d_clocks);
-    cooley_tukey_dif<<<dim3(ny, nz), nx / 2>>>(X, nx, dim3(nz, 1), ny * nz, d_clocks);
+    cooley_tukey_dif<<<dim3(nx, ny), nz / 2>>>(X, nz, log2(nz), dim3(ny * nz, nz), 1, d_clocks);
+    cooley_tukey_dif<<<dim3(nx, nz), ny / 2>>>(X, ny, log2(ny), dim3(ny * nz, 1), nz, d_clocks);
+    cooley_tukey_dif<<<dim3(ny, nz), nx / 2>>>(X, nx, log2(nx), dim3(nz, 1), ny * nz, d_clocks);
     timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
@@ -536,8 +534,8 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 void test1d()
 {
-    size_t const n      = (size_t)pow(2, 10);
-    size_t const nbatch = 20;
+    size_t const n      = (size_t)pow(2, 11);
+    size_t const nbatch = 4096;
     auto         x      = random_vector(n * nbatch);
 
     CPUTimer timer;
