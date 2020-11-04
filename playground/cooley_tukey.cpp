@@ -26,10 +26,23 @@
 using namespace std;
 using gpu_result = pair<float, vector<fftw_complex>>;
 
-struct CooleyTukeyClocks
+enum CooleyTukeyClocks
 {
-    int pull, reorder, transform, push;
+    OUTER_PULL,
+    OUTER_REORDER,
+    OUTER_TRANSFORM,
+    OUTER_PUSH,
+    OUTER_TOTAL,
+    INNER_SYNC,
+    INNER_ARITH,
+    INNER_PULL,
+    INNER_BUTTERFLY,
+    INNER_PUSH,
+    INNER_TOTAL,
+    SIZE
 };
+
+using CTTimer = ClockTimer<CooleyTukeyClocks>;
 
 //
 // Random inputs
@@ -261,41 +274,52 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
     }
 }
 
-__device__ void
-    cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N)
+__device__ void cooley_tukey_dif_wtwiddles__(
+    hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N, CTTimer& clks)
 {
-    // note: i0 in [0, N/2]
-    if(i0 >= N / 2)
-        return;
+    // // note: i0 in [0, N/2]
+    // if(i0 >= N / 2)
+    //     return;
+
+    clks.tic(INNER_TOTAL);
 
     int P = N >> 1;
-    int M = 1; // size of current block
 
-    while(M < N)
+    for (int M = 1; M < N; M <<= 1)
     {
+        clks.tic(INNER_SYNC);
         if(M > 64)
             __syncthreads();
+        clks.toc(INNER_SYNC);
 
         // convert i0 to i in [0, N]; skip odd blocks
+        clks.tic(INNER_ARITH);
         int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
         int j = i + M;
         int m = i % M;
+        clks.toc(INNER_ARITH);
 
-        hipDoubleComplex t = T[m * P];
-
+        clks.tic(INNER_PULL);
+        hipDoubleComplex t  = T[m * P];
         hipDoubleComplex xi = x[BNK(i)];
         hipDoubleComplex xj = x[BNK(j)];
         hipDoubleComplex d;
+        clks.toc(INNER_PULL);
 
+        clks.tic(INNER_BUTTERFLY);
         d.x = t.x * xj.x - t.y * xj.y;
         d.y = t.y * xj.x + t.x * xj.y;
+        clks.toc(INNER_BUTTERFLY);
 
+        clks.tic(INNER_PUSH);
         x[BNK(i)] = xi + d;
         x[BNK(j)] = xi - d;
+        clks.toc(INNER_PUSH);
 
-        M <<= 1;
         P >>= 1;
     }
+
+    clks.toc(INNER_TOTAL);
 }
 
 __device__ void reorder1(hipDoubleComplex* x, int p, int n)
@@ -319,98 +343,92 @@ __device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
 }
 
 __global__ void cooley_tukey_dif(
-    hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CooleyTukeyClocks* clocks)
+    hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CTTimer* clksbuf)
 {
     __shared__ hipDoubleComplex x[2048];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
-    int        i         = hipThreadIdx_x;
-    bool const set_clock = offset == 0 && i == 0;
+    int i = hipThreadIdx_x;
+
+    CTTimer clks;
+    if (offset == 0 && i == 0) clks.accumulate = true;
+
+    clks.tic(OUTER_TOTAL);
+
     // bool const set_clock = false;
-
-    clock_t tic, toc;
-
-    tic               = clock();
+    clks.tic(OUTER_PULL);
     x[BNK(i)]         = x_[offset + i * tstride];
     x[BNK(i + N / 2)] = x_[offset + (i + N / 2) * tstride];
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->pull = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_PULL);
 
+    clks.tic(OUTER_REORDER);
     reorder(x, i, N, log2N);
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->reorder = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_REORDER);
 
+    clks.tic(OUTER_TRANSFORM);
     cooley_tukey_dif__(x, i, N);
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->transform = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_TRANSFORM);
 
+    clks.tic(OUTER_PUSH);
     x_[offset + i * tstride]           = x[BNK(i)];
     x_[offset + (i + N / 2) * tstride] = x[BNK(i + N / 2)];
+    clks.toc(OUTER_PUSH);
 
-    toc = clock();
-    if(set_clock)
-        clocks->push = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_TOTAL);
+
+    *clksbuf = clks;
 }
 
-__global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex*  x_,
-                                           hipDoubleComplex*  T,
-                                           int                N,
-                                           int                log2N,
-                                           dim3               bstrides,
-                                           int                tstride,
-                                           CooleyTukeyClocks* clocks)
+__global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
+                                           hipDoubleComplex* T,
+                                           int               N,
+                                           int               log2N,
+                                           dim3              bstrides,
+                                           int               tstride,
+                                           CTTimer*       clksbuf)
 {
     __shared__ hipDoubleComplex x[2048];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
     int        i         = hipThreadIdx_x;
-    bool const set_clock = offset == 0 && i == 0;
-    // bool const set_clock = false;
 
-    clock_t tic, toc;
+    if (i > N / 2) return;
 
-    tic               = clock();
+    CTTimer clks;
+    if (offset == 0 && i==0) clks.accumulate = true;
+
+    clks.tic(OUTER_TOTAL);
+
+    clks.tic(OUTER_PULL);
     x[BNK(i)]         = x_[offset + i * tstride];
     x[BNK(i + N / 2)] = x_[offset + (i + N / 2) * tstride];
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->pull = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_PULL);
 
+    clks.tic(OUTER_REORDER);
     reorder(x, i, N, log2N);
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->reorder = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_REORDER);
 
-    cooley_tukey_dif_wtwiddles__(x, T, i, N);
+    clks.tic(OUTER_TRANSFORM);
+    cooley_tukey_dif_wtwiddles__(x, T, i, N, clks);
+    clks.toc(OUTER_TRANSFORM);
+
+    clks.tic(OUTER_PUSH);
     __syncthreads();
-    toc = clock();
-    if(set_clock)
-        clocks->transform = toc - tic;
-    tic = toc;
-
     x_[offset + i * tstride]           = x[BNK(i)];
     x_[offset + (i + N / 2) * tstride] = x[BNK(i + N / 2)];
+    clks.toc(OUTER_PUSH);
 
-    toc = clock();
-    if(set_clock)
-        clocks->push = toc - tic;
-    tic = toc;
+    clks.toc(OUTER_TOTAL);
+
+    if (clks.accumulate)
+      *clksbuf = clks;
 }
 
 __global__ void cooley_tukey_twiddles(hipDoubleComplex* T, int N)
@@ -437,8 +455,8 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     hipDoubleComplex* T;
     HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(fftw_complex)));
 
-    CooleyTukeyClocks* d_clocks;
-    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CooleyTukeyClocks)));
+    CTTimer* d_clocks;
+    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CTTimer)));
 
     GPUTimer timer;
     timer.tic();
@@ -447,17 +465,24 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     cooley_tukey_dif_wtwiddles<<<nbatch, nx / 2>>>(X, T, nx, log2(nx), strides, 1, d_clocks);
     timer.toc();
 
-    CooleyTukeyClocks clocks;
-    HIP_CHECK(hipMemcpy(&clocks, d_clocks, sizeof(CooleyTukeyClocks), hipMemcpyDeviceToHost));
+    CTTimer clocks;
+    HIP_CHECK(hipMemcpy(&clocks, d_clocks, sizeof(CTTimer), hipMemcpyDeviceToHost));
     HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(fftw_complex), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(d_clocks));
     HIP_CHECK(hipFree(T));
     HIP_CHECK(hipFree(X));
 
-    cout << "CT pull      " << clocks.pull << endl;
-    cout << "CT reorder   " << clocks.reorder << endl;
-    cout << "CT transform " << clocks.transform << endl;
-    cout << "CT push      " << clocks.push << endl;
+    cout << "OUTER_PULL      " << clocks.total[OUTER_PULL] << endl;
+    cout << "OUTER_REORDER   " << clocks.total[OUTER_REORDER] << endl;
+    cout << "OUTER_TRANSFORM " << clocks.total[OUTER_TRANSFORM] << endl;
+    cout << "OUTER_PUSH      " << clocks.total[OUTER_PUSH] << endl;
+    cout << "OUTER_TOTAL     " << clocks.total[OUTER_TOTAL] << endl;
+    cout << "INNER_SYNC      " << clocks.total[INNER_SYNC] << endl;
+    cout << "INNER_ARITH     " << clocks.total[INNER_ARITH] << endl;
+    cout << "INNER_PULL      " << clocks.total[INNER_PULL] << endl;
+    cout << "INNER_BUTTERFLY " << clocks.total[INNER_BUTTERFLY] << endl;
+    cout << "INNER_PUSH      " << clocks.total[INNER_PUSH] << endl;
+    cout << "INNER_TOTAL     " << clocks.total[INNER_TOTAL] << endl;
 
     return {timer.elapsed(), move(z)};
 }
@@ -472,8 +497,8 @@ gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    CooleyTukeyClocks* d_clocks;
-    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CooleyTukeyClocks)));
+    CTTimer* d_clocks;
+    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CTTimer)));
 
     GPUTimer timer;
     timer.tic();
@@ -498,8 +523,8 @@ gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int 
     HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
 
-    CooleyTukeyClocks* d_clocks;
-    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CooleyTukeyClocks)));
+    CTTimer* d_clocks;
+    HIP_CHECK(hipMalloc(&d_clocks, sizeof(CTTimer)));
 
     GPUTimer timer;
     timer.tic();
