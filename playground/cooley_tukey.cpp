@@ -23,8 +23,13 @@
     if(r != hipSuccess) \
         return {};
 
+#ifdef USE_CLOCK_TIMERS
 #define TIC(x) clks.tic(x)
 #define TOC(x) clks.toc(x)
+#else
+#define TIC(x)
+#define TOC(x)
+#endif
 
 using namespace std;
 using gpu_result = pair<float, vector<fftw_complex>>;
@@ -476,6 +481,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     HIP_CHECK(hipFree(T));
     HIP_CHECK(hipFree(X));
 
+#ifdef USE_CLOCK_TIMERS
     cout << "OUTER_PULL      " << clocks.total[OUTER_PULL] << endl;
     cout << "OUTER_REORDER   " << clocks.total[OUTER_REORDER] << endl;
     cout << "OUTER_TRANSFORM " << clocks.total[OUTER_TRANSFORM] << endl;
@@ -487,6 +493,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     cout << "INNER_BUTTERFLY " << clocks.total[INNER_BUTTERFLY] << endl;
     cout << "INNER_PUSH      " << clocks.total[INNER_PUSH] << endl;
     cout << "INNER_TOTAL     " << clocks.total[INNER_TOTAL] << endl;
+#endif
 
     return {timer.elapsed(), move(z)};
 }
