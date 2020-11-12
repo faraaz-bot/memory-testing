@@ -597,10 +597,9 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 // Some tests!
 //
-void test1d()
+void test1d(size_t n)
 {
-    size_t const n      = (size_t)pow(2, 11);
-    size_t const nbatch = 4096;
+    size_t const nbatch = 1;
     auto         x      = random_vector(n * nbatch);
 
     CPUTimer timer;
@@ -669,7 +668,13 @@ int main(int argc, char* argv[])
 #ifdef AVOID_BANK_CONFLICTS
     cout << "TRYING TO AVOID BANK CONFLICTS" << endl;
 #endif
-    test1d();
+    size_t n = 2048;
+    if(argc > 1)
+    {
+        n = stoi(argv[1]);
+    }
+
+    test1d(n);
     //test2d();
     //test3d();
 }
