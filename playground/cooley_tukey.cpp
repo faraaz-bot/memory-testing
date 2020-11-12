@@ -284,44 +284,67 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
     }
 }
 
+template <bool sync>
+__device__ void cooley_tukey_dif_wtwiddles_iter__(
+    hipDoubleComplex* x, hipDoubleComplex* T, int i0, int M, int P, CTTimer& clks)
+{
+
+    if constexpr(sync)
+    {
+        TIC(INNER_SYNC);
+        __syncthreads();
+        TOC(INNER_SYNC);
+    }
+
+    // convert i0 to i in [0, N]; skip odd blocks
+    TIC(INNER_ARITH);
+    int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
+    int j = i + M;
+    int m = i % M;
+    TOC(INNER_ARITH);
+
+    TIC(INNER_PULL);
+    hipDoubleComplex t  = T[m * P];
+    hipDoubleComplex xi = x[BNK(i)];
+    hipDoubleComplex xj = x[BNK(j)];
+    hipDoubleComplex d;
+    TOC(INNER_PULL);
+
+    TIC(INNER_BUTTERFLY);
+    d.x = t.x * xj.x - t.y * xj.y;
+    d.y = t.y * xj.x + t.x * xj.y;
+    TOC(INNER_BUTTERFLY);
+
+    TIC(INNER_PUSH);
+    x[BNK(i)] = xi + d;
+    x[BNK(j)] = xi - d;
+    TOC(INNER_PUSH);
+}
+
 __device__ void cooley_tukey_dif_wtwiddles__(
     hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N, CTTimer& clks)
 {
     TIC(INNER_TOTAL);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 1, N/2, clks);
 
-    int P = N >> 1;
+    //#define HELP_ME_UNDERSTAND
+#ifdef HELP_ME_UNDERSTAND
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 2, N/4, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 4, N/8, clks);
+    int P = N / 16;
+    int M = 8;
+#else
+    int P = N / 4;
+    int M = 2;
+#endif
 
-    for(int M = 1; M < N; M <<= 1)
+    while(M < N)
     {
-        TIC(INNER_SYNC);
         if(M > 64)
-            __syncthreads();
-        TOC(INNER_SYNC);
-
-        // convert i0 to i in [0, N]; skip odd blocks
-        TIC(INNER_ARITH);
-        int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
-        int j = i + M;
-        int m = i % M;
-        TOC(INNER_ARITH);
-
-        TIC(INNER_PULL);
-        hipDoubleComplex t  = T[m * P];
-        hipDoubleComplex xi = x[BNK(i)];
-        hipDoubleComplex xj = x[BNK(j)];
-        hipDoubleComplex d;
-        TOC(INNER_PULL);
-
-        TIC(INNER_BUTTERFLY);
-        d.x = t.x * xj.x - t.y * xj.y;
-        d.y = t.y * xj.x + t.x * xj.y;
-        TOC(INNER_BUTTERFLY);
-
-        TIC(INNER_PUSH);
-        x[BNK(i)] = xi + d;
-        x[BNK(j)] = xi - d;
-        TOC(INNER_PUSH);
-
+            cooley_tukey_dif_wtwiddles_iter__<true>(x, T, i0, M, P, clks);
+        else
+            cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, M, P, clks);
+        M <<= 1;
         P >>= 1;
     }
 
