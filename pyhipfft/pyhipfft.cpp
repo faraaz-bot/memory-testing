@@ -1,0 +1,232 @@
+//
+// Python extension module for hipFFT.
+//
+
+#include <exception>
+
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#define PY_ARRAY_UNIQUE_SYMBOL hipfft_ARRAY_API
+#include <numpy/arrayobject.h>
+
+#include <hipfft.h>
+
+#define BEGIN_EXTERN_C extern "C" {
+#define END_EXTERN_C }
+
+#define HIPFFT_CHECK(ret)                                          \
+    if((ret) != HIPFFT_SUCCESS)                                    \
+    {                                                              \
+        PyErr_SetObject(PyExc_RuntimeError, PyLong_FromLong(ret)); \
+        return NULL;                                               \
+    }
+
+#define HIP_CHECK(ret)                                             \
+    if((ret) != hipSuccess)                                        \
+    {                                                              \
+        PyErr_SetObject(PyExc_RuntimeError, PyLong_FromLong(ret)); \
+        return NULL;                                               \
+    }
+
+BEGIN_EXTERN_C
+
+typedef struct
+{
+    hipfftType fft_type;
+    int        npy_type;
+} transform_types_t;
+
+static transform_types_t transform_types(PyArrayObject* x, bool real, int direction)
+{
+    if(PyArray_TYPE(x) == NPY_FLOAT32)
+    {
+        return {HIPFFT_R2C, NPY_COMPLEX64};
+    }
+    if(PyArray_TYPE(x) == NPY_FLOAT64)
+    {
+        return {HIPFFT_D2Z, NPY_COMPLEX128};
+    }
+    if(PyArray_TYPE(x) == NPY_COMPLEX64)
+    {
+        if(real && direction == HIPFFT_BACKWARD)
+            return {HIPFFT_C2R, NPY_FLOAT32};
+        return {HIPFFT_C2C, NPY_COMPLEX64};
+    }
+    if(PyArray_TYPE(x) == NPY_COMPLEX128)
+    {
+        if(real && direction == HIPFFT_BACKWARD)
+            return {HIPFFT_Z2D, NPY_FLOAT64};
+        return {HIPFFT_Z2Z, NPY_COMPLEX128};
+    }
+    throw std::runtime_error("FFT type cannot be deduced.");
+}
+
+static PyObject* hipfft_transform(PyObject* X, bool real, int direction)
+{
+    PyArrayObject* x = (PyArrayObject*)X;
+
+    auto nd = PyArray_NDIM(x);
+    auto nx = PyArray_DIM(x, 0);
+    auto ny = PyArray_DIM(x, 1);
+    auto nz = PyArray_DIM(x, 2);
+
+    if(real && direction == HIPFFT_BACKWARD)
+    {
+        if(nd == 1)
+            nx = 2 * (nx - 1);
+        if(nd == 2)
+            ny = 2 * (ny - 1);
+        if(nd == 3)
+            nz = 2 * (nz - 1);
+    }
+
+    hipfftHandle      plan;
+    transform_types_t type;
+    try
+    {
+        type = transform_types(x, real, direction);
+    }
+    catch(std::exception& e)
+    {
+        HIPFFT_CHECK(HIPFFT_INVALID_TYPE);
+    }
+
+    if(PyArray_NDIM(x) == 1)
+    {
+        HIPFFT_CHECK(hipfftPlan1d(&plan, nx, type.fft_type, 1));
+    }
+    else if(PyArray_NDIM(x) == 2)
+    {
+        HIPFFT_CHECK(hipfftPlan2d(&plan, nx, ny, type.fft_type));
+    }
+    else if(PyArray_NDIM(x) == 3)
+    {
+        HIPFFT_CHECK(hipfftPlan3d(&plan, nx, ny, nz, type.fft_type));
+    }
+    else
+    {
+        HIPFFT_CHECK(HIPFFT_INVALID_SIZE);
+    }
+
+    npy_intp dims[3] = {nx, ny, nz};
+    if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
+        dims[nd - 1] = dims[nd - 1] / 2 + 1;
+    PyObject*      Z = PyArray_SimpleNew(nd, dims, type.npy_type);
+    PyArrayObject* z = (PyArrayObject*)Z;
+
+    size_t total_bytes_in  = (size_t)PyArray_NBYTES(x);
+    size_t total_bytes_out = (size_t)PyArray_NBYTES(z);
+    void*  d_in_out;
+    hipMalloc(&d_in_out, max(total_bytes_in, total_bytes_out));
+    HIP_CHECK(hipMemcpy(d_in_out, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
+
+    switch(type.fft_type)
+    {
+    case HIPFFT_C2C:
+        HIPFFT_CHECK(
+            hipfftExecC2C(plan, (hipfftComplex*)d_in_out, (hipfftComplex*)d_in_out, direction));
+        break;
+    case HIPFFT_R2C:
+        HIPFFT_CHECK(hipfftExecR2C(plan, (hipfftReal*)d_in_out, (hipfftComplex*)d_in_out));
+        break;
+    case HIPFFT_C2R:
+        HIPFFT_CHECK(hipfftExecC2R(plan, (hipfftComplex*)d_in_out, (hipfftReal*)d_in_out));
+        break;
+    case HIPFFT_D2Z:
+        HIPFFT_CHECK(
+            hipfftExecD2Z(plan, (hipfftDoubleReal*)d_in_out, (hipfftDoubleComplex*)d_in_out));
+        break;
+    case HIPFFT_Z2D:
+        HIPFFT_CHECK(
+            hipfftExecZ2D(plan, (hipfftDoubleComplex*)d_in_out, (hipfftDoubleReal*)d_in_out));
+        break;
+    case HIPFFT_Z2Z:
+        HIPFFT_CHECK(hipfftExecZ2Z(
+            plan, (hipfftDoubleComplex*)d_in_out, (hipfftDoubleComplex*)d_in_out, direction));
+        break;
+    default:
+        HIPFFT_CHECK(HIPFFT_INVALID_TYPE);
+        break;
+    }
+
+    HIP_CHECK(hipMemcpy(PyArray_DATA(z), d_in_out, total_bytes_out, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(d_in_out));
+    HIPFFT_CHECK(hipfftDestroy(plan));
+
+    return Z;
+}
+
+static PyObject* hipfft_forward(PyObject* self, PyObject* args)
+{
+    PyObject* X;
+    int       real = 0;
+    if(!PyArg_ParseTuple(args, "O|p", &X, &real))
+        return NULL;
+
+    if(!PyArray_CheckExact(X))
+        return NULL; // better messaging...
+
+    return hipfft_transform(X, bool(real), HIPFFT_FORWARD);
+}
+
+static PyObject* hipfft_backward(PyObject* self, PyObject* args)
+{
+    PyObject* X;
+    int       real = 0;
+    if(!PyArg_ParseTuple(args, "O|p", &X, &real))
+        return NULL;
+
+    if(!PyArray_CheckExact(X))
+        return NULL; // better messaging...
+
+    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD);
+}
+
+static PyMethodDef hipfft_methods[] = {{"forward", hipfft_forward, METH_VARARGS},
+                                       {"backward", hipfft_backward, METH_VARARGS},
+                                       {NULL, NULL, 0, NULL}};
+
+static struct PyModuleDef hipfft_module
+    = {PyModuleDef_HEAD_INIT, "hipfft", NULL, -1, hipfft_methods};
+
+PyMODINIT_FUNC PyInit_hipfft(void)
+{
+    PyObject* m = PyModule_Create(&hipfft_module);
+    if(m == NULL)
+        return NULL;
+
+    PyModule_AddIntConstant(m, "SUCCESS", HIPFFT_SUCCESS);
+    PyModule_AddIntConstant(m, "INVALID_PLAN", HIPFFT_INVALID_PLAN);
+    PyModule_AddIntConstant(m, "ALLOC_FAILED", HIPFFT_ALLOC_FAILED);
+    PyModule_AddIntConstant(m, "INVALID_TYPE", HIPFFT_INVALID_TYPE);
+    PyModule_AddIntConstant(m, "INVALID_VALUE", HIPFFT_INVALID_VALUE);
+    PyModule_AddIntConstant(m, "INTERNAL_ERROR", HIPFFT_INTERNAL_ERROR);
+    PyModule_AddIntConstant(m, "EXEC_FAILED", HIPFFT_EXEC_FAILED);
+    PyModule_AddIntConstant(m, "SETUP_FAILED", HIPFFT_SETUP_FAILED);
+    PyModule_AddIntConstant(m, "INVALID_SIZE", HIPFFT_INVALID_SIZE);
+    PyModule_AddIntConstant(m, "UNALIGNED_DATA", HIPFFT_UNALIGNED_DATA);
+    PyModule_AddIntConstant(m, "INCOMPLETE_PARAMETER_LIST", HIPFFT_INCOMPLETE_PARAMETER_LIST);
+    PyModule_AddIntConstant(m, "INVALID_DEVICE", HIPFFT_INVALID_DEVICE);
+    PyModule_AddIntConstant(m, "PARSE_ERROR", HIPFFT_PARSE_ERROR);
+    PyModule_AddIntConstant(m, "NO_WORKSPACE", HIPFFT_NO_WORKSPACE);
+    PyModule_AddIntConstant(m, "NOT_IMPLEMENTED", HIPFFT_NOT_IMPLEMENTED);
+    PyModule_AddIntConstant(m, "NOT_SUPPORTED", HIPFFT_NOT_SUPPORTED);
+
+    PyModule_AddIntConstant(m, "R2C", HIPFFT_R2C);
+    PyModule_AddIntConstant(m, "C2R", HIPFFT_C2R);
+    PyModule_AddIntConstant(m, "C2C", HIPFFT_C2C);
+    PyModule_AddIntConstant(m, "D2Z", HIPFFT_D2Z);
+    PyModule_AddIntConstant(m, "Z2D", HIPFFT_Z2D);
+    PyModule_AddIntConstant(m, "Z2Z", HIPFFT_Z2Z);
+
+    PyModule_AddIntConstant(m, "FORWARD", HIPFFT_FORWARD);
+    PyModule_AddIntConstant(m, "BACKWARD", HIPFFT_BACKWARD);
+
+    import_array();
+
+    return m;
+}
+
+END_EXTERN_C
