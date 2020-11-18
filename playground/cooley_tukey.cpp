@@ -325,14 +325,18 @@ __device__ void cooley_tukey_dif_wtwiddles__(
     hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N, CTTimer& clks)
 {
     TIC(INNER_TOTAL);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 1, N/2, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 1, N / 2, clks);
 
-    //#define HELP_ME_UNDERSTAND
+#define HELP_ME_UNDERSTAND
 #ifdef HELP_ME_UNDERSTAND
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 2, N/4, clks);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 4, N/8, clks);
-    int P = N / 16;
-    int M = 8;
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 2, N / 4, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 4, N / 8, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 8, N / 16, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 16, N / 32, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 32, N / 64, clks);
+    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 64, N / 128, clks);
+    int P = N / 256;
+    int M = 128;
 #else
     int P = N / 4;
     int M = 2;
@@ -340,10 +344,10 @@ __device__ void cooley_tukey_dif_wtwiddles__(
 
     while(M < N)
     {
-        if(M > 64)
+        // if(M > 64)
             cooley_tukey_dif_wtwiddles_iter__<true>(x, T, i0, M, P, clks);
-        else
-            cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, M, P, clks);
+        // else
+        //     cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, M, P, clks);
         M <<= 1;
         P >>= 1;
     }
@@ -371,6 +375,20 @@ __device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
     reorder1(x, i + N / 2, log2n);
 }
 
+__device__ void copy_and_reorder(
+    hipDoubleComplex* x, hipDoubleComplex* x_, int i, int N, int offset, int tstride, int log2n)
+{
+    int p, q;
+
+    p = i;
+    q = __brev(p) >> (32 - log2n);
+    x[p] = x_[offset + q * tstride];
+
+    p = i + N / 2;
+    q = __brev(p) >> (32 - log2n);
+    x[p] = x_[offset + q * tstride];
+}
+
 __global__ void cooley_tukey_dif(
     hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride, CTTimer* clksbuf)
 {
@@ -386,7 +404,6 @@ __global__ void cooley_tukey_dif(
 
     TIC(OUTER_TOTAL);
 
-    // bool const set_clock = false;
     TIC(OUTER_PULL);
     x[BNK(i)]         = x_[offset + i * tstride];
     x[BNK(i + N / 2)] = x_[offset + (i + N / 2) * tstride];
@@ -436,6 +453,13 @@ __global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
 
     TIC(OUTER_TOTAL);
 
+    //#define USE_COMBINED_REORDER
+#ifdef USE_COMBINED_REORDER
+    TIC(OUTER_PULL);
+    copy_and_reorder(x, x_, i, N, offset, tstride, log2N);
+    __syncthreads();
+    TOC(OUTER_PULL);
+#else
     TIC(OUTER_PULL);
     x[BNK(i)]         = x_[offset + i * tstride];
     x[BNK(i + N / 2)] = x_[offset + (i + N / 2) * tstride];
@@ -446,6 +470,7 @@ __global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
     reorder(x, i, N, log2N);
     __syncthreads();
     TOC(OUTER_REORDER);
+#endif
 
     TIC(OUTER_TRANSFORM);
     cooley_tukey_dif_wtwiddles__(x, T, i, N, clks);
@@ -599,7 +624,8 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 void test1d(size_t n)
 {
-    size_t const nbatch = 1;
+  //    size_t const nbatch = 65536;
+    size_t const nbatch = 16384;
     auto         x      = random_vector(n * nbatch);
 
     CPUTimer timer;
