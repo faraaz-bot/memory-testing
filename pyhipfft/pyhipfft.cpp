@@ -63,11 +63,18 @@ static transform_types_t transform_types(PyArrayObject* x, bool real, int direct
     throw std::runtime_error("FFT type cannot be deduced.");
 }
 
-static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool batched)
+static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool batched, bool time)
 {
-    PyArrayObject* x = (PyArrayObject*)X;
+    hipEvent_t start, stop;
+    float      elapsed = 1.0;
+    if(time)
+    {
+        HIP_CHECK(hipEventCreate(&start));
+        HIP_CHECK(hipEventCreate(&stop));
+    }
 
-    npy_intp nd=0, nb=0, nx=0, ny=0, nz=0;
+    PyArrayObject* x  = (PyArrayObject*)X;
+    npy_intp       nd = 0, nb = 0, nx = 0, ny = 0, nz = 0;
 
     if(batched)
     {
@@ -114,7 +121,8 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
     }
 
     int n[3] = {int(nx), int(ny), int(nz)};
-    HIPFFT_CHECK(hipfftPlanMany(&plan, int(nd), n, nullptr, 1, 0, nullptr, 1, 0, type.fft_type, int(nb)));
+    HIPFFT_CHECK(
+        hipfftPlanMany(&plan, int(nd), n, nullptr, 1, 0, nullptr, 1, 0, type.fft_type, int(nb)));
 
     PyObject* Z;
     if(nb > 1)
@@ -122,7 +130,7 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
         npy_intp dims[4] = {nb, nx, ny, nz};
         if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
             dims[nd] = dims[nd] / 2 + 1;
-        Z = PyArray_SimpleNew(nd+1, dims, type.npy_type);
+        Z = PyArray_SimpleNew(nd + 1, dims, type.npy_type);
     }
     else
     {
@@ -138,6 +146,11 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
     void*  d_in_out;
     hipMalloc(&d_in_out, max(total_bytes_in, total_bytes_out));
     HIP_CHECK(hipMemcpy(d_in_out, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
+
+    if(time)
+    {
+        HIP_CHECK(hipEventRecord(start, 0));
+    }
 
     switch(type.fft_type)
     {
@@ -168,42 +181,66 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
         break;
     }
 
+    if(time)
+    {
+        HIP_CHECK(hipEventRecord(stop, 0));
+        HIP_CHECK(hipEventSynchronize(stop));
+        HIP_CHECK(hipEventElapsedTime(&elapsed, start, stop));
+        HIP_CHECK(hipEventDestroy(stop));
+        HIP_CHECK(hipEventDestroy(start));
+    }
+
     HIP_CHECK(hipMemcpy(PyArray_DATA(z), d_in_out, total_bytes_out, hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(d_in_out));
     HIPFFT_CHECK(hipfftDestroy(plan));
 
+    if(time)
+    {
+        return Py_BuildValue("Of", Z, elapsed);
+    }
+
     return Z;
 }
 
-static PyObject* hipfft_forward(PyObject* self, PyObject* args)
+static PyObject* hipfft_forward(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* X;
-    int       real = 0, batched = 0;
-    if(!PyArg_ParseTuple(args, "O|pp", &X, &real, &batched))
+    int       real = 0, batched = 0, time = 0;
+
+    static const char* kwlist[] = {"x", "real", "batched", "time", NULL};
+    if(!PyArg_ParseTupleAndKeywords(
+           args, kwargs, "O|ppp", (char**)kwlist, &X, &real, &batched, &time))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_FORWARD, bool(batched));
+    return hipfft_transform(X, bool(real), HIPFFT_FORWARD, bool(batched), bool(time));
 }
 
-static PyObject* hipfft_backward(PyObject* self, PyObject* args)
+static PyObject* hipfft_backward(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* X;
-    int       real = 0, batched = 0;
-    if(!PyArg_ParseTuple(args, "O|pp", &X, &real, &batched))
+    int       real = 0, batched = 0, time = 0;
+
+    static const char* kwlist[] = {"x", "real", "batched", "time", NULL};
+    if(!PyArg_ParseTupleAndKeywords(
+           args, kwargs, "O|ppp", (char**)kwlist, &X, &real, &batched, &time))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD, bool(batched));
+    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD, bool(batched), bool(time));
 }
 
-static PyMethodDef hipfft_methods[] = {{"forward", hipfft_forward, METH_VARARGS},
-                                       {"backward", hipfft_backward, METH_VARARGS},
-                                       {NULL, NULL, 0, NULL}};
+// clang-format off
+static PyMethodDef hipfft_methods[] = {
+  {"forward", (PyCFunction)(void (*)(void))hipfft_forward, METH_VARARGS | METH_KEYWORDS, "Forward FFT."},
+  {"backward", (PyCFunction)(void (*)(void))hipfft_backward, METH_VARARGS | METH_KEYWORDS, "Inverse/backward FFT."},
+  {NULL, NULL, 0, NULL}
+};
+// clang-format on
 
 static struct PyModuleDef hipfft_module
     = {PyModuleDef_HEAD_INIT, "hipfft", NULL, -1, hipfft_methods};
