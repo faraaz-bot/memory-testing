@@ -8,7 +8,9 @@ if os.environ.get('CC') is None:
 
 hipfft = dc.Extension('hipfft',
                       sources=['pyhipfft.cpp'],
-                      include_dirs = ['/opt/rocm/include', np.get_include()])
+                      include_dirs = ['/opt/rocm/hipfft/include', np.get_include()],
+                      library_dirs = ['/opt/rocm/hipfft/lib'],
+                      libraries = ['hipfft'])
 
 dc.setup(name='hipfft',
          version='0.8',

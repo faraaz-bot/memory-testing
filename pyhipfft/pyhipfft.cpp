@@ -63,14 +63,28 @@ static transform_types_t transform_types(PyArrayObject* x, bool real, int direct
     throw std::runtime_error("FFT type cannot be deduced.");
 }
 
-static PyObject* hipfft_transform(PyObject* X, bool real, int direction)
+static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool batched)
 {
     PyArrayObject* x = (PyArrayObject*)X;
 
-    auto nd = PyArray_NDIM(x);
-    auto nx = PyArray_DIM(x, 0);
-    auto ny = PyArray_DIM(x, 1);
-    auto nz = PyArray_DIM(x, 2);
+    npy_intp nd=0, nb=0, nx=0, ny=0, nz=0;
+
+    if(batched)
+    {
+        nd = PyArray_NDIM(x) - 1;
+        nb = PyArray_DIM(x, 0);
+        nx = PyArray_DIM(x, 1);
+        ny = (nd > 1) ? PyArray_DIM(x, 2) : 1;
+        nz = (nd > 2) ? PyArray_DIM(x, 3) : 1;
+    }
+    else
+    {
+        nd = PyArray_NDIM(x);
+        nb = 1;
+        nx = PyArray_DIM(x, 0);
+        ny = (nd > 1) ? PyArray_DIM(x, 1) : 1;
+        nz = (nd > 2) ? PyArray_DIM(x, 2) : 1;
+    }
 
     if(real && direction == HIPFFT_BACKWARD)
     {
@@ -81,6 +95,12 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction)
         if(nd == 3)
             nz = 2 * (nz - 1);
     }
+
+    // cout << "nd " << nd << endl;
+    // cout << "nb " << nb << endl;
+    // cout << "nx " << nx << endl;
+    // cout << "ny " << ny << endl;
+    // cout << "nz " << nz << endl;
 
     hipfftHandle      plan;
     transform_types_t type;
@@ -93,27 +113,24 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction)
         HIPFFT_CHECK(HIPFFT_INVALID_TYPE);
     }
 
-    if(PyArray_NDIM(x) == 1)
+    int n[3] = {int(nx), int(ny), int(nz)};
+    HIPFFT_CHECK(hipfftPlanMany(&plan, int(nd), n, nullptr, 1, 0, nullptr, 1, 0, type.fft_type, int(nb)));
+
+    PyObject* Z;
+    if(nb > 1)
     {
-        HIPFFT_CHECK(hipfftPlan1d(&plan, nx, type.fft_type, 1));
-    }
-    else if(PyArray_NDIM(x) == 2)
-    {
-        HIPFFT_CHECK(hipfftPlan2d(&plan, nx, ny, type.fft_type));
-    }
-    else if(PyArray_NDIM(x) == 3)
-    {
-        HIPFFT_CHECK(hipfftPlan3d(&plan, nx, ny, nz, type.fft_type));
+        npy_intp dims[4] = {nb, nx, ny, nz};
+        if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
+            dims[nd] = dims[nd] / 2 + 1;
+        Z = PyArray_SimpleNew(nd+1, dims, type.npy_type);
     }
     else
     {
-        HIPFFT_CHECK(HIPFFT_INVALID_SIZE);
+        npy_intp dims[3] = {nx, ny, nz};
+        if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
+            dims[nd - 1] = dims[nd - 1] / 2 + 1;
+        Z = PyArray_SimpleNew(nd, dims, type.npy_type);
     }
-
-    npy_intp dims[3] = {nx, ny, nz};
-    if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
-        dims[nd - 1] = dims[nd - 1] / 2 + 1;
-    PyObject*      Z = PyArray_SimpleNew(nd, dims, type.npy_type);
     PyArrayObject* z = (PyArrayObject*)Z;
 
     size_t total_bytes_in  = (size_t)PyArray_NBYTES(x);
@@ -161,27 +178,27 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction)
 static PyObject* hipfft_forward(PyObject* self, PyObject* args)
 {
     PyObject* X;
-    int       real = 0;
-    if(!PyArg_ParseTuple(args, "O|p", &X, &real))
+    int       real = 0, batched = 0;
+    if(!PyArg_ParseTuple(args, "O|pp", &X, &real, &batched))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_FORWARD);
+    return hipfft_transform(X, bool(real), HIPFFT_FORWARD, bool(batched));
 }
 
 static PyObject* hipfft_backward(PyObject* self, PyObject* args)
 {
     PyObject* X;
-    int       real = 0;
-    if(!PyArg_ParseTuple(args, "O|p", &X, &real))
+    int       real = 0, batched = 0;
+    if(!PyArg_ParseTuple(args, "O|pp", &X, &real, &batched))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD);
+    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD, bool(batched));
 }
 
 static PyMethodDef hipfft_methods[] = {{"forward", hipfft_forward, METH_VARARGS},
