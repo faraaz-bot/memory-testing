@@ -18,6 +18,76 @@
 
 #include "timer.h"
 
+struct CT4
+{
+    static const int n             = 4;
+    static const int log2n         = 2;
+    static const int shared_memory = 4;
+};
+
+struct CT8
+{
+    static const int n             = 8;
+    static const int log2n         = 3;
+    static const int shared_memory = 8;
+};
+
+struct CT16
+{
+    static const int n             = 16;
+    static const int log2n         = 4;
+    static const int shared_memory = 16;
+};
+
+struct CT32
+{
+    static const int n             = 32;
+    static const int log2n         = 5;
+    static const int shared_memory = 32;
+};
+
+struct CT64
+{
+    static const int n             = 64;
+    static const int log2n         = 6;
+    static const int shared_memory = 64;
+};
+
+struct CT128
+{
+    static const int n             = 128;
+    static const int log2n         = 7;
+    static const int shared_memory = 128;
+};
+
+struct CT256
+{
+    static const int n             = 256;
+    static const int log2n         = 8;
+    static const int shared_memory = 256;
+};
+
+struct CT512
+{
+    static const int n             = 512;
+    static const int log2n         = 9;
+    static const int shared_memory = 512;
+};
+
+struct CT1024
+{
+    static const int n             = 1024;
+    static const int log2n         = 10;
+    static const int shared_memory = 1024;
+};
+
+struct CT2048
+{
+    static const int n             = 2048;
+    static const int log2n         = 11;
+    static const int shared_memory = 2048;
+};
+
 #define HIP_CHECK(r)    \
     if(r != hipSuccess) \
         return {};
@@ -109,87 +179,53 @@ size_t bitreverse(size_t x, size_t n)
 }
 
 //
-// Cooley-Tukey FFT on the GPU
-//
-//
-// Recall
-//
-//    X(k) = sum(n=0..N-1) x(n) w(n k, N)
-//
-// where
-//
-//    w(k, N) = exp(-2 pi i k / N).
-//
-// We want to decompose this assuming that N is a power of 2.  First,
-// break the sum into two (think we could also do this in four too).
-// Essentially we break the n-index into n = n1 + n2 N/2
-//
-//    X(k) = sum(n1=0..N/2-1) sum(n2=0,1) x(n1 + n2 N/2) w((n1 + n2 N/2) k, N)
-//         = sum(n1=0..N/2-1) sum(n2=0,1) x(n1 + n2 N/2) w((n1 + n2 N/2) k, N)
-//         = sum(n1=0..N/2-1) w(n1 k, N) sum(n2=0,1) x(n1 + n2 N/2) w(n2 N k / 2, N)
-//         = sum(n1=0..N/2-1) w(n1 k, N) [ x(n1) + (-1)^k x(n1+N/2) ]
-//
-// For even/odd k, we obtain
-//
-//    X(2k) = sum(n1=0..N/2-1) w(n1 k, N / 2) [ x(n1) + x(n1+N/2) ]
-//    X(2k+1) = sum(n1=0..N/2-1) w(n1 k, N / 2) w(n1, N) [ x(n1) - x(n1+N/2) ]
-//
-// Note that these look like N/2 DFTs; so could recurse.  If we store
-// cleverly, can re-write as iterative and do everything in-place.
-// This is the idea behind Cooley-Tukey.
-//
-
-//
 // Cooley-Tukey, re-order first, FFT on the GPU
 //
-// This version does a single element across all iterations;
-// bit-reverse done first.
-//
-__device__ void cooley_tukey_dif__(hipDoubleComplex* x, int i0, int N)
-{
-    // note: i0 in [0, N/2]
-    if(i0 >= N / 2)
-        return;
 
+template <bool sync>
+__device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int idx, int N, int M)
+{
+    if constexpr(sync)
+        __syncthreads();
+
+    // convert idx to i in [0, N]; skip odd blocks
+    int i = ((M - 1) & idx) + ((~(M - 1) & idx) << 1);
+    int j = i + M;
+    int m = i % M;
+
+    double cost, sint;
+    sincospi(-double(m) / M, &sint, &cost);
+
+    hipDoubleComplex xi = x[i];
+    hipDoubleComplex xj = x[j];
+    hipDoubleComplex d;
+
+    d.x = cost * xj.x - sint * xj.y;
+    d.y = sint * xj.x + cost * xj.y;
+
+    x[i] = xi + d;
+    x[j] = xi - d;
+}
+
+__device__ void cooley_tukey_dif__(hipDoubleComplex* x, int idx, int N)
+{
     int M = 1; // size of current block
 
     while(M < N)
     {
         if(M > 64)
-            __syncthreads();
-
-        // convert i0 to i in [0, N]; skip odd blocks
-        int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
-        int j = i + M;
-        int m = i % M;
-
-        double cost, sint;
-        sincospi(-double(m) / M, &sint, &cost);
-
-        hipDoubleComplex xi = x[i];
-        hipDoubleComplex xj = x[j];
-        hipDoubleComplex d;
-
-        d.x = cost * xj.x - sint * xj.y;
-        d.y = sint * xj.x + cost * xj.y;
-
-        x[i] = xi + d;
-        x[j] = xi - d;
-
+            cooley_tukey_dif_iter__<true>(x, idx, N, M);
+        else
+            cooley_tukey_dif_iter__<false>(x, idx, N, M);
         M <<= 1;
     }
 }
 
-template <bool sync>
-__device__ void cooley_tukey_dif_wtwiddles_iter__(
-    hipDoubleComplex* x, hipDoubleComplex* T, int i0, int M, int P)
+void __device__ cooley_tukey_dif_wtwiddles_iter__(
+    hipDoubleComplex* __restrict__ x, hipDoubleComplex* __restrict__ T, int idx, int M, int P)
 {
-
-    if constexpr(sync)
-        __syncthreads();
-
-    // convert i0 to i in [0, N]; skip odd blocks
-    int i = ((M - 1) & i0) + ((~(M - 1) & i0) << 1);
+    // convert idx to i in [0, N]; skip odd blocks
+    int i = ((M - 1) & idx) + ((~(M - 1) & idx) << 1);
     int j = i + M;
     int m = i % M;
 
@@ -205,34 +241,41 @@ __device__ void cooley_tukey_dif_wtwiddles_iter__(
     x[j] = xi - d;
 }
 
-__device__ void
-    cooley_tukey_dif_wtwiddles__(hipDoubleComplex* x, hipDoubleComplex* T, int i0, int N)
+template <class params>
+void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
+                                             hipDoubleComplex* __restrict__ T,
+                                             int idx)
 {
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 1, N / 2);
+    int M = 1;
+    int P = params::n >> 1;
 
-#define HELP_ME_UNDERSTAND
-#ifdef HELP_ME_UNDERSTAND
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 2, N / 4);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 4, N / 8);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 8, N / 16);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 16, N / 32);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 32, N / 64);
-    cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, 64, N / 128);
-    int P = N / 256;
-    int M = 128;
-#else
-    int P = N / 4;
-    int M = 2;
-#endif
+    static const int iters_no_sync = 6;
 
-    while(M < N)
+    if constexpr(params::log2n >= iters_no_sync)
     {
-        // if(M > 64)
-        cooley_tukey_dif_wtwiddles_iter__<true>(x, T, i0, M, P);
-        // else
-        //     cooley_tukey_dif_wtwiddles_iter__<false>(x, T, i0, M, P, clks);
-        M <<= 1;
-        P >>= 1;
+        for(int itr = 0; itr < iters_no_sync; ++itr)
+        {
+            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            M <<= 1;
+            P >>= 1;
+        }
+
+        for(int itr = iters_no_sync; itr < params::log2n; ++itr)
+        {
+            __syncthreads();
+            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            M <<= 1;
+            P >>= 1;
+        }
+    }
+    else
+    {
+        for(int itr = 0; itr < params::log2n; ++itr)
+        {
+            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            M <<= 1;
+            P >>= 1;
+        }
     }
 }
 
@@ -272,7 +315,7 @@ __device__ void copy_and_reorder(
 
 __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride)
 {
-    __shared__ hipDoubleComplex x[2048];
+    __shared__ hipDoubleComplex x[4096];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
@@ -292,37 +335,34 @@ __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bs
     x_[offset + (i + N / 2) * tstride] = x[i + N / 2];
 }
 
-__global__ void cooley_tukey_dif_wtwiddles(
-    hipDoubleComplex* x_, hipDoubleComplex* T, int N, int log2N, dim3 bstrides, int tstride)
+template <class params>
+__global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
+                                           hipDoubleComplex* T,
+                                           dim3              bstrides,
+                                           int               tstride)
 
 {
-    __shared__ hipDoubleComplex x[2048];
+    __shared__ hipDoubleComplex x[params::shared_memory];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
     int i = hipThreadIdx_x;
 
-    if(i > N / 2)
+    if(i >= params::n / 2)
         return;
 
-        //#define USE_COMBINED_REORDER
-#ifdef USE_COMBINED_REORDER
-    copy_and_reorder(x, x_, i, N, offset, tstride, log2N);
-    __syncthreads();
-#else
-    x[i]         = x_[offset + i * tstride];
-    x[i + N / 2] = x_[offset + (i + N / 2) * tstride];
+    x[i]                 = x_[offset + i * tstride];
+    x[i + params::n / 2] = x_[offset + (i + params::n / 2) * tstride];
     __syncthreads();
 
-    reorder(x, i, N, log2N);
+    reorder(x, i, params::n, params::log2n);
     __syncthreads();
-#endif
 
-    cooley_tukey_dif_wtwiddles__(x, T, i, N);
-
+    cooley_tukey_dif_wtwiddles__<params>(x, T, i);
     __syncthreads();
-    x_[offset + i * tstride]           = x[i];
-    x_[offset + (i + N / 2) * tstride] = x[i + N / 2];
+
+    x_[offset + i * tstride]                   = x[i];
+    x_[offset + (i + params::n / 2) * tstride] = x[i + params::n / 2];
 }
 
 __global__ void cooley_tukey_twiddles(hipDoubleComplex* T, int N)
@@ -352,8 +392,42 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     GPUTimer timer;
     timer.tic();
     dim3 strides(nx);
+    // cooley_tukey_dif<<<nbatch, nx / 2>>>(X, nx, log2(nx), strides, 1);
     cooley_tukey_twiddles<<<(nx / 2 + 255) / 256, 256>>>(T, nx / 2);
-    cooley_tukey_dif_wtwiddles<<<nbatch, nx / 2>>>(X, T, nx, log2(nx), strides, 1);
+    // cooley_tukey_twiddles<<<1, nx / 2>>>(T, nx / 2);
+    switch(nx)
+    {
+    case 4:
+        cooley_tukey_dif_wtwiddles<CT4><<<nbatch, 2>>>(X, T, strides, 1);
+        break;
+    case 8:
+        cooley_tukey_dif_wtwiddles<CT8><<<nbatch, 4>>>(X, T, strides, 1);
+        break;
+    case 16:
+        cooley_tukey_dif_wtwiddles<CT16><<<nbatch, 8>>>(X, T, strides, 1);
+        break;
+    case 32:
+        cooley_tukey_dif_wtwiddles<CT32><<<nbatch, 16>>>(X, T, strides, 1);
+        break;
+    case 64:
+        cooley_tukey_dif_wtwiddles<CT64><<<nbatch, 32>>>(X, T, strides, 1);
+        break;
+    case 128:
+        cooley_tukey_dif_wtwiddles<CT128><<<nbatch, 64>>>(X, T, strides, 1);
+        break;
+    case 256:
+        cooley_tukey_dif_wtwiddles<CT256><<<nbatch, 128>>>(X, T, strides, 1);
+        break;
+    case 512:
+        cooley_tukey_dif_wtwiddles<CT512><<<nbatch, 256>>>(X, T, strides, 1);
+        break;
+    case 1024:
+        cooley_tukey_dif_wtwiddles<CT1024><<<nbatch, 512>>>(X, T, strides, 1);
+        break;
+    case 2048:
+        cooley_tukey_dif_wtwiddles<CT2048><<<nbatch, 1024>>>(X, T, strides, 1);
+        break;
+    }
     timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(fftw_complex), hipMemcpyDeviceToHost));
@@ -419,8 +493,10 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
     {
         double dx = z1[n][0] - z2[n][0];
         double dy = z1[n][1] - z2[n][1];
-        // if (dx * dx + dy * dy > 1.e-7) {
-        //   cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n][0] << " " << z2[n][0] << endl;
+        // if(dx * dx + dy * dy > 1.e-7)
+        // {
+        //     cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n][0] << " " << z2[n][0]
+        //          << endl;
         // }
         d += dx * dx + dy * dy;
         r += z1[n][0] * z1[n][0] + z1[n][1] * z1[n][1];
@@ -431,17 +507,16 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 // Some tests!
 //
-void test1d(size_t n)
+void test1d(size_t n, size_t nbatch)
 {
-    //    size_t const nbatch = 65536;
-    //size_t const nbatch = 16384;
-    size_t const nbatch = 1;
-    auto         x      = random_vector(n * nbatch);
-
     CPUTimer timer;
 
+    double GiB = double(n * nbatch * 16) / 1024 / 1024 / 1024;
     cout << "# 1d test" << endl;
     cout << "1d input length: " << n << " (" << nbatch << ")" << endl;
+    cout << "1d input size:   " << GiB << "GiB" << endl;
+
+    auto x = random_vector(n * nbatch);
 
     timer.tic();
     auto z1 = fft_fftw(x, n, nbatch);
@@ -449,8 +524,11 @@ void test1d(size_t n)
     cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
 
     auto [c4, z4] = fft_gpu_ct_dif(x, n, nbatch);
+    auto [c5, z5] = fft_gpu_ct_dif(x, n, nbatch);
+    auto [c6, z6] = fft_gpu_ct_dif(x, n, nbatch);
     cout << "GPU rel diff:    " << compare(z1, z4) << endl;
-    cout << "GPU kernel time: " << c4 << "ms" << endl;
+    cout << "GPU kernel time: " << c6 << "ms" << endl;
+    cout << "GPU throughput:  " << GiB * 1000 / c6 << " GiB/s" << endl;
 }
 
 void test2d()
@@ -495,13 +573,14 @@ void test3d()
 
 int main(int argc, char* argv[])
 {
-    size_t n = 2048;
+    size_t length = 2048;
+    size_t nbatch = 1;
     if(argc > 1)
-    {
-        n = stoi(argv[1]);
-    }
+        length = stoi(argv[1]);
+    if(argc > 2)
+        nbatch = stoi(argv[2]);
 
-    test1d(n);
+    test1d(length, nbatch);
     //test2d();
     //test3d();
 }
