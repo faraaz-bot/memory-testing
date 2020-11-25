@@ -61,6 +61,15 @@ class LComplex:
     def render(self) -> str:
         return '{ ' + self.x.render() + ', ' + self.y.render() + ' }'
 
+class DComplex:
+    '''Defined complex value.'''
+    name: str
+    def __init__(self, name):
+        self.name = name
+        self.x, self.y = Symbol(self.name + 'R'), Symbol(self.name + 'I')
+    def render(self) -> str:
+        return '{ ' + self.x.render() + ', ' + self.y.render() + ' }'
+
 
 @dataclass
 class Assign:
@@ -103,10 +112,22 @@ class Difference:
     def render(self) -> str:
         return ' - '.join([ x.render() for x in self.args ])
 
+@dataclass
+class Define:
+    '''CPP definition.'''
+    lhs: str
+    rhs: str
+    def render(self) -> str:
+        return f'#define {self.lhs.render()} {self.rhs.render()}'
 
-def render(stmts : List[Any]) -> str:
-    '''Render helper: render list of statements and join with semicolons.'''
+
+def srender(stmts : List[Any]) -> str:
+    '''Render helper: render list of statements and join with semicolons and newlines.'''
     return ';\n'.join([ s.render() for s in stmts ] + [''])
+
+def nrender(stmts : List[Any]) -> str:
+    '''Render helper: render list of statements and join with newlines.'''
+    return '\n'.join([ s.render() for s in stmts ] + [''])
 
 
 #
@@ -114,9 +135,8 @@ def render(stmts : List[Any]) -> str:
 # properties to generate a butterly kernel.
 #
 
-def butterfly_(A):
+def butterfly_kernel(A, N, direction):
 
-    N = A.shape[0]
     R = [ Complex(f'(*R{i})') for i in range(N) ]
     x = [ Complex(f'x{i}') for i in range(N) ]
     dp, dm = Complex('dp'), Complex('dm')
@@ -129,32 +149,64 @@ def butterfly_(A):
         yield Assign(dp, Sum([R[j], R[N-j]]))
         yield Assign(dm, Difference([R[j], R[N-j]]))
         for i in range(1, N//2+1):
-            alpha = LComplex(re(A[i,j]), im(A[i,j]))
-            yield AssignAdd(x[i].x,
-                                Difference([
-                                    Multiply([alpha.x, dp.x]),
-                                    Multiply([alpha.y, dm.y]) ]))
-            yield AssignAdd(x[i].y,
-                                Sum([
-                                    Multiply([alpha.x, dp.y]),
-                                    Multiply([alpha.y, dm.x]) ]))
-            yield AssignAdd(x[N-i].x,
-                                Sum([
-                                    Multiply([alpha.x, dp.x]),
-                                    Multiply([alpha.y, dm.y]) ]))
-            yield AssignAdd(x[N-i].y,
-                                Difference([
-                                    Multiply([alpha.x, dp.y]),
-                                    Multiply([alpha.y, dm.x]) ]))
+            alpha = A[i,j]
+            if direction == -1:
+                yield AssignAdd(x[i].x,
+                                    Difference([
+                                        Multiply([alpha.x, dp.x]),
+                                        Multiply([alpha.y, dm.y]) ]))
+                yield AssignAdd(x[i].y,
+                                    Sum([
+                                        Multiply([alpha.x, dp.y]),
+                                        Multiply([alpha.y, dm.x]) ]))
+                yield AssignAdd(x[N-i].x,
+                                    Sum([
+                                        Multiply([alpha.x, dp.x]),
+                                        Multiply([alpha.y, dm.y]) ]))
+                yield AssignAdd(x[N-i].y,
+                                    Difference([
+                                        Multiply([alpha.x, dp.y]),
+                                        Multiply([alpha.y, dm.x]) ]))
+            else:
+                yield AssignAdd(x[i].x,
+                                    Sum([
+                                        Multiply([alpha.x, dp.x]),
+                                        Multiply([alpha.y, dm.y]) ]))
+                yield AssignAdd(x[i].y,
+                                    Difference([
+                                        Multiply([alpha.x, dp.y]),
+                                        Multiply([alpha.y, dm.x]) ]))
+                yield AssignAdd(x[N-i].x,
+                                    Difference([
+                                        Multiply([alpha.x, dp.x]),
+                                        Multiply([alpha.y, dm.y]) ]))
+                yield AssignAdd(x[N-i].y,
+                                    Sum([
+                                        Multiply([alpha.x, dp.y]),
+                                        Multiply([alpha.y, dm.x]) ]))
+
     for i in range(N):
         yield Assign(R[i], x[i])
 
 
-def butterfly(A):
+def butterfly(N, direction):
     '''Generate statements to compute butterfly kernel given DFT matrix A.'''
-    return list(butterfly_(A))
+
+    # symbolic
+    A = { (i, j) : DComplex(f'Q{N}i{i}j{j}') for i in range(N) for j in range(N) }
+    kernel = list(butterfly_kernel(A, N, direction))
+
+    D = dft(N, direction).evalf(22)
+    constants = []
+    for i in range(1, N//2+1):
+        for j in range(1, N//2+1):
+            constants.append(Define(A[i,j].x, Value(re(D[i,j]))))
+            constants.append(Define(A[i,j].y, Value(im(D[i,j]))))
+
+    return kernel, constants
 
 
-if __name__ == '__main__':
-    A = dft(13, 1)
-    print(render(butterfly(A.evalf(22))))
+#if __name__ == '__main__':
+kernel, constants = butterfly(13, 1)
+print(nrender(constants))
+print(srender(kernel))
