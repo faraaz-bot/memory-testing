@@ -183,13 +183,13 @@ size_t bitreverse(size_t x, size_t n)
 //
 
 template <bool sync>
-__device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int idx, int N, int M)
+__device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, int M)
 {
     if constexpr(sync)
         __syncthreads();
 
-    // convert idx to i in [0, N]; skip odd blocks
-    int i = ((M - 1) & idx) + ((~(M - 1) & idx) << 1);
+    // convert thread to i in [0, N]; skip odd blocks
+    int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
     int j = i + M;
     int m = i % M;
 
@@ -207,25 +207,25 @@ __device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int idx, int N, int
     x[j] = xi - d;
 }
 
-__device__ void cooley_tukey_dif__(hipDoubleComplex* x, int idx, int N)
+__device__ void cooley_tukey_dif__(hipDoubleComplex* x, int thread, int N)
 {
     int M = 1; // size of current block
 
     while(M < N)
     {
         if(M > 64)
-            cooley_tukey_dif_iter__<true>(x, idx, N, M);
+            cooley_tukey_dif_iter__<true>(x, thread, N, M);
         else
-            cooley_tukey_dif_iter__<false>(x, idx, N, M);
+            cooley_tukey_dif_iter__<false>(x, thread, N, M);
         M <<= 1;
     }
 }
 
 void __device__ cooley_tukey_dif_wtwiddles_iter__(
-    hipDoubleComplex* __restrict__ x, hipDoubleComplex* __restrict__ T, int idx, int M, int P)
+    hipDoubleComplex* __restrict__ x, hipDoubleComplex* __restrict__ T, int thread, int M, int P)
 {
-    // convert idx to i in [0, N]; skip odd blocks
-    int i = ((M - 1) & idx) + ((~(M - 1) & idx) << 1);
+    // convert thread to i in [0, N]; skip odd blocks
+    int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
     int j = i + M;
     int m = i % M;
 
@@ -244,7 +244,7 @@ void __device__ cooley_tukey_dif_wtwiddles_iter__(
 template <class params>
 void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
                                              hipDoubleComplex* __restrict__ T,
-                                             int idx)
+                                             int thread)
 {
     int M = 1;
     int P = params::n >> 1;
@@ -255,7 +255,7 @@ void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
     {
         for(int itr = 0; itr < iters_no_sync; ++itr)
         {
-            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
             M <<= 1;
             P >>= 1;
         }
@@ -263,7 +263,7 @@ void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
         for(int itr = iters_no_sync; itr < params::log2n; ++itr)
         {
             __syncthreads();
-            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
             M <<= 1;
             P >>= 1;
         }
@@ -272,7 +272,7 @@ void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
     {
         for(int itr = 0; itr < params::log2n; ++itr)
         {
-            cooley_tukey_dif_wtwiddles_iter__(x, T, idx, M, P);
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
             M <<= 1;
             P >>= 1;
         }
@@ -319,20 +319,20 @@ __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bs
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
-    int i = hipThreadIdx_x;
+    int thread = hipThreadIdx_x;
 
-    x[i]         = x_[offset + i * tstride];
-    x[i + N / 2] = x_[offset + (i + N / 2) * tstride];
+    x[thread]         = x_[offset + thread * tstride];
+    x[thread + N / 2] = x_[offset + (thread + N / 2) * tstride];
     __syncthreads();
 
-    reorder(x, i, N, log2N);
+    reorder(x, thread, N, log2N);
     __syncthreads();
 
-    cooley_tukey_dif__(x, i, N);
+    cooley_tukey_dif__(x, thread, N);
     __syncthreads();
 
-    x_[offset + i * tstride]           = x[i];
-    x_[offset + (i + N / 2) * tstride] = x[i + N / 2];
+    x_[offset + thread * tstride]           = x[thread];
+    x_[offset + (thread + N / 2) * tstride] = x[thread + N / 2];
 }
 
 template <class params>
@@ -346,23 +346,23 @@ __global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
-    int i = hipThreadIdx_x;
+    int thread = hipThreadIdx_x;
 
-    if(i >= params::n / 2)
+    if(thread >= params::n / 2)
         return;
 
-    x[i]                 = x_[offset + i * tstride];
-    x[i + params::n / 2] = x_[offset + (i + params::n / 2) * tstride];
+    x[thread]                 = x_[offset + thread * tstride];
+    x[thread + params::n / 2] = x_[offset + (thread + params::n / 2) * tstride];
     __syncthreads();
 
-    reorder(x, i, params::n, params::log2n);
+    reorder(x, thread, params::n, params::log2n);
     __syncthreads();
 
-    cooley_tukey_dif_wtwiddles__<params>(x, T, i);
+    cooley_tukey_dif_wtwiddles__<params>(x, T, thread);
     __syncthreads();
 
-    x_[offset + i * tstride]                   = x[i];
-    x_[offset + (i + params::n / 2) * tstride] = x[i + params::n / 2];
+    x_[offset + thread * tstride]                   = x[thread];
+    x_[offset + (thread + params::n / 2) * tstride] = x[thread + params::n / 2];
 }
 
 __global__ void cooley_tukey_twiddles(hipDoubleComplex* T, int N)
