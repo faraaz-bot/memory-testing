@@ -173,23 +173,7 @@ vector<fftw_complex> fft_fftw_3d(vector<fftw_complex> const& x, int nx, int ny, 
 }
 
 //
-// Cooley-Tukey FFT
-//
-
-size_t bitreverse(size_t x, size_t n)
-{
-    size_t r = 0;
-    for(size_t i = 0; i < n; ++i)
-    {
-        r <<= 1;
-        r |= x & 1;
-        x >>= 1;
-    }
-    return r;
-}
-
-//
-// Cooley-Tukey, re-order first, FFT on the GPU
+// Cooley-Tukey, re-order first
 //
 
 template <bool sync>
@@ -404,9 +388,7 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     GPUTimer timer;
     timer.tic();
     dim3 strides(nx);
-    // cooley_tukey_dif<<<nbatch, nx / 2>>>(X, nx, log2(nx), strides, 1);
     cooley_tukey_twiddles<<<(nx / 2 + 255) / 256, 256>>>(T, nx / 2);
-    // cooley_tukey_twiddles<<<1, nx / 2>>>(T, nx / 2);
     switch(nx)
     {
     case 4:
