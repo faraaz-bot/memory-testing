@@ -23,6 +23,7 @@ struct CT4
     static const int n             = 4;
     static const int log2n         = 2;
     static const int shared_memory = 4;
+    static const int threads       = 2;
 };
 
 struct CT8
@@ -30,6 +31,7 @@ struct CT8
     static const int n             = 8;
     static const int log2n         = 3;
     static const int shared_memory = 8;
+    static const int threads       = 4;
 };
 
 struct CT16
@@ -37,6 +39,7 @@ struct CT16
     static const int n             = 16;
     static const int log2n         = 4;
     static const int shared_memory = 16;
+    static const int threads       = 8;
 };
 
 struct CT32
@@ -44,6 +47,7 @@ struct CT32
     static const int n             = 32;
     static const int log2n         = 5;
     static const int shared_memory = 32;
+    static const int threads       = 16;
 };
 
 struct CT64
@@ -51,6 +55,7 @@ struct CT64
     static const int n             = 64;
     static const int log2n         = 6;
     static const int shared_memory = 64;
+    static const int threads       = 32;
 };
 
 struct CT128
@@ -58,6 +63,7 @@ struct CT128
     static const int n             = 128;
     static const int log2n         = 7;
     static const int shared_memory = 128;
+    static const int threads       = 64;
 };
 
 struct CT256
@@ -65,6 +71,7 @@ struct CT256
     static const int n             = 256;
     static const int log2n         = 8;
     static const int shared_memory = 256;
+    static const int threads       = 128;
 };
 
 struct CT512
@@ -72,6 +79,7 @@ struct CT512
     static const int n             = 512;
     static const int log2n         = 9;
     static const int shared_memory = 512;
+    static const int threads       = 256;
 };
 
 struct CT1024
@@ -79,6 +87,7 @@ struct CT1024
     static const int n             = 1024;
     static const int log2n         = 10;
     static const int shared_memory = 1024;
+    static const int threads       = 512;
 };
 
 struct CT2048
@@ -86,6 +95,7 @@ struct CT2048
     static const int n             = 2048;
     static const int log2n         = 11;
     static const int shared_memory = 2048;
+    static const int threads       = 1024;
 };
 
 #define HIP_CHECK(r)    \
@@ -250,6 +260,7 @@ void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
     int P = params::n >> 1;
 
     static const int iters_no_sync = 6;
+    static const int iters_no_sync = 7;
 
     if constexpr(params::log2n >= iters_no_sync)
     {
@@ -313,7 +324,8 @@ __device__ void copy_and_reorder(
     x[p] = x_[offset + q * tstride];
 }
 
-__global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride)
+__global__ void __launch_bounds__(1024)
+    cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride)
 {
     __shared__ hipDoubleComplex x[4096];
 
@@ -336,10 +348,10 @@ __global__ void cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bs
 }
 
 template <class params>
-__global__ void cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
-                                           hipDoubleComplex* T,
-                                           dim3              bstrides,
-                                           int               tstride)
+__global__ void __launch_bounds__(params::threads) cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
+                                                                              hipDoubleComplex* T,
+                                                                              dim3 bstrides,
+                                                                              int  tstride)
 
 {
     __shared__ hipDoubleComplex x[params::shared_memory];
@@ -398,34 +410,34 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     switch(nx)
     {
     case 4:
-        cooley_tukey_dif_wtwiddles<CT4><<<nbatch, 2>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT4><<<nbatch, CT4::threads>>>(X, T, strides, 1);
         break;
     case 8:
-        cooley_tukey_dif_wtwiddles<CT8><<<nbatch, 4>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT8><<<nbatch, CT8::threads>>>(X, T, strides, 1);
         break;
     case 16:
-        cooley_tukey_dif_wtwiddles<CT16><<<nbatch, 8>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT16><<<nbatch, CT16::threads>>>(X, T, strides, 1);
         break;
     case 32:
-        cooley_tukey_dif_wtwiddles<CT32><<<nbatch, 16>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT32><<<nbatch, CT32::threads>>>(X, T, strides, 1);
         break;
     case 64:
-        cooley_tukey_dif_wtwiddles<CT64><<<nbatch, 32>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT64><<<nbatch, CT64::threads>>>(X, T, strides, 1);
         break;
     case 128:
-        cooley_tukey_dif_wtwiddles<CT128><<<nbatch, 64>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT128><<<nbatch, CT128::threads>>>(X, T, strides, 1);
         break;
     case 256:
-        cooley_tukey_dif_wtwiddles<CT256><<<nbatch, 128>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT256><<<nbatch, CT256::threads>>>(X, T, strides, 1);
         break;
     case 512:
-        cooley_tukey_dif_wtwiddles<CT512><<<nbatch, 256>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT512><<<nbatch, CT512::threads>>>(X, T, strides, 1);
         break;
     case 1024:
-        cooley_tukey_dif_wtwiddles<CT1024><<<nbatch, 512>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT1024><<<nbatch, CT1024::threads>>>(X, T, strides, 1);
         break;
     case 2048:
-        cooley_tukey_dif_wtwiddles<CT2048><<<nbatch, 1024>>>(X, T, strides, 1);
+        cooley_tukey_dif_wtwiddles<CT2048><<<nbatch, CT2048::threads>>>(X, T, strides, 1);
         break;
     }
     timer.toc();
