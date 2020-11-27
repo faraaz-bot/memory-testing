@@ -175,6 +175,23 @@ vector<fftw_complex> fft_fftw_3d(vector<fftw_complex> const& x, int nx, int ny, 
 //
 // Cooley-Tukey, re-order first
 //
+// The power-2 Cooley-Tukey algorithm updates two elements at a time.
+// Therefore we only need to launch N/2 threads.
+//
+// During the p'th iteration of Cooley-Tukey, we update N/2 pairs of
+// elements; denoted by indicies (i, j).  The i indicies are traversed
+// in chunks of length M=2^p elements; and j is simply i + M.  The i
+// indicies skip over odd chunks (those are the j elements).
+//
+// To go from a thread index to a Cooley-Tukey pair during the p'th
+// iteration, we decompose the thread index into: which chunk we're
+// in; and which element within that chunk we're at.  This is done
+// using:
+//
+//  int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
+//          ^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+//             within chunk            chunk; skip odd
+//
 
 template <bool sync>
 __device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, int M)
@@ -182,7 +199,6 @@ __device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, 
     if constexpr(sync)
         __syncthreads();
 
-    // convert thread to i in [0, N]; skip odd blocks
     int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
     int j = i + M;
     int m = i % M;
@@ -218,7 +234,6 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int thread, int N)
 void __device__ cooley_tukey_dif_wtwiddles_iter__(
     hipDoubleComplex* __restrict__ x, hipDoubleComplex* __restrict__ T, int thread, int M, int P)
 {
-    // convert thread to i in [0, N]; skip odd blocks
     int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
     int j = i + M;
     int m = i % M;
