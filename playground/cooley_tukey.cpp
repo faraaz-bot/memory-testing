@@ -297,77 +297,56 @@ __device__ void cooley_tukey_dif_wtwiddles_shuffle__(hipDoubleComplex* __restric
     int M = 1;
     int P = params::n >> 1;
 
-#define SHUF
-#ifdef SHUF
     hipDoubleComplex t, z1, z2, d1, d2;
-#endif
 
     constexpr int iters_no_sync = params::log2n > 7 ? 7 : params::log2n;
 
-    if(true)
+    // first iteration; elements (z1 and z2) interact
+    d1 = x[thread * 2];
+    d2 = x[thread * 2 + 1];
+    z1 = d1 + d2;
+    z2 = d1 - d2;
+    M <<= 1;
+    P >>= 1;
+
+    // subsequent iterations up to wavefront; elements don't interact; no sync
+    for(int itr = 1; itr < iters_no_sync; ++itr)
     {
-#ifdef SHUF
-        d1 = x[thread * 2];
-        d2 = x[thread * 2 + 1];
-        z1 = d1 + d2;
-        z2 = d1 - d2;
+        int lane  = thread % 64;
+        int mask  = 1 << (itr - 1);
+        int onoff = (lane & mask) >> (itr - 1);
+        int pm    = 1 - 2 * onoff;
+        int vmask = onoff * mask;
+        int dmask = mask ^ vmask;
+
+        int root = (2 * lane * P) % (params::n / 2);
+
+        t    = T[root];
+        d1.x = t.x * z1.x - t.y * z1.y;
+        d1.y = t.y * z1.x + t.x * z1.y;
+        t    = T[root + P];
+        d2.x = t.x * z2.x - t.y * z2.y;
+        d2.y = t.y * z2.x + t.x * z2.y;
+
+        z1.x = __shfl_xor(z1.x, vmask) + pm * __shfl_xor(d1.x, dmask);
+        z1.y = __shfl_xor(z1.y, vmask) + pm * __shfl_xor(d1.y, dmask);
+        z2.x = __shfl_xor(z2.x, vmask) + pm * __shfl_xor(d2.x, dmask);
+        z2.y = __shfl_xor(z2.y, vmask) + pm * __shfl_xor(d2.y, dmask);
+
         M <<= 1;
         P >>= 1;
-#endif
-
-        for(int itr = 1; itr < iters_no_sync; ++itr)
-        {
-#ifndef SHUF
-            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
-#else
-            int lane  = thread % 64;
-            int mask  = 1 << (itr - 1);
-            int onoff = (lane & mask) >> (itr - 1);
-            int pm    = 1 - 2 * onoff;
-            int vmask = onoff * mask;
-            int dmask = mask ^ vmask;
-
-            int root = (2 * lane * P) % (params::n / 2);
-
-            t    = T[root];
-            d1.x = t.x * z1.x - t.y * z1.y;
-            d1.y = t.y * z1.x + t.x * z1.y;
-            t    = T[root + P];
-            d2.x = t.x * z2.x - t.y * z2.y;
-            d2.y = t.y * z2.x + t.x * z2.y;
-
-            z1.x = __shfl_xor(z1.x, vmask) + pm * __shfl_xor(d1.x, dmask);
-            z1.y = __shfl_xor(z1.y, vmask) + pm * __shfl_xor(d1.y, dmask);
-            z2.x = __shfl_xor(z2.x, vmask) + pm * __shfl_xor(d2.x, dmask);
-            z2.y = __shfl_xor(z2.y, vmask) + pm * __shfl_xor(d2.y, dmask);
-#endif
-
-            M <<= 1;
-            P >>= 1;
-        }
-
-#ifdef SHUF
-        x[thread * 2]     = z1;
-        x[thread * 2 + 1] = z2;
-#endif
-
-        for(int itr = iters_no_sync; itr < params::log2n; ++itr)
-        {
-            __syncthreads();
-            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
-            M <<= 1;
-            P >>= 1;
-        }
     }
-    else
+
+    x[thread * 2]     = z1;
+    x[thread * 2 + 1] = z2;
+
+    // remaining iterations; out of wavefront, use local storage and sync
+    for(int itr = iters_no_sync; itr < params::log2n; ++itr)
     {
-        // XXX
-        for(int itr = 0; itr < params::log2n; ++itr)
-        {
-            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
-            M <<= 1;
-            P >>= 1;
-        }
+        __syncthreads();
+        cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
+        M <<= 1;
+        P >>= 1;
     }
 }
 
