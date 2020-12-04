@@ -103,36 +103,36 @@ struct CT2048
         return {};
 
 using namespace std;
-using gpu_result = pair<float, vector<fftw_complex>>;
+using dtype      = hipDoubleComplex;
+using gpu_result = pair<float, vector<dtype>>;
 
 //
 // Random inputs
 //
-vector<fftw_complex> random_vector(size_t n)
+vector<dtype> random_vector(size_t n)
 {
-    vector<fftw_complex>              x(n);
+    vector<dtype>                     x(n);
     random_device                     rd;
     mt19937                           gen(rd());
     uniform_real_distribution<double> dis(0.0, 1.0);
 #pragma omp parallel for
     for(size_t i = 0; i < n; ++i)
     {
-        x[i][0] = dis(gen);
-        x[i][1] = dis(gen);
+        x[i].x = dis(gen);
+        x[i].y = dis(gen);
     }
     return x;
 }
 
 //
-// Copy helper for fftw_complex (which aren't assignable!)
+// Copy helper for dtype (which aren't assignable!)
 //
-vector<fftw_complex> copy(vector<fftw_complex> const& x)
+vector<dtype> copy(vector<dtype> const& x)
 {
-    vector<fftw_complex> z(x.size());
+    vector<dtype> z(x.size());
     for(size_t i = 0; i < x.size(); ++i)
     {
-        z[i][0] = x[i][0];
-        z[i][1] = x[i][1];
+        z[i] = x[i];
     }
     return z;
 }
@@ -140,13 +140,13 @@ vector<fftw_complex> copy(vector<fftw_complex> const& x)
 //
 // FFTW backed FFT
 //
-vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x, int nx, int nbatch)
+vector<dtype> fft_fftw(vector<dtype> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
     // clang-format off
     auto p = fftw_plan_many_dft(1, &nx, nbatch,
-                                z.data(), nullptr, 1, nx,
-                                z.data(), nullptr, 1, nx,
+                                (fftw_complex*) z.data(), nullptr, 1, nx,
+                                (fftw_complex*) z.data(), nullptr, 1, nx,
                                 FFTW_FORWARD, FFTW_ESTIMATE);
     // clang-format on
     fftw_execute(p);
@@ -154,19 +154,21 @@ vector<fftw_complex> fft_fftw(vector<fftw_complex> const& x, int nx, int nbatch)
     return z;
 }
 
-vector<fftw_complex> fft_fftw_2d(vector<fftw_complex> const& x, int nx, int ny)
+vector<dtype> fft_fftw_2d(vector<dtype> const& x, int nx, int ny)
 {
     auto z = copy(x);
-    auto p = fftw_plan_dft_2d(nx, ny, z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    auto p = fftw_plan_dft_2d(
+        nx, ny, (fftw_complex*)z.data(), (fftw_complex*)z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(p);
     fftw_destroy_plan(p);
     return z;
 }
 
-vector<fftw_complex> fft_fftw_3d(vector<fftw_complex> const& x, int nx, int ny, int nz)
+vector<dtype> fft_fftw_3d(vector<dtype> const& x, int nx, int ny, int nz)
 {
     auto z = copy(x);
-    auto p = fftw_plan_dft_3d(nx, ny, nz, z.data(), z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    auto p = fftw_plan_dft_3d(
+        nx, ny, nz, (fftw_complex*)z.data(), (fftw_complex*)z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(p);
     fftw_destroy_plan(p);
     return z;
@@ -447,16 +449,16 @@ __global__ void cooley_tukey_twiddles(hipDoubleComplex* T, int N)
     T[m].y = sint;
 }
 
-gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
+gpu_result fft_gpu_ct_dif(vector<dtype> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
 
     hipDoubleComplex* X;
-    HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(fftw_complex)));
-    HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(fftw_complex), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(dtype)));
+    HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(dtype), hipMemcpyHostToDevice));
 
     hipDoubleComplex* T;
-    HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(fftw_complex)));
+    HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(dtype)));
 
     dim3 strides(nx);
     cooley_tukey_twiddles<<<(nx / 2 + 255) / 256, 256>>>(T, nx / 2);
@@ -498,22 +500,22 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     }
     timer.toc();
 
-    HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(T));
     HIP_CHECK(hipFree(X));
 
     return {timer.elapsed(), move(z)};
 }
 
-gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
+gpu_result fft_gpu_ct_dif_2d(vector<dtype> const& x, int nx, int ny)
 {
     auto const N = x.size();
 
     auto z = copy(x);
 
     hipDoubleComplex* X;
-    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
-    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMalloc(&X, N * sizeof(dtype)));
+    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(dtype), hipMemcpyHostToDevice));
 
     GPUTimer timer;
     timer.tic();
@@ -521,21 +523,21 @@ gpu_result fft_gpu_ct_dif_2d(vector<fftw_complex> const& x, int nx, int ny)
     cooley_tukey_dif<<<ny, nx / 2>>>(X, nx, log2(nx), dim3(1), ny);
     timer.toc();
 
-    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(dtype), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
     return {timer.elapsed(), move(z)};
 }
 
-gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int nz)
+gpu_result fft_gpu_ct_dif_3d(vector<dtype> const& x, int nx, int ny, int nz)
 {
     auto const N = x.size();
 
     auto z = copy(x);
 
     hipDoubleComplex* X;
-    HIP_CHECK(hipMalloc(&X, N * sizeof(fftw_complex)));
-    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(fftw_complex), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMalloc(&X, N * sizeof(dtype)));
+    HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(dtype), hipMemcpyHostToDevice));
 
     GPUTimer timer;
     timer.tic();
@@ -544,7 +546,7 @@ gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int 
     cooley_tukey_dif<<<dim3(ny, nz), nx / 2>>>(X, nx, log2(nx), dim3(nz, 1), ny * nz);
     timer.toc();
 
-    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(fftw_complex), hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(z.data(), X, N * sizeof(dtype), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(X));
 
     return {timer.elapsed(), move(z)};
@@ -553,21 +555,21 @@ gpu_result fft_gpu_ct_dif_3d(vector<fftw_complex> const& x, int nx, int ny, int 
 //
 // Relative difference
 //
-double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
+double compare(vector<dtype> const& z1, vector<dtype> const& z2)
 {
     double d = 0.0;
     double r = 0.0;
     for(size_t n = 0; n < z1.size(); ++n)
     {
-        double dx = z1[n][0] - z2[n][0];
-        double dy = z1[n][1] - z2[n][1];
+        double dx = z1[n].x - z2[n].x;
+        double dy = z1[n].y - z2[n].y;
         // if(dx * dx + dy * dy > 1.e-7)
         // {
         //     cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n][0] << " " << z2[n][0]
         //          << endl;
         // }
         d += dx * dx + dy * dy;
-        r += z1[n][0] * z1[n][0] + z1[n][1] * z1[n][1];
+        r += z1[n].x * z1[n].x + z1[n].y * z1[n].y;
     }
     return sqrt(d) / sqrt(r);
 }
