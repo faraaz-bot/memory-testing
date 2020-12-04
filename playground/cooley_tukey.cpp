@@ -103,7 +103,7 @@ struct CT2048
         return {};
 
 using namespace std;
-using dtype      = hipDoubleComplex;
+using dtype      = hipComplex;
 using gpu_result = pair<float, vector<dtype>>;
 
 //
@@ -127,9 +127,10 @@ vector<dtype> random_vector(size_t n)
 //
 // Copy helper for dtype (which aren't assignable!)
 //
-vector<dtype> copy(vector<dtype> const& x)
+template <typename T>
+vector<T> copy(vector<T> const& x)
 {
-    vector<dtype> z(x.size());
+    vector<T> z(x.size());
     for(size_t i = 0; i < x.size(); ++i)
     {
         z[i] = x[i];
@@ -140,7 +141,7 @@ vector<dtype> copy(vector<dtype> const& x)
 //
 // FFTW backed FFT
 //
-vector<dtype> fft_fftw(vector<dtype> const& x, int nx, int nbatch)
+vector<hipDoubleComplex> fft_fftw(vector<hipDoubleComplex> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
     // clang-format off
@@ -154,7 +155,7 @@ vector<dtype> fft_fftw(vector<dtype> const& x, int nx, int nbatch)
     return z;
 }
 
-vector<dtype> fft_fftw_2d(vector<dtype> const& x, int nx, int ny)
+vector<hipDoubleComplex> fft_fftw_2d(vector<hipDoubleComplex> const& x, int nx, int ny)
 {
     auto z = copy(x);
     auto p = fftw_plan_dft_2d(
@@ -164,13 +165,52 @@ vector<dtype> fft_fftw_2d(vector<dtype> const& x, int nx, int ny)
     return z;
 }
 
-vector<dtype> fft_fftw_3d(vector<dtype> const& x, int nx, int ny, int nz)
+vector<hipDoubleComplex> fft_fftw_3d(vector<hipDoubleComplex> const& x, int nx, int ny, int nz)
 {
     auto z = copy(x);
     auto p = fftw_plan_dft_3d(
         nx, ny, nz, (fftw_complex*)z.data(), (fftw_complex*)z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
     fftw_execute(p);
     fftw_destroy_plan(p);
+    return z;
+}
+
+vector<hipComplex> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
+{
+    auto z = copy(x);
+    // clang-format off
+    auto p = fftwf_plan_many_dft(1, &nx, nbatch,
+                                (fftwf_complex*) z.data(), nullptr, 1, nx,
+                                (fftwf_complex*) z.data(), nullptr, 1, nx,
+                                FFTW_FORWARD, FFTW_ESTIMATE);
+    // clang-format on
+    fftwf_execute(p);
+    fftwf_destroy_plan(p);
+    return z;
+}
+
+vector<hipComplex> fft_fftw_2d(vector<hipComplex> const& x, int nx, int ny)
+{
+    auto z = copy(x);
+    auto p = fftwf_plan_dft_2d(
+        nx, ny, (fftwf_complex*)z.data(), (fftwf_complex*)z.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+    fftwf_execute(p);
+    fftwf_destroy_plan(p);
+    return z;
+}
+
+vector<hipComplex> fft_fftw_3d(vector<hipComplex> const& x, int nx, int ny, int nz)
+{
+    auto z = copy(x);
+    auto p = fftwf_plan_dft_3d(nx,
+                               ny,
+                               nz,
+                               (fftwf_complex*)z.data(),
+                               (fftwf_complex*)z.data(),
+                               FFTW_FORWARD,
+                               FFTW_ESTIMATE);
+    fftwf_execute(p);
+    fftwf_destroy_plan(p);
     return z;
 }
 
@@ -196,7 +236,7 @@ vector<dtype> fft_fftw_3d(vector<dtype> const& x, int nx, int ny, int nz)
 //
 
 template <bool sync>
-__device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, int M)
+__device__ void cooley_tukey_dif_iter__(dtype* x, int thread, int N, int M)
 {
     if constexpr(sync)
         __syncthreads();
@@ -208,9 +248,9 @@ __device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, 
     double cost, sint;
     sincospi(-double(m) / M, &sint, &cost);
 
-    hipDoubleComplex xi = x[i];
-    hipDoubleComplex xj = x[j];
-    hipDoubleComplex d;
+    dtype xi = x[i];
+    dtype xj = x[j];
+    dtype d;
 
     d.x = cost * xj.x - sint * xj.y;
     d.y = sint * xj.x + cost * xj.y;
@@ -219,7 +259,7 @@ __device__ void cooley_tukey_dif_iter__(hipDoubleComplex* x, int thread, int N, 
     x[j] = xi - d;
 }
 
-__device__ void cooley_tukey_dif__(hipDoubleComplex* x, int thread, int N)
+__device__ void cooley_tukey_dif__(dtype* x, int thread, int N)
 {
     int M = 1; // size of current block
 
@@ -234,16 +274,16 @@ __device__ void cooley_tukey_dif__(hipDoubleComplex* x, int thread, int N)
 }
 
 void __device__ cooley_tukey_dif_wtwiddles_iter__(
-    hipDoubleComplex* __restrict__ x, hipDoubleComplex* __restrict__ T, int thread, int M, int P)
+    dtype* __restrict__ x, dtype* __restrict__ T, int thread, int M, int P)
 {
     int i = ((M - 1) & thread) + ((~(M - 1) & thread) << 1);
     int j = i + M;
     int m = i % M;
 
-    hipDoubleComplex t  = T[m * P];
-    hipDoubleComplex xi = x[i];
-    hipDoubleComplex xj = x[j];
-    hipDoubleComplex d;
+    dtype t  = T[m * P];
+    dtype xi = x[i];
+    dtype xj = x[j];
+    dtype d;
 
     d.x = t.x * xj.x - t.y * xj.y;
     d.y = t.y * xj.x + t.x * xj.y;
@@ -253,9 +293,8 @@ void __device__ cooley_tukey_dif_wtwiddles_iter__(
 }
 
 template <class params>
-__device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
-                                             hipDoubleComplex* __restrict__ T,
-                                             int thread)
+__device__ void
+    cooley_tukey_dif_wtwiddles__(dtype* __restrict__ x, dtype* __restrict__ T, int thread)
 {
     int M = 1;
     int P = params::n >> 1;
@@ -292,14 +331,13 @@ __device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
 }
 
 template <class params>
-__device__ void cooley_tukey_dif_wtwiddles_shuffle__(hipDoubleComplex* __restrict__ x,
-                                                     hipDoubleComplex* __restrict__ T,
-                                                     int thread)
+__device__ void
+    cooley_tukey_dif_wtwiddles_shuffle__(dtype* __restrict__ x, dtype* __restrict__ T, int thread)
 {
     int M = 1;
     int P = params::n >> 1;
 
-    hipDoubleComplex t, z1, z2, d1, d2;
+    dtype t, z1, z2, d1, d2;
 
     constexpr int iters_no_sync = params::log2n > 7 ? 7 : params::log2n;
 
@@ -352,25 +390,25 @@ __device__ void cooley_tukey_dif_wtwiddles_shuffle__(hipDoubleComplex* __restric
     }
 }
 
-__device__ void reorder1(hipDoubleComplex* x, int p, int n)
+__device__ void reorder1(dtype* x, int p, int n)
 {
     int q = __brev(p) >> (32 - n);
     if(p > q)
     {
-        hipDoubleComplex t = x[p];
-        x[p]               = x[q];
-        x[q]               = t;
+        dtype t = x[p];
+        x[p]    = x[q];
+        x[q]    = t;
     }
 }
 
-__device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
+__device__ void reorder(dtype* x, int i, int N, int log2n)
 {
     reorder1(x, i, log2n);
     reorder1(x, i + N / 2, log2n);
 }
 
-__device__ void copy_and_reorder(
-    hipDoubleComplex* x, hipDoubleComplex* x_, int i, int N, int offset, int tstride, int log2n)
+__device__ void
+    copy_and_reorder(dtype* x, dtype* x_, int i, int N, int offset, int tstride, int log2n)
 {
     int p, q;
 
@@ -384,9 +422,9 @@ __device__ void copy_and_reorder(
 }
 
 __global__ void __launch_bounds__(1024)
-    cooley_tukey_dif(hipDoubleComplex* x_, int N, int log2N, dim3 bstrides, int tstride)
+    cooley_tukey_dif(dtype* x_, int N, int log2N, dim3 bstrides, int tstride)
 {
-    __shared__ hipDoubleComplex x[4096];
+    __shared__ dtype x[4096];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
@@ -407,13 +445,11 @@ __global__ void __launch_bounds__(1024)
 }
 
 template <class params>
-__global__ void __launch_bounds__(params::threads) cooley_tukey_dif_wtwiddles(hipDoubleComplex* x_,
-                                                                              hipDoubleComplex* T,
-                                                                              dim3 bstrides,
-                                                                              int  tstride)
+__global__ void __launch_bounds__(params::threads)
+    cooley_tukey_dif_wtwiddles(dtype* x_, dtype* T, dim3 bstrides, int tstride)
 
 {
-    __shared__ hipDoubleComplex x[params::shared_memory];
+    __shared__ dtype x[params::shared_memory];
 
     int offset
         = hipBlockIdx_x * bstrides.x + hipBlockIdx_y * bstrides.y + hipBlockIdx_z * bstrides.z;
@@ -436,7 +472,7 @@ __global__ void __launch_bounds__(params::threads) cooley_tukey_dif_wtwiddles(hi
     x_[offset + (thread + params::n / 2) * tstride] = x[thread + params::n / 2];
 }
 
-__global__ void cooley_tukey_twiddles(hipDoubleComplex* T, int N)
+__global__ void cooley_tukey_twiddles(dtype* T, int N)
 {
     int m = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -453,11 +489,11 @@ gpu_result fft_gpu_ct_dif(vector<dtype> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
 
-    hipDoubleComplex* X;
+    dtype* X;
     HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(dtype)));
     HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(dtype), hipMemcpyHostToDevice));
 
-    hipDoubleComplex* T;
+    dtype* T;
     HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(dtype)));
 
     dim3 strides(nx);
@@ -513,7 +549,7 @@ gpu_result fft_gpu_ct_dif_2d(vector<dtype> const& x, int nx, int ny)
 
     auto z = copy(x);
 
-    hipDoubleComplex* X;
+    dtype* X;
     HIP_CHECK(hipMalloc(&X, N * sizeof(dtype)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(dtype), hipMemcpyHostToDevice));
 
@@ -535,7 +571,7 @@ gpu_result fft_gpu_ct_dif_3d(vector<dtype> const& x, int nx, int ny, int nz)
 
     auto z = copy(x);
 
-    hipDoubleComplex* X;
+    dtype* X;
     HIP_CHECK(hipMalloc(&X, N * sizeof(dtype)));
     HIP_CHECK(hipMemcpy(X, z.data(), N * sizeof(dtype), hipMemcpyHostToDevice));
 
