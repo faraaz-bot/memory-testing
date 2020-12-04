@@ -251,18 +251,18 @@ void __device__ cooley_tukey_dif_wtwiddles_iter__(
 }
 
 template <class params>
-void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
+__device__ void cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
                                              hipDoubleComplex* __restrict__ T,
                                              int thread)
 {
     int M = 1;
     int P = params::n >> 1;
 
-    static const int iters_no_sync = 6;
-    static const int iters_no_sync = 7;
+    constexpr int iters_no_sync = 7;
 
-    if constexpr(params::log2n >= iters_no_sync)
+    if constexpr(params::log2n > iters_no_sync)
     {
+
         for(int itr = 0; itr < iters_no_sync; ++itr)
         {
             cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
@@ -289,6 +289,88 @@ void __device__ cooley_tukey_dif_wtwiddles__(hipDoubleComplex* __restrict__ x,
     }
 }
 
+template <class params>
+__device__ void cooley_tukey_dif_wtwiddles_shuffle__(hipDoubleComplex* __restrict__ x,
+                                                     hipDoubleComplex* __restrict__ T,
+                                                     int thread)
+{
+    int M = 1;
+    int P = params::n >> 1;
+
+#define SHUF
+#ifdef SHUF
+    hipDoubleComplex t, z1, z2, d1, d2;
+#endif
+
+    constexpr int iters_no_sync = params::log2n > 7 ? 7 : params::log2n;
+
+    if(true)
+    {
+#ifdef SHUF
+        d1 = x[thread * 2];
+        d2 = x[thread * 2 + 1];
+        z1 = d1 + d2;
+        z2 = d1 - d2;
+        M <<= 1;
+        P >>= 1;
+#endif
+
+        for(int itr = 1; itr < iters_no_sync; ++itr)
+        {
+#ifndef SHUF
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
+#else
+            int lane  = thread % 64;
+            int mask  = 1 << (itr - 1);
+            int onoff = (lane & mask) >> (itr - 1);
+            int pm    = 1 - 2 * onoff;
+            int vmask = onoff * mask;
+            int dmask = mask ^ vmask;
+
+            int root = (2 * lane * P) % (params::n / 2);
+
+            t    = T[root];
+            d1.x = t.x * z1.x - t.y * z1.y;
+            d1.y = t.y * z1.x + t.x * z1.y;
+            t    = T[root + P];
+            d2.x = t.x * z2.x - t.y * z2.y;
+            d2.y = t.y * z2.x + t.x * z2.y;
+
+            z1.x = __shfl_xor(z1.x, vmask) + pm * __shfl_xor(d1.x, dmask);
+            z1.y = __shfl_xor(z1.y, vmask) + pm * __shfl_xor(d1.y, dmask);
+            z2.x = __shfl_xor(z2.x, vmask) + pm * __shfl_xor(d2.x, dmask);
+            z2.y = __shfl_xor(z2.y, vmask) + pm * __shfl_xor(d2.y, dmask);
+#endif
+
+            M <<= 1;
+            P >>= 1;
+        }
+
+#ifdef SHUF
+        x[thread * 2]     = z1;
+        x[thread * 2 + 1] = z2;
+#endif
+
+        for(int itr = iters_no_sync; itr < params::log2n; ++itr)
+        {
+            __syncthreads();
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
+            M <<= 1;
+            P >>= 1;
+        }
+    }
+    else
+    {
+        // XXX
+        for(int itr = 0; itr < params::log2n; ++itr)
+        {
+            cooley_tukey_dif_wtwiddles_iter__(x, T, thread, M, P);
+            M <<= 1;
+            P >>= 1;
+        }
+    }
+}
+
 __device__ void reorder1(hipDoubleComplex* x, int p, int n)
 {
     int q = __brev(p) >> (32 - n);
@@ -302,9 +384,6 @@ __device__ void reorder1(hipDoubleComplex* x, int p, int n)
 
 __device__ void reorder(hipDoubleComplex* x, int i, int N, int log2n)
 {
-    if(i >= N / 2)
-        return;
-
     reorder1(x, i, log2n);
     reorder1(x, i + N / 2, log2n);
 }
@@ -369,7 +448,7 @@ __global__ void __launch_bounds__(params::threads) cooley_tukey_dif_wtwiddles(hi
     reorder(x, thread, params::n, params::log2n);
     __syncthreads();
 
-    cooley_tukey_dif_wtwiddles__<params>(x, T, thread);
+    cooley_tukey_dif_wtwiddles_shuffle__<params>(x, T, thread);
     __syncthreads();
 
     x_[offset + thread * tstride]                   = x[thread];
@@ -400,10 +479,11 @@ gpu_result fft_gpu_ct_dif(vector<fftw_complex> const& x, int nx, int nbatch)
     hipDoubleComplex* T;
     HIP_CHECK(hipMalloc(&T, nx / 2 * sizeof(fftw_complex)));
 
-    GPUTimer timer;
-    timer.tic();
     dim3 strides(nx);
     cooley_tukey_twiddles<<<(nx / 2 + 255) / 256, 256>>>(T, nx / 2);
+
+    GPUTimer timer;
+    timer.tic();
     switch(nx)
     {
     case 4:
@@ -518,8 +598,6 @@ double compare(vector<fftw_complex> const& z1, vector<fftw_complex> const& z2)
 //
 void test1d(size_t n, size_t nbatch)
 {
-    CPUTimer timer;
-
     double GiB = double(n * nbatch * 16) / 1024 / 1024 / 1024;
     cout << "# 1d test" << endl;
     cout << "1d input length: " << n << " (" << nbatch << ")" << endl;
@@ -527,6 +605,7 @@ void test1d(size_t n, size_t nbatch)
 
     auto x = random_vector(n * nbatch);
 
+    CPUTimer timer;
     timer.tic();
     auto z1 = fft_fftw(x, n, nbatch);
     timer.toc();
