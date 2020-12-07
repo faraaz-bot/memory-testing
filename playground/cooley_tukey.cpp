@@ -103,7 +103,7 @@ struct CT2048
         return {};
 
 using namespace std;
-using dtype      = hipComplex;
+using dtype      = hipDoubleComplex;
 using gpu_result = pair<float, vector<dtype>>;
 
 //
@@ -339,7 +339,7 @@ __device__ void
 
     dtype t, z1, z2, d1, d2;
 
-    constexpr int iters_no_sync = params::log2n > 7 ? 7 : params::log2n;
+    constexpr int iters_no_sync = params::log2n > 6 ? 6 : params::log2n;
 
     // first iteration; elements (z1 and z2) interact
     d1 = x[thread * 2];
@@ -466,6 +466,7 @@ __global__ void __launch_bounds__(params::threads)
     __syncthreads();
 
     cooley_tukey_dif_wtwiddles_shuffle__<params>(x, T, thread);
+    //    cooley_tukey_dif_wtwiddles__<params>(x, T, thread);
     __syncthreads();
 
     x_[offset + thread * tstride]                   = x[thread];
@@ -615,7 +616,7 @@ double compare(vector<dtype> const& z1, vector<dtype> const& z2)
 //
 void test1d(size_t n, size_t nbatch)
 {
-    double GiB = double(n * nbatch * 16) / 1024 / 1024 / 1024;
+    double GiB = double(n * nbatch * sizeof(dtype)) / 1024 / 1024 / 1024;
     cout << "# 1d test" << endl;
     cout << "1d input length: " << n << " (" << nbatch << ")" << endl;
     cout << "1d input size:   " << GiB << "GiB" << endl;
