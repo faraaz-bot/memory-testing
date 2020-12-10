@@ -104,7 +104,7 @@ struct CT2048
 
 using namespace std;
 using dtype      = hipDoubleComplex;
-using gpu_result = pair<float, vector<dtype>>;
+using fft_result = pair<float, vector<dtype>>;
 
 //
 // Random inputs
@@ -141,7 +141,8 @@ vector<T> copy(vector<T> const& x)
 //
 // FFTW backed FFT
 //
-vector<hipDoubleComplex> fft_fftw(vector<hipDoubleComplex> const& x, int nx, int nbatch)
+pair<float, vector<hipDoubleComplex>>
+    fft_fftw(vector<hipDoubleComplex> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
     // clang-format off
@@ -150,9 +151,12 @@ vector<hipDoubleComplex> fft_fftw(vector<hipDoubleComplex> const& x, int nx, int
                                 (fftw_complex*) z.data(), nullptr, 1, nx,
                                 FFTW_FORWARD, FFTW_ESTIMATE);
     // clang-format on
+    CPUTimer timer;
+    timer.tic();
     fftw_execute(p);
+    timer.toc();
     fftw_destroy_plan(p);
-    return z;
+    return {timer.elapsed(), move(z)};
 }
 
 vector<hipDoubleComplex> fft_fftw_2d(vector<hipDoubleComplex> const& x, int nx, int ny)
@@ -175,7 +179,7 @@ vector<hipDoubleComplex> fft_fftw_3d(vector<hipDoubleComplex> const& x, int nx, 
     return z;
 }
 
-vector<hipComplex> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
+pair<float, vector<hipComplex>> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
     // clang-format off
@@ -184,9 +188,12 @@ vector<hipComplex> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
                                 (fftwf_complex*) z.data(), nullptr, 1, nx,
                                 FFTW_FORWARD, FFTW_ESTIMATE);
     // clang-format on
+    CPUTimer timer;
+    timer.tic();
     fftwf_execute(p);
+    timer.toc();
     fftwf_destroy_plan(p);
-    return z;
+    return {timer.elapsed(), move(z)};
 }
 
 vector<hipComplex> fft_fftw_2d(vector<hipComplex> const& x, int nx, int ny)
@@ -486,7 +493,7 @@ __global__ void cooley_tukey_twiddles(dtype* T, int N)
     T[m].y = sint;
 }
 
-gpu_result fft_gpu_ct_dif(vector<dtype> const& x, int nx, int nbatch)
+fft_result fft_gpu_ct_dif(vector<dtype> const& x, int nx, int nbatch)
 {
     auto z = copy(x);
 
@@ -544,7 +551,7 @@ gpu_result fft_gpu_ct_dif(vector<dtype> const& x, int nx, int nbatch)
     return {timer.elapsed(), move(z)};
 }
 
-gpu_result fft_gpu_ct_dif_2d(vector<dtype> const& x, int nx, int ny)
+fft_result fft_gpu_ct_dif_2d(vector<dtype> const& x, int nx, int ny)
 {
     auto const N = x.size();
 
@@ -566,7 +573,7 @@ gpu_result fft_gpu_ct_dif_2d(vector<dtype> const& x, int nx, int ny)
     return {timer.elapsed(), move(z)};
 }
 
-gpu_result fft_gpu_ct_dif_3d(vector<dtype> const& x, int nx, int ny, int nz)
+fft_result fft_gpu_ct_dif_3d(vector<dtype> const& x, int nx, int ny, int nz)
 {
     auto const N = x.size();
 
@@ -623,18 +630,13 @@ void test1d(size_t n, size_t nbatch)
 
     auto x = random_vector(n * nbatch);
 
-    CPUTimer timer;
-    timer.tic();
-    auto z1 = fft_fftw(x, n, nbatch);
-    timer.toc();
-    cout << "FFTW time:       " << timer.elapsed() << "ms" << endl;
+    auto [t1, z1] = fft_fftw(x, n, nbatch);
+    cout << "FFTW time:       " << t1 << "ms" << endl;
 
-    auto [c4, z4] = fft_gpu_ct_dif(x, n, nbatch);
-    auto [c5, z5] = fft_gpu_ct_dif(x, n, nbatch);
-    auto [c6, z6] = fft_gpu_ct_dif(x, n, nbatch);
-    cout << "GPU rel diff:    " << compare(z1, z4) << endl;
-    cout << "GPU kernel time: " << c6 << "ms" << endl;
-    cout << "GPU throughput:  " << GiB * 1000 / c6 << " GiB/s" << endl;
+    auto [t2, z2] = fft_gpu_ct_dif(x, n, nbatch);
+    cout << "GPU rel diff:    " << compare(z1, z2) << endl;
+    cout << "GPU kernel time: " << t2 << "ms" << endl;
+    cout << "GPU throughput:  " << GiB * 1000 / t2 << " GiB/s" << endl;
 }
 
 void test2d()
