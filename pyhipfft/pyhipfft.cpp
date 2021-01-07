@@ -198,7 +198,9 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
 
     if(time)
     {
-        return Py_BuildValue("Of", Z, elapsed);
+        PyObject *R = Py_BuildValue("Of", Z, elapsed);
+        Py_XDECREF(Z);
+        return R;
     }
 
     return Z;
