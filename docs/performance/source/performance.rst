@@ -68,6 +68,31 @@ GESTS
 GROMACS
 ^^^^^^^
 
+JIRA tickets
+
+* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
+* `SWDEV-245239 <http://ontrack-internal.amd.com/browse/SWDEV-245239>`_
+
+Representative transforms:
+
+* 3D R2C: ``rocfft-rider -t 2 --length 100 100 100``
+* 3D C2R: ``rocfft-rider -t 3 --length 100 100 100``
+* 3D R2C: ``rocfft-rider -t 2 --length 64 64 52``
+* 3D C2R: ``rocfft-rider -t 3 --length 64 64 52``
+* 3D R2C: ``rocfft-rider -t 2 --length 72 72 52``
+* 3D C2R: ``rocfft-rider -t 3 --length 72 72 52``
+* 3D R2C: ``rocfft-rider -t 2 --length 208 100 100``
+* 3D C2R: ``rocfft-rider -t 3 --length 208 100 100``
+* 3D R2C: ``rocfft-rider -t 2 --length 216 104 100``
+* 3D C2R: ``rocfft-rider -t 3 --length 216 104 100``
+* 3D R2C: ``rocfft-rider -t 2 --length 216 104 104``
+* 3D C2R: ``rocfft-rider -t 3 --length 216 104 104``
+* 3D R2C: ``rocfft-rider -t 2 --length 224 104 104``
+* 3D C2R: ``rocfft-rider -t 3 --length 224 104 104``
+* 3D R2C: ``rocfft-rider -t 2 --length 224 108 104``
+* 3D C2R: ``rocfft-rider -t 3 --length 224 108 104``
+
+
 ECP APPS
 ^^^^^^^^
 
