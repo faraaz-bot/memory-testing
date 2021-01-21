@@ -320,28 +320,28 @@ void fft_256_fwd(float2 *gb, float2 *twiddles)
 	lds[me*4 + 2] = X[2].x;
 	lds[me*4 + 3] = X[3].x;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].x = lds[me +   0];
 	X[1].x = lds[me +  64];	
 	X[2].x = lds[me + 128];
 	X[3].x = lds[me + 192];
 	
-	__syncthreads();
+	// __syncthreads();
 
 	lds[me*4 + 0] = X[0].y;
 	lds[me*4 + 1] = X[1].y;
 	lds[me*4 + 2] = X[2].y;
 	lds[me*4 + 3] = X[3].y;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].y = lds[me +   0];
 	X[1].y = lds[me +  64];	
 	X[2].y = lds[me + 128];
 	X[3].y = lds[me + 192];
 	
-	__syncthreads();	
+	// __syncthreads();	
 
 
 	TWIDDLE_MUL_FWD(twiddles, 3 + 3*(me%4) + 0, X[1])	
@@ -356,28 +356,28 @@ void fft_256_fwd(float2 *gb, float2 *twiddles)
 	lds[(me/4)*16 + me%4 +  8] = X[2].x;
 	lds[(me/4)*16 + me%4 + 12] = X[3].x;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].x = lds[me +   0];
 	X[1].x = lds[me +  64];	
 	X[2].x = lds[me + 128];
 	X[3].x = lds[me + 192];
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	lds[(me/4)*16 + me%4 +  0] = X[0].y;
 	lds[(me/4)*16 + me%4 +  4] = X[1].y;
 	lds[(me/4)*16 + me%4 +  8] = X[2].y;
 	lds[(me/4)*16 + me%4 + 12] = X[3].y;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].y = lds[me +   0];
 	X[1].y = lds[me +  64];	
 	X[2].y = lds[me + 128];
 	X[3].y = lds[me + 192];
 	
-	__syncthreads();	
+	// __syncthreads();	
 
 	TWIDDLE_MUL_FWD(twiddles, 15 + 3*(me%16) + 0, X[1])	
 	TWIDDLE_MUL_FWD(twiddles, 15 + 3*(me%16) + 1, X[2])	
@@ -391,28 +391,28 @@ void fft_256_fwd(float2 *gb, float2 *twiddles)
 	lds[(me/16)*64 + me%16 + 32] = X[2].x;
 	lds[(me/16)*64 + me%16 + 48] = X[3].x;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].x = lds[me +   0];
 	X[1].x = lds[me +  64];	
 	X[2].x = lds[me + 128];
 	X[3].x = lds[me + 192];
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	lds[(me/16)*64 + me%16 +  0] = X[0].y;
 	lds[(me/16)*64 + me%16 + 16] = X[1].y;
 	lds[(me/16)*64 + me%16 + 32] = X[2].y;
 	lds[(me/16)*64 + me%16 + 48] = X[3].y;
 	
-	__syncthreads();
+	// __syncthreads();
 	
 	X[0].y = lds[me +   0];
 	X[1].y = lds[me +  64];	
 	X[2].y = lds[me + 128];
 	X[3].y = lds[me + 192];
 	
-	__syncthreads();		
+	// __syncthreads();		
 	
 	TWIDDLE_MUL_FWD(twiddles, 63 + 3*me + 0, X[1])	
 	TWIDDLE_MUL_FWD(twiddles, 63 + 3*me + 1, X[2])	
