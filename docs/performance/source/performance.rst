@@ -28,6 +28,14 @@ Cases of interest
 For each application of interest, please choose a small handful of
 representative cases that we can focus on.
 
+UBER ALLES TICKETS
+^^^^^^^^^^^^^^^^^^
+
+* `SWDEV-190718 <http://ontrack-internal.amd.com/browse/SWDEV-190718>`_
+* `SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_
+* `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_
+* `SWDEV-240859 <http://ontrack-internal.amd.com/browse/SWDEV-240859>`_
+
 CHOLLA
 ^^^^^^
 
@@ -37,7 +45,7 @@ JIRA tickets
 * 1D Multiples of 21 `SWDEV-268238 <http://ontrack-internal.amd.com/browse/SWDEV-268238>`_
 * 2D batched 256x256 (lower priority): `SWDEV-257111 <http://ontrack-internal.amd.com/browse/SWDEV-257111>`_
 
-Representative transforms for 240404 and 268238:
+Representative transforms for tickets 240404 and 268238:
 
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 10752``
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 18816``
@@ -46,10 +54,21 @@ Representative transforms for 240404 and 268238:
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
 * 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
 
-NAMD
-^^^^
+Representative transforms for ticket 257111 (low priority):
 
-XXX
+* 2D Z2D: ``rocfft-rider -t 3 -b 256 --length 256 256 --double``
+* 2D D2Z: ``rocfft-rider -t 2 -b 256 --length 256 256 --double``
+
+CINES
+^^^^^
+
+JIRA tickets
+
+* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_
+
+Representative transforms:
+
+* 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
 
 HACC
 ^^^^
@@ -61,9 +80,6 @@ JIRA tickets
 Representative transforms (stride is 1):
 
 * 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
-
-GESTS
-^^^^^
 
 GROMACS
 ^^^^^^^
@@ -93,11 +109,43 @@ Representative transforms:
 * 3D C2R: ``rocfft-rider -t 3 --length 224 108 104``
 
 
+Shoreline MI200
+^^^^^^^^^^^^^^^
+
+JIRA tickets
+
+* `SWDEV-249890 <http://ontrack-internal.amd.com/browse/SWDEV-249890>`_
+
+Small 1D with large batch.
+
+
 ECP APPS
 ^^^^^^^^
 
 * heFFTe
 * FFTX
+
+Misc but interesting
+^^^^^^^^^^^^^^^^^^^^
+
+JIRA tickets
+
+* `SWDEV-254297 <http://ontrack-internal.amd.com/browse/SWDEV-254297>`_
+* `SWDEV-253931 <http://ontrack-internal.amd.com/browse/SWDEV-253931>`_
+
+Representative transforms:
+
+* 3D pow2 out-of-place cube: ``rocfft-rider --length 256 256 256 --double -N 100 -o``
+* 3D pow2 in-place cube: ``rocfft-rider --length 256 256 256 --double -N 100``
+* 1D 4096: ``rocfft-rider --length 4096 -b 8192 -N 20``
+
+From our work with other group
+
+* length 4096 (exercises radix-16)
+* length 512 (exercises radix-8)
+* length 2187 (exercises radix-3)
+* length 3125 (exercises radix-5)
+* length 112 (exercises radix-7)
 
 
 Proposals
