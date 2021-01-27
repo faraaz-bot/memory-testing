@@ -70,7 +70,28 @@ print(X1)
 print(np.max(np.abs(X0 - X1)))
 
 
+# Numerical recipes
+print("Numerical recipes:")
+xtilde = np.empty(N+1)
+xtilde[0] = 0
+for i in range(1, N):
+    xtilde[i + 1] = x[i]
+y = np.empty(N)
+y[0] = 0
+for j in range(1,N):
+    y[j] = np.sin(j * np.pi / N) * (xtilde[j] + xtilde[N-j]) + 0.5 * (xtilde[j] - xtilde[N-j])
+print(y)
+Y = scipy.fft.rfft(y)
+print(Y)
+X3 = np.empty(N)
+X3[1] = Y[0].real
+for k in range((N+1) // 2):
+    print(k)
+    X3[2 * k] = Y[k].imag
+    X3[2 * k + 1] = Y[k].real + X3[2 * k - 1]
+print(X3)
 
+exit(0)
 
 print("\nDCT-II")
 

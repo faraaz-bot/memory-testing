@@ -59,7 +59,7 @@ def main(argv):
         N = row0[0]
         for row1 in data1:
             if row1[0] == N:
-                print(len(row0[1]), len(row1[1]))
+                #print(len(row0[1]), len(row1[1]))
                 stat, pm, med, tbl = scipy.stats.median_test(row0[1], row1[1], ties="ignore")
                 #w, pw = scipy.stats.wilcoxon(row0[1], row1[1])
                 stat, pwu = scipy.stats.mannwhitneyu(row0[1], row1[1])
