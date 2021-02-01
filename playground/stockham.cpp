@@ -484,7 +484,78 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
     lwb[me + 192] = X[3];
 }
 
-fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch)
+__global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
+{
+    __shared__ dtype lds[256];
+
+    int    ioOffset = 256 * blockIdx.x;
+    dtype* lwb      = gb + ioOffset;
+    int    me       = threadIdx.x;
+
+    dtype X[4];
+
+    X[0] = lwb[me + 0];
+    X[1] = lwb[me + 64];
+    X[2] = lwb[me + 128];
+    X[3] = lwb[me + 192];
+
+    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+
+    lds[me * 4 + 0] = X[0];
+    lds[me * 4 + 1] = X[1];
+    lds[me * 4 + 2] = X[2];
+    lds[me * 4 + 3] = X[3];
+
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
+
+    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 0, X[1])
+    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 1, X[2])
+    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 2, X[3])
+
+    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+
+    lds[(me / 4) * 16 + me % 4 + 0]  = X[0];
+    lds[(me / 4) * 16 + me % 4 + 4]  = X[1];
+    lds[(me / 4) * 16 + me % 4 + 8]  = X[2];
+    lds[(me / 4) * 16 + me % 4 + 12] = X[3];
+
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
+
+    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 0, X[1])
+    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 1, X[2])
+    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 2, X[3])
+
+    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+
+    lds[(me / 16) * 64 + me % 16 + 0]  = X[0];
+    lds[(me / 16) * 64 + me % 16 + 16] = X[1];
+    lds[(me / 16) * 64 + me % 16 + 32] = X[2];
+    lds[(me / 16) * 64 + me % 16 + 48] = X[3];
+
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
+
+    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 0, X[1])
+    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 1, X[2])
+    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 2, X[3])
+
+    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+
+    lwb[me + 0]   = X[0];
+    lwb[me + 64]  = X[1];
+    lwb[me + 128] = X[2];
+    lwb[me + 192] = X[3];
+}
+
+fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool batch_first)
 {
     auto z = copy(x);
 
@@ -499,7 +570,10 @@ fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch)
 
     GPUTimer timer;
     timer.tic();
-    fft_256_fwd<<<nbatch, 64>>>(X, T);
+    if(batch_first)
+        fft_256_fwd_batchfirst<<<nbatch, 64>>>(X, T);
+    else
+        fft_256_fwd<<<nbatch, 64>>>(X, T);
     timer.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
@@ -546,7 +620,7 @@ void test1d(size_t n, size_t nbatch)
     auto [t1, z1] = fft_fftw(x, n, nbatch);
     cout << "FFTW time:       " << t1 << "ms" << endl;
 
-    auto [t2, z2] = fft_stockham_gpu(x, n, nbatch);
+    auto [t2, z2] = fft_stockham_gpu(x, n, nbatch, true);
 
     cout << "GPU rel diff:    " << compare(z1, z2) << endl;
     cout << "GPU kernel time: " << t2 << "ms" << endl;
