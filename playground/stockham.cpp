@@ -384,7 +384,7 @@ __device__ void FwdRad4(dtype* R0, dtype* R2, dtype* R1, dtype* R3)
 
 __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 {
-    __shared__ float lds[256];
+    __shared__ dtype lds[256];
 
     int    ioOffset = 256 * blockIdx.x;
     dtype* lwb      = gb + ioOffset;
@@ -399,33 +399,15 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    lds[me * 4 + 0] = X[0].x;
-    lds[me * 4 + 1] = X[1].x;
-    lds[me * 4 + 2] = X[2].x;
-    lds[me * 4 + 3] = X[3].x;
+    lds[me * 4 + 0] = X[0];
+    lds[me * 4 + 1] = X[1];
+    lds[me * 4 + 2] = X[2];
+    lds[me * 4 + 3] = X[3];
 
-    // __syncthreads();
-
-    X[0].x = lds[me + 0];
-    X[1].x = lds[me + 64];
-    X[2].x = lds[me + 128];
-    X[3].x = lds[me + 192];
-
-    // __syncthreads();
-
-    lds[me * 4 + 0] = X[0].y;
-    lds[me * 4 + 1] = X[1].y;
-    lds[me * 4 + 2] = X[2].y;
-    lds[me * 4 + 3] = X[3].y;
-
-    // __syncthreads();
-
-    X[0].y = lds[me + 0];
-    X[1].y = lds[me + 64];
-    X[2].y = lds[me + 128];
-    X[3].y = lds[me + 192];
-
-    // __syncthreads();
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
 
     TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 0, X[1])
     TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 1, X[2])
@@ -433,33 +415,15 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    lds[(me / 4) * 16 + me % 4 + 0]  = X[0].x;
-    lds[(me / 4) * 16 + me % 4 + 4]  = X[1].x;
-    lds[(me / 4) * 16 + me % 4 + 8]  = X[2].x;
-    lds[(me / 4) * 16 + me % 4 + 12] = X[3].x;
+    lds[(me / 4) * 16 + me % 4 + 0]  = X[0];
+    lds[(me / 4) * 16 + me % 4 + 4]  = X[1];
+    lds[(me / 4) * 16 + me % 4 + 8]  = X[2];
+    lds[(me / 4) * 16 + me % 4 + 12] = X[3];
 
-    // __syncthreads();
-
-    X[0].x = lds[me + 0];
-    X[1].x = lds[me + 64];
-    X[2].x = lds[me + 128];
-    X[3].x = lds[me + 192];
-
-    // __syncthreads();
-
-    lds[(me / 4) * 16 + me % 4 + 0]  = X[0].y;
-    lds[(me / 4) * 16 + me % 4 + 4]  = X[1].y;
-    lds[(me / 4) * 16 + me % 4 + 8]  = X[2].y;
-    lds[(me / 4) * 16 + me % 4 + 12] = X[3].y;
-
-    // __syncthreads();
-
-    X[0].y = lds[me + 0];
-    X[1].y = lds[me + 64];
-    X[2].y = lds[me + 128];
-    X[3].y = lds[me + 192];
-
-    // __syncthreads();
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
 
     TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 0, X[1])
     TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 1, X[2])
@@ -467,33 +431,15 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    lds[(me / 16) * 64 + me % 16 + 0]  = X[0].x;
-    lds[(me / 16) * 64 + me % 16 + 16] = X[1].x;
-    lds[(me / 16) * 64 + me % 16 + 32] = X[2].x;
-    lds[(me / 16) * 64 + me % 16 + 48] = X[3].x;
+    lds[(me / 16) * 64 + me % 16 + 0]  = X[0];
+    lds[(me / 16) * 64 + me % 16 + 16] = X[1];
+    lds[(me / 16) * 64 + me % 16 + 32] = X[2];
+    lds[(me / 16) * 64 + me % 16 + 48] = X[3];
 
-    // __syncthreads();
-
-    X[0].x = lds[me + 0];
-    X[1].x = lds[me + 64];
-    X[2].x = lds[me + 128];
-    X[3].x = lds[me + 192];
-
-    // __syncthreads();
-
-    lds[(me / 16) * 64 + me % 16 + 0]  = X[0].y;
-    lds[(me / 16) * 64 + me % 16 + 16] = X[1].y;
-    lds[(me / 16) * 64 + me % 16 + 32] = X[2].y;
-    lds[(me / 16) * 64 + me % 16 + 48] = X[3].y;
-
-    // __syncthreads();
-
-    X[0].y = lds[me + 0];
-    X[1].y = lds[me + 64];
-    X[2].y = lds[me + 128];
-    X[3].y = lds[me + 192];
-
-    // __syncthreads();
+    X[0] = lds[me + 0];
+    X[1] = lds[me + 64];
+    X[2] = lds[me + 128];
+    X[3] = lds[me + 192];
 
     TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 0, X[1])
     TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 1, X[2])
