@@ -74,6 +74,23 @@ pair<float, vector<hipDoubleComplex>>
     return {timer.elapsed(), move(z)};
 }
 
+pair<float, vector<hipComplex>> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
+{
+    auto z = copy(x);
+    // clang-format off
+    auto p = fftwf_plan_many_dft(1, &nx, nbatch,
+                                (fftwf_complex*) z.data(), nullptr, 1, nx,
+                                (fftwf_complex*) z.data(), nullptr, 1, nx,
+                                FFTW_FORWARD, FFTW_ESTIMATE);
+    // clang-format on
+    CPUTimer timer;
+    timer.tic();
+    fftwf_execute(p);
+    timer.toc();
+    fftwf_destroy_plan(p);
+    return {timer.elapsed(), move(z)};
+}
+
 //
 // Stockham
 //
