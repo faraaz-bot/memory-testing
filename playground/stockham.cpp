@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <math.h>
+#include <numeric>
 #include <random>
 #include <vector>
 
@@ -18,8 +19,8 @@
         return {};
 
 using namespace std;
-using dtype      = hipDoubleComplex;
-using fft_result = pair<float, vector<dtype>>;
+using dtype       = hipDoubleComplex;
+using fft_result  = pair<float, vector<dtype>>;
 using fft_result2 = tuple<float, float, vector<dtype>>;
 
 template <class T>
@@ -70,6 +71,11 @@ vector<T> copy(vector<T> const& x)
         z[i] = x[i];
     }
     return z;
+}
+
+float average(vector<float> x)
+{
+    return accumulate(x.cbegin(), x.cend(), 0.0) / x.size();
 }
 
 //
@@ -485,112 +491,149 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
     lwb[me + 192] = X[3];
 }
 
+//
+// gb - global buffer
+// twiddles - twiddle table
+// nbpt - number of batches per thread
+//
+#define GLBIDX(b, i) (256 * nbpt * blockIdx.x + 256 * b + i)
+#define LCLIDX(b, i) (256 * b + i)
+
+template <int nbpt>
 __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
 {
-#define GLBIDX(i) (256*blockIdx.x + (i))
+    dtype __shared__ lds[256 * nbpt];
+    dtype            X[4], W[4];
+    dtype            t;
 
-    __shared__ dtype lds[256];
-    int    me       = threadIdx.x;
+    int me = threadIdx.x;
+    int idx;
 
-    dtype X[4];
-    dtype w, t;
+    for(int b = 0; b < nbpt; ++b)
+    {
+        idx  = GLBIDX(b, me);
+        X[0] = gb[idx + 0];
+        X[1] = gb[idx + 64];
+        X[2] = gb[idx + 128];
+        X[3] = gb[idx + 192];
 
-    X[0] = gb[GLBIDX(me + 0)];
-    X[1] = gb[GLBIDX(me + 64)];
-    X[2] = gb[GLBIDX(me + 128)];
-    X[3] = gb[GLBIDX(me + 192)];
+        FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+        idx          = LCLIDX(b, me * 4);
+        lds[idx + 0] = X[0];
+        lds[idx + 1] = X[1];
+        lds[idx + 2] = X[2];
+        lds[idx + 3] = X[3];
+    }
 
-    lds[me * 4 + 0] = X[0];
-    lds[me * 4 + 1] = X[1];
-    lds[me * 4 + 2] = X[2];
-    lds[me * 4 + 3] = X[3];
+    idx  = 3 + 3 * (me % 4);
+    W[1] = twiddles[idx + 0];
+    W[2] = twiddles[idx + 1];
+    W[3] = twiddles[idx + 2];
 
-    X[0] = lds[me + 0];
-    X[1] = lds[me + 64];
-    X[2] = lds[me + 128];
-    X[3] = lds[me + 192];
+    for(int b = 0; b < nbpt; ++b)
+    {
+        idx  = LCLIDX(b, me);
+        X[0] = lds[idx + 0];
+        X[1] = lds[idx + 64];
+        X[2] = lds[idx + 128];
+        X[3] = lds[idx + 192];
 
-    w = twiddles[3 + 3 * (me % 4) + 0];
-    t.x = w.x * X[1].x - w.y * X[1].y;
-    t.y = w.y * X[1].x + w.x * X[1].y;
-    X[1] = t;
+        t.x  = W[1].x * X[1].x - W[1].y * X[1].y;
+        t.y  = W[1].y * X[1].x + W[1].x * X[1].y;
+        X[1] = t;
 
-    w = twiddles[3 + 3 * (me % 4) + 1];
-    t.x = w.x * X[2].x - w.y * X[2].y;
-    t.y = w.y * X[2].x + w.x * X[2].y;
-    X[2] = t;
+        t.x  = W[2].x * X[2].x - W[2].y * X[2].y;
+        t.y  = W[2].y * X[2].x + W[2].x * X[2].y;
+        X[2] = t;
 
-    w = twiddles[3 + 3 * (me % 4) + 2];
-    t.x = w.x * X[3].x - w.y * X[3].y;
-    t.y = w.y * X[3].x + w.x * X[3].y;
-    X[3] = t;
+        t.x  = W[3].x * X[3].x - W[3].y * X[3].y;
+        t.y  = W[3].y * X[3].x + W[3].x * X[3].y;
+        X[3] = t;
 
-    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+        FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    lds[(me / 4) * 16 + me % 4 + 0]  = X[0];
-    lds[(me / 4) * 16 + me % 4 + 4]  = X[1];
-    lds[(me / 4) * 16 + me % 4 + 8]  = X[2];
-    lds[(me / 4) * 16 + me % 4 + 12] = X[3];
+        idx           = LCLIDX(b, (me / 4) * 16 + me % 4);
+        lds[idx + 0]  = X[0];
+        lds[idx + 4]  = X[1];
+        lds[idx + 8]  = X[2];
+        lds[idx + 12] = X[3];
+    }
 
-    X[0] = lds[me + 0];
-    X[1] = lds[me + 64];
-    X[2] = lds[me + 128];
-    X[3] = lds[me + 192];
+    idx  = 15 + 3 * (me % 16);
+    W[1] = twiddles[idx + 0];
+    W[2] = twiddles[idx + 1];
+    W[3] = twiddles[idx + 2];
 
-    w = twiddles[15 + 3 * (me % 16) + 0];
-    t.x = w.x * X[1].x - w.y * X[1].y;
-    t.y = w.y * X[1].x + w.x * X[1].y;
-    X[1] = t;
+    for(int b = 0; b < nbpt; ++b)
+    {
+        idx  = LCLIDX(b, me);
+        X[0] = lds[idx + 0];
+        X[1] = lds[idx + 64];
+        X[2] = lds[idx + 128];
+        X[3] = lds[idx + 192];
 
-    w = twiddles[15 + 3 * (me % 16) + 1];
-    t.x = w.x * X[2].x - w.y * X[2].y;
-    t.y = w.y * X[2].x + w.x * X[2].y;
-    X[2] = t;
+        t.x  = W[1].x * X[1].x - W[1].y * X[1].y;
+        t.y  = W[1].y * X[1].x + W[1].x * X[1].y;
+        X[1] = t;
 
-    w = twiddles[15 + 3 * (me % 16) + 2];
-    t.x = w.x * X[3].x - w.y * X[3].y;
-    t.y = w.y * X[3].x + w.x * X[3].y;
-    X[3] = t;
+        t.x  = W[2].x * X[2].x - W[2].y * X[2].y;
+        t.y  = W[2].y * X[2].x + W[2].x * X[2].y;
+        X[2] = t;
 
-    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+        t.x  = W[3].x * X[3].x - W[3].y * X[3].y;
+        t.y  = W[3].y * X[3].x + W[3].x * X[3].y;
+        X[3] = t;
 
-    lds[(me / 16) * 64 + me % 16 + 0]  = X[0];
-    lds[(me / 16) * 64 + me % 16 + 16] = X[1];
-    lds[(me / 16) * 64 + me % 16 + 32] = X[2];
-    lds[(me / 16) * 64 + me % 16 + 48] = X[3];
+        FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    X[0] = lds[me + 0];
-    X[1] = lds[me + 64];
-    X[2] = lds[me + 128];
-    X[3] = lds[me + 192];
+        idx           = LCLIDX(b, (me / 16) * 64 + me % 16);
+        lds[idx + 0]  = X[0];
+        lds[idx + 16] = X[1];
+        lds[idx + 32] = X[2];
+        lds[idx + 48] = X[3];
+    }
 
-    w = twiddles[63 + 3 * me + 0];
-    t.x = w.x * X[1].x - w.y * X[1].y;
-    t.y = w.y * X[1].x + w.x * X[1].y;
-    X[1] = t;
+    idx  = 63 + 3 * me;
+    W[1] = twiddles[idx + 0];
+    W[2] = twiddles[idx + 1];
+    W[3] = twiddles[idx + 2];
 
-    w = twiddles[63 + 3 * me + 1];
-    t.x = w.x * X[2].x - w.y * X[2].y;
-    t.y = w.y * X[2].x + w.x * X[2].y;
-    X[2] = t;
+    for(int b = 0; b < nbpt; ++b)
+    {
+        idx  = LCLIDX(b, me);
+        X[0] = lds[idx + 0];
+        X[1] = lds[idx + 64];
+        X[2] = lds[idx + 128];
+        X[3] = lds[idx + 192];
 
-    w = twiddles[63 + 3 * me + 2];
-    t.x = w.x * X[3].x - w.y * X[3].y;
-    t.y = w.y * X[3].x + w.x * X[3].y;
-    X[3] = t;
+        t.x  = W[1].x * X[1].x - W[1].y * X[1].y;
+        t.y  = W[1].y * X[1].x + W[1].x * X[1].y;
+        X[1] = t;
 
-    FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+        t.x  = W[2].x * X[2].x - W[2].y * X[2].y;
+        t.y  = W[2].y * X[2].x + W[2].x * X[2].y;
+        X[2] = t;
 
-    gb[GLBIDX(me + 0)]   = X[0];
-    gb[GLBIDX(me + 64)]  = X[1];
-    gb[GLBIDX(me + 128)] = X[2];
-    gb[GLBIDX(me + 192)] = X[3];
+        t.x  = W[3].x * X[3].x - W[3].y * X[3].y;
+        t.y  = W[3].y * X[3].x + W[3].x * X[3].y;
+        X[3] = t;
+
+        FwdRad4(&X[0], &X[1], &X[2], &X[3]);
+
+        idx           = GLBIDX(b, me);
+        gb[idx + 0]   = X[0];
+        gb[idx + 64]  = X[1];
+        gb[idx + 128] = X[2];
+        gb[idx + 192] = X[3];
+    }
 }
 
-fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool batch_first)
+fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbpt)
 {
+    vector<float> times;
+    int           ntrials = 10;
+
     auto z = copy(x);
 
     dtype* X;
@@ -605,19 +648,44 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool ba
     HIP_CHECK(hipMemcpy(T, h_twiddles, (nx - 1) * sizeof(dtype), hipMemcpyHostToDevice));
 
     GPUTimer timer;
-    timer.tic();
-    if(batch_first)
-        fft_256_fwd_batchfirst<<<nbatch, 64>>>(X, T);
-    else
-        fft_256_fwd<<<nbatch, 64>>>(X, T);
-    timer.toc();
+    for(int n = 0; n <= ntrials; ++n)
+    {
+        timer.tic();
+        if(nbpt > 1)
+        {
+          switch(nbpt) {
+          case 2:
+            fft_256_fwd_batchfirst<2><<<nbatch / 2, 64>>>(X, T);
+            break;
+          case 4:
+            fft_256_fwd_batchfirst<4><<<nbatch / 4, 64>>>(X, T);
+            break;
+          case 8:
+            fft_256_fwd_batchfirst<8><<<nbatch / 8, 64>>>(X, T);
+            break;
+          case 16:
+            fft_256_fwd_batchfirst<16><<<nbatch / 16, 64>>>(X, T);
+            break;
+          default:
+            cout << "INVALID NBPT" << endl;
+          }
+        }
+        else
+        {
+            fft_256_fwd<<<nbatch, 64>>>(X, T);
+        }
+        timer.toc();
+        if(n > 0)
+            times.push_back(timer.elapsed());
+        if(n == 0)
+            HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
+    }
     total.toc();
 
-    HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(T));
     HIP_CHECK(hipFree(X));
 
-    return {timer.elapsed(), total.elapsed(), move(z)};
+    return {average(times), total.elapsed(), move(z)};
 }
 
 //
@@ -645,7 +713,7 @@ double compare(vector<dtype> const& z1, vector<dtype> const& z2)
 //
 // Some tests!
 //
-void test1d(size_t n, size_t nbatch)
+void test1d(size_t n, size_t nbatch, size_t nbpt)
 {
     double GiB = double(n * nbatch * sizeof(dtype)) / 1024 / 1024 / 1024;
     cout << "# 1d test" << endl;
@@ -657,10 +725,11 @@ void test1d(size_t n, size_t nbatch)
     auto [t1, z1] = fft_fftw(x, n, nbatch);
     cout << "FFTW time:       " << t1 << "ms" << endl;
 
-    auto [t2, t2t, z2] = fft_stockham_gpu(x, n, nbatch, true);
+    auto [t2, t2t, z2] = fft_stockham_gpu(x, n, nbatch, nbpt);
 
     cout << "GPU rel diff:    " << compare(z1, z2) << endl;
-    cout << "GPU kernel time: " << t2 << "ms" << " / " << t2t << "ms" << endl;
+    cout << "GPU kernel time: " << t2 << "ms"
+         << " / " << t2t << "ms" << endl;
     cout << "GPU throughput:  " << GiB * 1000 / t2 << " GiB/s" << endl;
 }
 
@@ -668,10 +737,13 @@ int main(int argc, char* argv[])
 {
     size_t length = 256;
     size_t nbatch = 1;
+    size_t nbpt   = 1;
     if(argc > 1)
         length = stoi(argv[1]);
     if(argc > 2)
         nbatch = stoi(argv[2]);
+    if(argc > 3)
+        nbpt = stoi(argv[3]);
 
-    test1d(length, nbatch);
+    test1d(length, nbatch, nbpt);
 }
