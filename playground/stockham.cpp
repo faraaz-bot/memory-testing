@@ -20,6 +20,7 @@
 using namespace std;
 using dtype      = hipDoubleComplex;
 using fft_result = pair<float, vector<dtype>>;
+using fft_result2 = tuple<float, float, vector<dtype>>;
 
 template <class T>
 struct real_type;
@@ -486,18 +487,18 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 
 __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
 {
-    __shared__ dtype lds[256];
+#define GLBIDX(i) (256*blockIdx.x + (i))
 
-    int    ioOffset = 256 * blockIdx.x;
-    dtype* lwb      = gb + ioOffset;
+    __shared__ dtype lds[256];
     int    me       = threadIdx.x;
 
     dtype X[4];
+    dtype w, t;
 
-    X[0] = lwb[me + 0];
-    X[1] = lwb[me + 64];
-    X[2] = lwb[me + 128];
-    X[3] = lwb[me + 192];
+    X[0] = gb[GLBIDX(me + 0)];
+    X[1] = gb[GLBIDX(me + 64)];
+    X[2] = gb[GLBIDX(me + 128)];
+    X[3] = gb[GLBIDX(me + 192)];
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
@@ -511,9 +512,20 @@ __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
     X[2] = lds[me + 128];
     X[3] = lds[me + 192];
 
-    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 0, X[1])
-    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 1, X[2])
-    TWIDDLE_MUL_FWD(twiddles, 3 + 3 * (me % 4) + 2, X[3])
+    w = twiddles[3 + 3 * (me % 4) + 0];
+    t.x = w.x * X[1].x - w.y * X[1].y;
+    t.y = w.y * X[1].x + w.x * X[1].y;
+    X[1] = t;
+
+    w = twiddles[3 + 3 * (me % 4) + 1];
+    t.x = w.x * X[2].x - w.y * X[2].y;
+    t.y = w.y * X[2].x + w.x * X[2].y;
+    X[2] = t;
+
+    w = twiddles[3 + 3 * (me % 4) + 2];
+    t.x = w.x * X[3].x - w.y * X[3].y;
+    t.y = w.y * X[3].x + w.x * X[3].y;
+    X[3] = t;
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
@@ -527,9 +539,20 @@ __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
     X[2] = lds[me + 128];
     X[3] = lds[me + 192];
 
-    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 0, X[1])
-    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 1, X[2])
-    TWIDDLE_MUL_FWD(twiddles, 15 + 3 * (me % 16) + 2, X[3])
+    w = twiddles[15 + 3 * (me % 16) + 0];
+    t.x = w.x * X[1].x - w.y * X[1].y;
+    t.y = w.y * X[1].x + w.x * X[1].y;
+    X[1] = t;
+
+    w = twiddles[15 + 3 * (me % 16) + 1];
+    t.x = w.x * X[2].x - w.y * X[2].y;
+    t.y = w.y * X[2].x + w.x * X[2].y;
+    X[2] = t;
+
+    w = twiddles[15 + 3 * (me % 16) + 2];
+    t.x = w.x * X[3].x - w.y * X[3].y;
+    t.y = w.y * X[3].x + w.x * X[3].y;
+    X[3] = t;
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
@@ -543,19 +566,30 @@ __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
     X[2] = lds[me + 128];
     X[3] = lds[me + 192];
 
-    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 0, X[1])
-    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 1, X[2])
-    TWIDDLE_MUL_FWD(twiddles, 63 + 3 * me + 2, X[3])
+    w = twiddles[63 + 3 * me + 0];
+    t.x = w.x * X[1].x - w.y * X[1].y;
+    t.y = w.y * X[1].x + w.x * X[1].y;
+    X[1] = t;
+
+    w = twiddles[63 + 3 * me + 1];
+    t.x = w.x * X[2].x - w.y * X[2].y;
+    t.y = w.y * X[2].x + w.x * X[2].y;
+    X[2] = t;
+
+    w = twiddles[63 + 3 * me + 2];
+    t.x = w.x * X[3].x - w.y * X[3].y;
+    t.y = w.y * X[3].x + w.x * X[3].y;
+    X[3] = t;
 
     FwdRad4(&X[0], &X[1], &X[2], &X[3]);
 
-    lwb[me + 0]   = X[0];
-    lwb[me + 64]  = X[1];
-    lwb[me + 128] = X[2];
-    lwb[me + 192] = X[3];
+    gb[GLBIDX(me + 0)]   = X[0];
+    gb[GLBIDX(me + 64)]  = X[1];
+    gb[GLBIDX(me + 128)] = X[2];
+    gb[GLBIDX(me + 192)] = X[3];
 }
 
-fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool batch_first)
+fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool batch_first)
 {
     auto z = copy(x);
 
@@ -565,8 +599,10 @@ fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool bat
 
     dtype* T;
     HIP_CHECK(hipMalloc(&T, nx * sizeof(dtype)));
+
+    GPUTimer total;
+    total.tic();
     HIP_CHECK(hipMemcpy(T, h_twiddles, (nx - 1) * sizeof(dtype), hipMemcpyHostToDevice));
-    //    twiddles<<<(nx + 255) / 256, 256>>>(T, nx);
 
     GPUTimer timer;
     timer.tic();
@@ -575,12 +611,13 @@ fft_result fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, bool bat
     else
         fft_256_fwd<<<nbatch, 64>>>(X, T);
     timer.toc();
+    total.toc();
 
     HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(T));
     HIP_CHECK(hipFree(X));
 
-    return {timer.elapsed(), move(z)};
+    return {timer.elapsed(), total.elapsed(), move(z)};
 }
 
 //
@@ -620,10 +657,10 @@ void test1d(size_t n, size_t nbatch)
     auto [t1, z1] = fft_fftw(x, n, nbatch);
     cout << "FFTW time:       " << t1 << "ms" << endl;
 
-    auto [t2, z2] = fft_stockham_gpu(x, n, nbatch, true);
+    auto [t2, t2t, z2] = fft_stockham_gpu(x, n, nbatch, true);
 
     cout << "GPU rel diff:    " << compare(z1, z2) << endl;
-    cout << "GPU kernel time: " << t2 << "ms" << endl;
+    cout << "GPU kernel time: " << t2 << "ms" << " / " << t2t << "ms" << endl;
     cout << "GPU throughput:  " << GiB * 1000 / t2 << " GiB/s" << endl;
 }
 
