@@ -120,11 +120,11 @@ pair<float, vector<hipComplex>> fft_fftw(vector<hipComplex> const& x, int nx, in
 // Stockham
 //
 
-__global__ void stockham_twiddles(dtype* twiddles, int N, int nfactors, int* factors)
+__global__ void stockham_twiddles(int ntwiddles, dtype* twiddles, int nfactors, int* factors)
 {
     int m = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
-    if(m >= N)
+    if(m >= ntwiddles)
         return;
 
     int n      = 0;
@@ -139,7 +139,6 @@ __global__ void stockham_twiddles(dtype* twiddles, int N, int nfactors, int* fac
         lb = nt;
         nt += (factor - 1) * L;
         L *= factor;
-        if (n > nfactors) return;
     }
 
     int j = (m - lb) % (factor - 1) + 1;
@@ -1008,8 +1007,8 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
     HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(dtype)));
     HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(dtype), hipMemcpyHostToDevice));
 
-    dtype* T;
-    HIP_CHECK(hipMalloc(&T, nx * sizeof(dtype)));
+    dtype* twiddles;
+    HIP_CHECK(hipMalloc(&twiddles, (nx-1) * sizeof(dtype)));
 
     GPUTimer total;
     total.tic();
@@ -1018,7 +1017,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
       int *d_factors;
       HIP_CHECK(hipMalloc(&d_factors, factors.size() * sizeof(int)));
       HIP_CHECK(hipMemcpy(d_factors, factors.data(), factors.size() * sizeof(int), hipMemcpyHostToDevice));
-      stockham_twiddles<<<1, nx>>>(T, nx, 4, d_factors);
+      stockham_twiddles<<<1, nx-1>>>(nx-1, twiddles, 4, d_factors);
       HIP_CHECK(hipFree(d_factors));
     }
 
@@ -1031,16 +1030,16 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
             switch(nbpt)
             {
             case 2:
-                fft_256_fwd_batchfirst<2><<<nbatch / 2, 64>>>(X, T);
+                fft_256_fwd_batchfirst<2><<<nbatch / 2, 64>>>(X, twiddles);
                 break;
             case 4:
-                fft_256_fwd_batchfirst<4><<<nbatch / 4, 64>>>(X, T);
+                fft_256_fwd_batchfirst<4><<<nbatch / 4, 64>>>(X, twiddles);
                 break;
             case 8:
-                fft_256_fwd_batchfirst<8><<<nbatch / 8, 64>>>(X, T);
+                fft_256_fwd_batchfirst<8><<<nbatch / 8, 64>>>(X, twiddles);
                 break;
             case 16:
-                fft_256_fwd_batchfirst<16><<<nbatch / 16, 64>>>(X, T);
+                fft_256_fwd_batchfirst<16><<<nbatch / 16, 64>>>(X, twiddles);
                 break;
             default:
                 cout << "INVALID NBPT" << endl;
@@ -1048,7 +1047,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         }
         else
         {
-            fft_256_fwd<<<nbatch, 64>>>(X, T);
+            fft_256_fwd<<<nbatch, 64>>>(X, twiddles);
         }
         timer.toc();
         if(n > 0)
@@ -1058,7 +1057,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
     }
     total.toc();
 
-    HIP_CHECK(hipFree(T));
+    HIP_CHECK(hipFree(twiddles));
     HIP_CHECK(hipFree(X));
 
     return {average(times), total.elapsed(), move(z)};
