@@ -127,25 +127,23 @@ __global__ void stockham_twiddles(int ntwiddles, dtype* twiddles, int nfactors, 
     if(m >= ntwiddles)
         return;
 
-    int n      = 0;
-    int factor = factors[0];
-    int L      = factor;
-    int nt     = factor - 1;
-    int lb = 0;
-    while(m > nt - 1)
+    int n       = 0;
+    int factor  = factors[0];
+    int nroots  = factor;
+    int nraccum = factor - 1;
+    while(m > nraccum - 1)
     {
-        n++;
-        factor = factors[n];
-        lb = nt;
-        nt += (factor - 1) * L;
-        L *= factor;
+        factor = factors[++n];
+        nroots *= factor;
+        nraccum += (factor - 1) * (nroots / factor);
     }
 
-    int j = (m - lb) % (factor - 1) + 1;
-    int k = (m - lb) / (factor - 1);
+    int m0 = nraccum - (nroots / factor) * (factor - 1);
+    int j  = (m - m0) % (factor - 1) + 1;
+    int k  = (m - m0) / (factor - 1);
 
     real_type_t<dtype> cost, sint;
-    sincospi(-2 * real_type_t<dtype>(j) * k / L, &sint, &cost);
+    sincospi(-2 * real_type_t<dtype>(j) * k / nroots, &sint, &cost);
     twiddles[m].x = cost;
     twiddles[m].y = sint;
 }
@@ -1008,17 +1006,19 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
     HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(dtype), hipMemcpyHostToDevice));
 
     dtype* twiddles;
-    HIP_CHECK(hipMalloc(&twiddles, (nx-1) * sizeof(dtype)));
+    HIP_CHECK(hipMalloc(&twiddles, (nx - 1) * sizeof(dtype)));
 
     GPUTimer total;
     total.tic();
-    if(nx == 256) {
-      vector<int> factors{4, 4, 4, 4};
-      int *d_factors;
-      HIP_CHECK(hipMalloc(&d_factors, factors.size() * sizeof(int)));
-      HIP_CHECK(hipMemcpy(d_factors, factors.data(), factors.size() * sizeof(int), hipMemcpyHostToDevice));
-      stockham_twiddles<<<1, nx-1>>>(nx-1, twiddles, 4, d_factors);
-      HIP_CHECK(hipFree(d_factors));
+    if(nx == 256)
+    {
+        vector<int> factors{4, 4, 4, 4};
+        int*        d_factors;
+        HIP_CHECK(hipMalloc(&d_factors, factors.size() * sizeof(int)));
+        HIP_CHECK(hipMemcpy(
+            d_factors, factors.data(), factors.size() * sizeof(int), hipMemcpyHostToDevice));
+        stockham_twiddles<<<1, nx - 1>>>(nx - 1, twiddles, 4, d_factors);
+        HIP_CHECK(hipFree(d_factors));
     }
 
     GPUTimer timer;
