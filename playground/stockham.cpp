@@ -755,10 +755,10 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
 {
     dtype __shared__ lds[56];
 
-    int batch = blockIdx.x;
+    int batch  = blockIdx.x;
     int thread = threadIdx.x;
-    if (thread >= 4)
-      return;
+    if(thread >= 4)
+        return;
 
     unsigned int offset = batch * 56;
 
@@ -859,6 +859,756 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   &R11,
                                   &R12,
                                   &R13);
+}
+
+template<typename scalar_type>
+__global__ void fft_56_fwd_fat(scalar_type*       inout,
+                               //                    bool               rw,
+                               //                    int                thread,
+                    const scalar_type* twiddles,
+                    int                stride_in,
+                    int                stride_out,
+                    int                offset_in,
+                    int                offset_out,
+                    int                offset_lds)
+{
+    int thread = threadIdx.x;
+    if(thread >= 4)
+        return;
+
+    __shared__ scalar_type lds[1024];
+    scalar_type            R[14];
+    scalar_type            W;
+    scalar_type            t;
+    R[0] = inout[offset_in + (2 * thread + 0) * stride_in];
+    R[1] = inout[offset_in + (2 * thread + 8) * stride_in];
+    R[2] = inout[offset_in + (2 * thread + 16) * stride_in];
+    R[3] = inout[offset_in + (2 * thread + 24) * stride_in];
+    R[4] = inout[offset_in + (2 * thread + 32) * stride_in];
+    R[5] = inout[offset_in + (2 * thread + 40) * stride_in];
+    R[6] = inout[offset_in + (2 * thread + 48) * stride_in];
+    FwdRad7B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6]);
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 0] = R[0];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 1] = R[1];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 2] = R[2];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 3] = R[3];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 4] = R[4];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 5] = R[5];
+    lds[offset_lds + ((2 * thread + 0)) * 7 + 6] = R[6];
+    R[7]                                         = inout[offset_in + (2 * thread + 1) * stride_in];
+    R[8]                                         = inout[offset_in + (2 * thread + 9) * stride_in];
+    R[9]                                         = inout[offset_in + (2 * thread + 17) * stride_in];
+    R[10]                                        = inout[offset_in + (2 * thread + 25) * stride_in];
+    R[11]                                        = inout[offset_in + (2 * thread + 33) * stride_in];
+    R[12]                                        = inout[offset_in + (2 * thread + 41) * stride_in];
+    R[13]                                        = inout[offset_in + (2 * thread + 49) * stride_in];
+    FwdRad7B1(&R[7], &R[8], &R[9], &R[10], &R[11], &R[12], &R[13]);
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 0] = R[7];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 1] = R[8];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 2] = R[9];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 3] = R[10];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 4] = R[11];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 5] = R[12];
+    lds[offset_lds + ((2 * thread + 1)) * 7 + 6] = R[13];
+    R[0]                                         = lds[offset_lds + 7 * thread + 0];
+    R[1]                                         = lds[offset_lds + 7 * thread + 28];
+    W                                            = twiddles[6 + 1 * ((7 * thread + 0) % 7)];
+    t.x                                          = W.x * R[1].x - W.y * R[1].y;
+    t.y                                          = W.y * R[1].x + W.x * R[1].y;
+    R[1]                                         = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 0) / 7) * 14 + (7 * thread + 0) % 7 + 0)] = R[0];
+    lds[offset_lds + (((7 * thread + 0) / 7) * 14 + (7 * thread + 0) % 7 + 7)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 1];
+    R[3] = lds[offset_lds + 7 * thread + 29];
+    W    = twiddles[6 + 1 * ((7 * thread + 1) % 7)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 1) / 7) * 14 + (7 * thread + 1) % 7 + 0)] = R[2];
+    lds[offset_lds + (((7 * thread + 1) / 7) * 14 + (7 * thread + 1) % 7 + 7)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 2];
+    R[1] = lds[offset_lds + 7 * thread + 30];
+    W    = twiddles[6 + 1 * ((7 * thread + 2) % 7)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 2) / 7) * 14 + (7 * thread + 2) % 7 + 0)] = R[0];
+    lds[offset_lds + (((7 * thread + 2) / 7) * 14 + (7 * thread + 2) % 7 + 7)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 3];
+    R[3] = lds[offset_lds + 7 * thread + 31];
+    W    = twiddles[6 + 1 * ((7 * thread + 3) % 7)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 3) / 7) * 14 + (7 * thread + 3) % 7 + 0)] = R[2];
+    lds[offset_lds + (((7 * thread + 3) / 7) * 14 + (7 * thread + 3) % 7 + 7)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 4];
+    R[1] = lds[offset_lds + 7 * thread + 32];
+    W    = twiddles[6 + 1 * ((7 * thread + 4) % 7)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 4) / 7) * 14 + (7 * thread + 4) % 7 + 0)] = R[0];
+    lds[offset_lds + (((7 * thread + 4) / 7) * 14 + (7 * thread + 4) % 7 + 7)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 5];
+    R[3] = lds[offset_lds + 7 * thread + 33];
+    W    = twiddles[6 + 1 * ((7 * thread + 5) % 7)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 5) / 7) * 14 + (7 * thread + 5) % 7 + 0)] = R[2];
+    lds[offset_lds + (((7 * thread + 5) / 7) * 14 + (7 * thread + 5) % 7 + 7)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 6];
+    R[1] = lds[offset_lds + 7 * thread + 34];
+    W    = twiddles[6 + 1 * ((7 * thread + 6) % 7)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 6) / 7) * 14 + (7 * thread + 6) % 7 + 0)] = R[0];
+    lds[offset_lds + (((7 * thread + 6) / 7) * 14 + (7 * thread + 6) % 7 + 7)] = R[1];
+    R[0] = lds[offset_lds + 7 * thread + 0];
+    R[1] = lds[offset_lds + 7 * thread + 28];
+    W    = twiddles[13 + 1 * ((7 * thread + 0) % 14)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 0) / 14) * 28 + (7 * thread + 0) % 14 + 0)]  = R[0];
+    lds[offset_lds + (((7 * thread + 0) / 14) * 28 + (7 * thread + 0) % 14 + 14)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 1];
+    R[3] = lds[offset_lds + 7 * thread + 29];
+    W    = twiddles[13 + 1 * ((7 * thread + 1) % 14)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 1) / 14) * 28 + (7 * thread + 1) % 14 + 0)]  = R[2];
+    lds[offset_lds + (((7 * thread + 1) / 14) * 28 + (7 * thread + 1) % 14 + 14)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 2];
+    R[1] = lds[offset_lds + 7 * thread + 30];
+    W    = twiddles[13 + 1 * ((7 * thread + 2) % 14)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 2) / 14) * 28 + (7 * thread + 2) % 14 + 0)]  = R[0];
+    lds[offset_lds + (((7 * thread + 2) / 14) * 28 + (7 * thread + 2) % 14 + 14)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 3];
+    R[3] = lds[offset_lds + 7 * thread + 31];
+    W    = twiddles[13 + 1 * ((7 * thread + 3) % 14)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 3) / 14) * 28 + (7 * thread + 3) % 14 + 0)]  = R[2];
+    lds[offset_lds + (((7 * thread + 3) / 14) * 28 + (7 * thread + 3) % 14 + 14)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 4];
+    R[1] = lds[offset_lds + 7 * thread + 32];
+    W    = twiddles[13 + 1 * ((7 * thread + 4) % 14)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 4) / 14) * 28 + (7 * thread + 4) % 14 + 0)]  = R[0];
+    lds[offset_lds + (((7 * thread + 4) / 14) * 28 + (7 * thread + 4) % 14 + 14)] = R[1];
+    R[2] = lds[offset_lds + 7 * thread + 5];
+    R[3] = lds[offset_lds + 7 * thread + 33];
+    W    = twiddles[13 + 1 * ((7 * thread + 5) % 14)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    FwdRad2B1(&R[2], &R[3]);
+    lds[offset_lds + (((7 * thread + 5) / 14) * 28 + (7 * thread + 5) % 14 + 0)]  = R[2];
+    lds[offset_lds + (((7 * thread + 5) / 14) * 28 + (7 * thread + 5) % 14 + 14)] = R[3];
+    R[0] = lds[offset_lds + 7 * thread + 6];
+    R[1] = lds[offset_lds + 7 * thread + 34];
+    W    = twiddles[13 + 1 * ((7 * thread + 6) % 14)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    lds[offset_lds + (((7 * thread + 6) / 14) * 28 + (7 * thread + 6) % 14 + 0)]  = R[0];
+    lds[offset_lds + (((7 * thread + 6) / 14) * 28 + (7 * thread + 6) % 14 + 14)] = R[1];
+    R[0] = lds[offset_lds + 7 * thread + 0];
+    R[1] = lds[offset_lds + 7 * thread + 28];
+    W    = twiddles[27 + 1 * ((7 * thread + 0) % 28)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    FwdRad2B1(&R[0], &R[1]);
+    inout[offset_out + (7 * thread + 0) * stride_out]  = R[0];
+    inout[offset_out + (7 * thread + 28) * stride_out] = R[1];
+    R[2]                                               = lds[offset_lds + 7 * thread + 1];
+    R[3]                                               = lds[offset_lds + 7 * thread + 29];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 1) % 28)];
+    t.x                                                = W.x * R[3].x - W.y * R[3].y;
+    t.y                                                = W.y * R[3].x + W.x * R[3].y;
+    R[3]                                               = t;
+    FwdRad2B1(&R[2], &R[3]);
+    inout[offset_out + (7 * thread + 1) * stride_out]  = R[2];
+    inout[offset_out + (7 * thread + 29) * stride_out] = R[3];
+    R[0]                                               = lds[offset_lds + 7 * thread + 2];
+    R[1]                                               = lds[offset_lds + 7 * thread + 30];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 2) % 28)];
+    t.x                                                = W.x * R[1].x - W.y * R[1].y;
+    t.y                                                = W.y * R[1].x + W.x * R[1].y;
+    R[1]                                               = t;
+    FwdRad2B1(&R[0], &R[1]);
+    inout[offset_out + (7 * thread + 2) * stride_out]  = R[0];
+    inout[offset_out + (7 * thread + 30) * stride_out] = R[1];
+    R[2]                                               = lds[offset_lds + 7 * thread + 3];
+    R[3]                                               = lds[offset_lds + 7 * thread + 31];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 3) % 28)];
+    t.x                                                = W.x * R[3].x - W.y * R[3].y;
+    t.y                                                = W.y * R[3].x + W.x * R[3].y;
+    R[3]                                               = t;
+    FwdRad2B1(&R[2], &R[3]);
+    inout[offset_out + (7 * thread + 3) * stride_out]  = R[2];
+    inout[offset_out + (7 * thread + 31) * stride_out] = R[3];
+    R[0]                                               = lds[offset_lds + 7 * thread + 4];
+    R[1]                                               = lds[offset_lds + 7 * thread + 32];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 4) % 28)];
+    t.x                                                = W.x * R[1].x - W.y * R[1].y;
+    t.y                                                = W.y * R[1].x + W.x * R[1].y;
+    R[1]                                               = t;
+    FwdRad2B1(&R[0], &R[1]);
+    inout[offset_out + (7 * thread + 4) * stride_out]  = R[0];
+    inout[offset_out + (7 * thread + 32) * stride_out] = R[1];
+    R[2]                                               = lds[offset_lds + 7 * thread + 5];
+    R[3]                                               = lds[offset_lds + 7 * thread + 33];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 5) % 28)];
+    t.x                                                = W.x * R[3].x - W.y * R[3].y;
+    t.y                                                = W.y * R[3].x + W.x * R[3].y;
+    R[3]                                               = t;
+    FwdRad2B1(&R[2], &R[3]);
+    inout[offset_out + (7 * thread + 5) * stride_out]  = R[2];
+    inout[offset_out + (7 * thread + 33) * stride_out] = R[3];
+    R[0]                                               = lds[offset_lds + 7 * thread + 6];
+    R[1]                                               = lds[offset_lds + 7 * thread + 34];
+    W                                                  = twiddles[27 + 1 * ((7 * thread + 6) % 28)];
+    t.x                                                = W.x * R[1].x - W.y * R[1].y;
+    t.y                                                = W.y * R[1].x + W.x * R[1].y;
+    R[1]                                               = t;
+    FwdRad2B1(&R[0], &R[1]);
+    inout[offset_out + (7 * thread + 6) * stride_out]  = R[0];
+    inout[offset_out + (7 * thread + 34) * stride_out] = R[1];
+}
+
+#define C8Q 0.70710678118654752440084436210485
+
+__device__ void FwdRad8B1(dtype* R0, dtype* R4, dtype* R2, dtype* R6, dtype* R1, dtype* R5, dtype* R3, dtype* R7)
+{
+
+    dtype res;
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+    (*R3) = (*R2) - (*R3);
+    (*R2) = 2.0 * (*R2) - (*R3);
+    (*R5) = (*R4) - (*R5);
+    (*R4) = 2.0 * (*R4) - (*R5);
+    (*R7) = (*R6) - (*R7);
+    (*R6) = 2.0 * (*R6) - (*R7);
+
+    (*R2) = (*R0) - (*R2);
+    (*R0) = 2.0 * (*R0) - (*R2);
+    (*R3) = (*R1) + dtype{-(*R3).y, (*R3).x};
+    (*R1) = 2.0 * (*R1) - (*R3);
+    (*R6) = (*R4) - (*R6);
+    (*R4) = 2.0 * (*R4) - (*R6);
+    (*R7) = (*R5) + dtype{-(*R7).y, (*R7).x};
+
+    (*R5) = 2.0 * (*R5) - (*R7);
+
+    (*R4) = (*R0) - (*R4);
+    (*R0) = 2.0 * (*R0) - (*R4);
+    (*R5) = ((*R1) - C8Q * (*R5)) - C8Q * dtype{(*R5).y, -(*R5).x};
+    (*R1) = 2.0 * (*R1) - (*R5);
+    (*R6) = (*R2) + dtype{-(*R6).y, (*R6).x};
+    (*R2) = 2.0 * (*R2) - (*R6);
+    (*R7) = ((*R3) + C8Q * (*R7)) - C8Q * dtype{(*R7).y, -(*R7).x};
+    (*R3) = 2.0 * (*R3) - (*R7);
+
+    res   = (*R1);
+    (*R1) = (*R4);
+    (*R4) = res;
+    res   = (*R3);
+    (*R3) = (*R6);
+    (*R6) = res;
+}
+
+template <typename scalar_type>
+__global__ void           fft_56_fwd_fat56(scalar_type*       inout,
+                          //                          bool               rw,
+                          //                          int                thread,
+                          const scalar_type* twiddles,
+                          int                stride_in,
+                          int                stride_out,
+                          int                offset_in,
+                          int                offset_out,
+                          int                offset_lds)
+{
+    int thread = threadIdx.x;
+    if(thread >= 1)
+        return;
+
+    __shared__ scalar_type lds[1024];
+    scalar_type            R[16];
+    scalar_type            W;
+    scalar_type            t;
+
+    R[0] = inout[offset_in + (7 * thread + 0) * stride_in];
+    R[1] = inout[offset_in + (7 * thread + 7) * stride_in];
+    R[2] = inout[offset_in + (7 * thread + 14) * stride_in];
+    R[3] = inout[offset_in + (7 * thread + 21) * stride_in];
+    R[4] = inout[offset_in + (7 * thread + 28) * stride_in];
+    R[5] = inout[offset_in + (7 * thread + 35) * stride_in];
+    R[6] = inout[offset_in + (7 * thread + 42) * stride_in];
+    R[7] = inout[offset_in + (7 * thread + 49) * stride_in];
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 0] = R[0];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 1] = R[1];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 2] = R[2];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 3] = R[3];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 4] = R[4];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 5] = R[5];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 6] = R[6];
+    lds[offset_lds + ((7 * thread + 0)) * 8 + 7] = R[7];
+
+    R[8]  = inout[offset_in + (7 * thread + 1) * stride_in];
+    R[9]  = inout[offset_in + (7 * thread + 8) * stride_in];
+    R[10] = inout[offset_in + (7 * thread + 15) * stride_in];
+    R[11] = inout[offset_in + (7 * thread + 22) * stride_in];
+    R[12] = inout[offset_in + (7 * thread + 29) * stride_in];
+    R[13] = inout[offset_in + (7 * thread + 36) * stride_in];
+    R[14] = inout[offset_in + (7 * thread + 43) * stride_in];
+    R[15] = inout[offset_in + (7 * thread + 50) * stride_in];
+    FwdRad8B1(&R[8], &R[9], &R[10], &R[11], &R[12], &R[13], &R[14], &R[15]);
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 0] = R[8];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 1] = R[9];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 2] = R[10];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 3] = R[11];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 4] = R[12];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 5] = R[13];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 6] = R[14];
+    lds[offset_lds + ((7 * thread + 1)) * 8 + 7] = R[15];
+
+    R[0] = inout[offset_in + (7 * thread + 2) * stride_in];
+    R[1] = inout[offset_in + (7 * thread + 9) * stride_in];
+    R[2] = inout[offset_in + (7 * thread + 16) * stride_in];
+    R[3] = inout[offset_in + (7 * thread + 23) * stride_in];
+    R[4] = inout[offset_in + (7 * thread + 30) * stride_in];
+    R[5] = inout[offset_in + (7 * thread + 37) * stride_in];
+    R[6] = inout[offset_in + (7 * thread + 44) * stride_in];
+    R[7] = inout[offset_in + (7 * thread + 51) * stride_in];
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 0] = R[0];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 1] = R[1];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 2] = R[2];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 3] = R[3];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 4] = R[4];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 5] = R[5];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 6] = R[6];
+    lds[offset_lds + ((7 * thread + 2)) * 8 + 7] = R[7];
+
+    R[8]  = inout[offset_in + (7 * thread + 3) * stride_in];
+    R[9]  = inout[offset_in + (7 * thread + 10) * stride_in];
+    R[10] = inout[offset_in + (7 * thread + 17) * stride_in];
+    R[11] = inout[offset_in + (7 * thread + 24) * stride_in];
+    R[12] = inout[offset_in + (7 * thread + 31) * stride_in];
+    R[13] = inout[offset_in + (7 * thread + 38) * stride_in];
+    R[14] = inout[offset_in + (7 * thread + 45) * stride_in];
+    R[15] = inout[offset_in + (7 * thread + 52) * stride_in];
+    FwdRad8B1(&R[8], &R[9], &R[10], &R[11], &R[12], &R[13], &R[14], &R[15]);
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 0] = R[8];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 1] = R[9];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 2] = R[10];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 3] = R[11];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 4] = R[12];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 5] = R[13];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 6] = R[14];
+    lds[offset_lds + ((7 * thread + 3)) * 8 + 7] = R[15];
+
+    R[0] = inout[offset_in + (7 * thread + 4) * stride_in];
+    R[1] = inout[offset_in + (7 * thread + 11) * stride_in];
+    R[2] = inout[offset_in + (7 * thread + 18) * stride_in];
+    R[3] = inout[offset_in + (7 * thread + 25) * stride_in];
+    R[4] = inout[offset_in + (7 * thread + 32) * stride_in];
+    R[5] = inout[offset_in + (7 * thread + 39) * stride_in];
+    R[6] = inout[offset_in + (7 * thread + 46) * stride_in];
+    R[7] = inout[offset_in + (7 * thread + 53) * stride_in];
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 0] = R[0];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 1] = R[1];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 2] = R[2];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 3] = R[3];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 4] = R[4];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 5] = R[5];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 6] = R[6];
+    lds[offset_lds + ((7 * thread + 4)) * 8 + 7] = R[7];
+
+    R[8]  = inout[offset_in + (7 * thread + 5) * stride_in];
+    R[9]  = inout[offset_in + (7 * thread + 12) * stride_in];
+    R[10] = inout[offset_in + (7 * thread + 19) * stride_in];
+    R[11] = inout[offset_in + (7 * thread + 26) * stride_in];
+    R[12] = inout[offset_in + (7 * thread + 33) * stride_in];
+    R[13] = inout[offset_in + (7 * thread + 40) * stride_in];
+    R[14] = inout[offset_in + (7 * thread + 47) * stride_in];
+    R[15] = inout[offset_in + (7 * thread + 54) * stride_in];
+    FwdRad8B1(&R[8], &R[9], &R[10], &R[11], &R[12], &R[13], &R[14], &R[15]);
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 0] = R[8];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 1] = R[9];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 2] = R[10];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 3] = R[11];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 4] = R[12];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 5] = R[13];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 6] = R[14];
+    lds[offset_lds + ((7 * thread + 5)) * 8 + 7] = R[15];
+
+    R[0] = inout[offset_in + (7 * thread + 6) * stride_in];
+    R[1] = inout[offset_in + (7 * thread + 13) * stride_in];
+    R[2] = inout[offset_in + (7 * thread + 20) * stride_in];
+    R[3] = inout[offset_in + (7 * thread + 27) * stride_in];
+    R[4] = inout[offset_in + (7 * thread + 34) * stride_in];
+    R[5] = inout[offset_in + (7 * thread + 41) * stride_in];
+    R[6] = inout[offset_in + (7 * thread + 48) * stride_in];
+    R[7] = inout[offset_in + (7 * thread + 55) * stride_in];
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 0] = R[0];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 1] = R[1];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 2] = R[2];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 3] = R[3];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 4] = R[4];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 5] = R[5];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 6] = R[6];
+    lds[offset_lds + ((7 * thread + 6)) * 8 + 7] = R[7];
+
+    R[0] = lds[offset_lds + 8 * thread + 0];
+    R[1] = lds[offset_lds + 8 * thread + 8];
+    R[2] = lds[offset_lds + 8 * thread + 16];
+    R[3] = lds[offset_lds + 8 * thread + 24];
+    R[4] = lds[offset_lds + 8 * thread + 32];
+    R[5] = lds[offset_lds + 8 * thread + 40];
+    R[6] = lds[offset_lds + 8 * thread + 48];
+    W    = twiddles[7 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    W    = twiddles[8 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[2].x - W.y * R[2].y;
+    t.y  = W.y * R[2].x + W.x * R[2].y;
+    R[2] = t;
+    W    = twiddles[9 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    W    = twiddles[10 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[4].x - W.y * R[4].y;
+    t.y  = W.y * R[4].x + W.x * R[4].y;
+    R[4] = t;
+    W    = twiddles[11 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[5].x - W.y * R[5].y;
+    t.y  = W.y * R[5].x + W.x * R[5].y;
+    R[5] = t;
+    W    = twiddles[12 + 6 * ((8 * thread + 0) % 8)];
+    t.x  = W.x * R[6].x - W.y * R[6].y;
+    t.y  = W.y * R[6].x + W.x * R[6].y;
+    R[6] = t;
+    FwdRad7B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6]);
+    inout[offset_out + (8 * thread + 0) * stride_out]  = R[0];
+    inout[offset_out + (8 * thread + 8) * stride_out]  = R[1];
+    inout[offset_out + (8 * thread + 16) * stride_out] = R[2];
+    inout[offset_out + (8 * thread + 24) * stride_out] = R[3];
+    inout[offset_out + (8 * thread + 32) * stride_out] = R[4];
+    inout[offset_out + (8 * thread + 40) * stride_out] = R[5];
+    inout[offset_out + (8 * thread + 48) * stride_out] = R[6];
+
+    R[7]  = lds[offset_lds + 8 * thread + 1];
+    R[8]  = lds[offset_lds + 8 * thread + 9];
+    R[9]  = lds[offset_lds + 8 * thread + 17];
+    R[10] = lds[offset_lds + 8 * thread + 25];
+    R[11] = lds[offset_lds + 8 * thread + 33];
+    R[12] = lds[offset_lds + 8 * thread + 41];
+    R[13] = lds[offset_lds + 8 * thread + 49];
+    W     = twiddles[7 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[8].x - W.y * R[8].y;
+    t.y   = W.y * R[8].x + W.x * R[8].y;
+    R[8]  = t;
+    W     = twiddles[8 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[9].x - W.y * R[9].y;
+    t.y   = W.y * R[9].x + W.x * R[9].y;
+    R[9]  = t;
+    W     = twiddles[9 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[10].x - W.y * R[10].y;
+    t.y   = W.y * R[10].x + W.x * R[10].y;
+    R[10] = t;
+    W     = twiddles[10 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[11].x - W.y * R[11].y;
+    t.y   = W.y * R[11].x + W.x * R[11].y;
+    R[11] = t;
+    W     = twiddles[11 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[12].x - W.y * R[12].y;
+    t.y   = W.y * R[12].x + W.x * R[12].y;
+    R[12] = t;
+    W     = twiddles[12 + 6 * ((8 * thread + 1) % 8)];
+    t.x   = W.x * R[13].x - W.y * R[13].y;
+    t.y   = W.y * R[13].x + W.x * R[13].y;
+    R[13] = t;
+    FwdRad7B1(&R[7], &R[8], &R[9], &R[10], &R[11], &R[12], &R[13]);
+    inout[offset_out + (8 * thread + 1) * stride_out]  = R[7];
+    inout[offset_out + (8 * thread + 9) * stride_out]  = R[8];
+    inout[offset_out + (8 * thread + 17) * stride_out] = R[9];
+    inout[offset_out + (8 * thread + 25) * stride_out] = R[10];
+    inout[offset_out + (8 * thread + 33) * stride_out] = R[11];
+    inout[offset_out + (8 * thread + 41) * stride_out] = R[12];
+    inout[offset_out + (8 * thread + 49) * stride_out] = R[13];
+
+    R[0] = lds[offset_lds + 8 * thread + 2];
+    R[1] = lds[offset_lds + 8 * thread + 10];
+    R[2] = lds[offset_lds + 8 * thread + 18];
+    R[3] = lds[offset_lds + 8 * thread + 26];
+    R[4] = lds[offset_lds + 8 * thread + 34];
+    R[5] = lds[offset_lds + 8 * thread + 42];
+    R[6] = lds[offset_lds + 8 * thread + 50];
+    W    = twiddles[7 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    W    = twiddles[8 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[2].x - W.y * R[2].y;
+    t.y  = W.y * R[2].x + W.x * R[2].y;
+    R[2] = t;
+    W    = twiddles[9 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    W    = twiddles[10 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[4].x - W.y * R[4].y;
+    t.y  = W.y * R[4].x + W.x * R[4].y;
+    R[4] = t;
+    W    = twiddles[11 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[5].x - W.y * R[5].y;
+    t.y  = W.y * R[5].x + W.x * R[5].y;
+    R[5] = t;
+    W    = twiddles[12 + 6 * ((8 * thread + 2) % 8)];
+    t.x  = W.x * R[6].x - W.y * R[6].y;
+    t.y  = W.y * R[6].x + W.x * R[6].y;
+    R[6] = t;
+    FwdRad7B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6]);
+    inout[offset_out + (8 * thread + 2) * stride_out]  = R[0];
+    inout[offset_out + (8 * thread + 10) * stride_out] = R[1];
+    inout[offset_out + (8 * thread + 18) * stride_out] = R[2];
+    inout[offset_out + (8 * thread + 26) * stride_out] = R[3];
+    inout[offset_out + (8 * thread + 34) * stride_out] = R[4];
+    inout[offset_out + (8 * thread + 42) * stride_out] = R[5];
+    inout[offset_out + (8 * thread + 50) * stride_out] = R[6];
+
+    R[7]  = lds[offset_lds + 8 * thread + 3];
+    R[8]  = lds[offset_lds + 8 * thread + 11];
+    R[9]  = lds[offset_lds + 8 * thread + 19];
+    R[10] = lds[offset_lds + 8 * thread + 27];
+    R[11] = lds[offset_lds + 8 * thread + 35];
+    R[12] = lds[offset_lds + 8 * thread + 43];
+    R[13] = lds[offset_lds + 8 * thread + 51];
+    W     = twiddles[7 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[8].x - W.y * R[8].y;
+    t.y   = W.y * R[8].x + W.x * R[8].y;
+    R[8]  = t;
+    W     = twiddles[8 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[9].x - W.y * R[9].y;
+    t.y   = W.y * R[9].x + W.x * R[9].y;
+    R[9]  = t;
+    W     = twiddles[9 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[10].x - W.y * R[10].y;
+    t.y   = W.y * R[10].x + W.x * R[10].y;
+    R[10] = t;
+    W     = twiddles[10 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[11].x - W.y * R[11].y;
+    t.y   = W.y * R[11].x + W.x * R[11].y;
+    R[11] = t;
+    W     = twiddles[11 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[12].x - W.y * R[12].y;
+    t.y   = W.y * R[12].x + W.x * R[12].y;
+    R[12] = t;
+    W     = twiddles[12 + 6 * ((8 * thread + 3) % 8)];
+    t.x   = W.x * R[13].x - W.y * R[13].y;
+    t.y   = W.y * R[13].x + W.x * R[13].y;
+    R[13] = t;
+    FwdRad7B1(&R[7], &R[8], &R[9], &R[10], &R[11], &R[12], &R[13]);
+    inout[offset_out + (8 * thread + 3) * stride_out]  = R[7];
+    inout[offset_out + (8 * thread + 11) * stride_out] = R[8];
+    inout[offset_out + (8 * thread + 19) * stride_out] = R[9];
+    inout[offset_out + (8 * thread + 27) * stride_out] = R[10];
+    inout[offset_out + (8 * thread + 35) * stride_out] = R[11];
+    inout[offset_out + (8 * thread + 43) * stride_out] = R[12];
+    inout[offset_out + (8 * thread + 51) * stride_out] = R[13];
+
+    R[0] = lds[offset_lds + 8 * thread + 4];
+    R[1] = lds[offset_lds + 8 * thread + 12];
+    R[2] = lds[offset_lds + 8 * thread + 20];
+    R[3] = lds[offset_lds + 8 * thread + 28];
+    R[4] = lds[offset_lds + 8 * thread + 36];
+    R[5] = lds[offset_lds + 8 * thread + 44];
+    R[6] = lds[offset_lds + 8 * thread + 52];
+    W    = twiddles[7 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    W    = twiddles[8 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[2].x - W.y * R[2].y;
+    t.y  = W.y * R[2].x + W.x * R[2].y;
+    R[2] = t;
+    W    = twiddles[9 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    W    = twiddles[10 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[4].x - W.y * R[4].y;
+    t.y  = W.y * R[4].x + W.x * R[4].y;
+    R[4] = t;
+    W    = twiddles[11 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[5].x - W.y * R[5].y;
+    t.y  = W.y * R[5].x + W.x * R[5].y;
+    R[5] = t;
+    W    = twiddles[12 + 6 * ((8 * thread + 4) % 8)];
+    t.x  = W.x * R[6].x - W.y * R[6].y;
+    t.y  = W.y * R[6].x + W.x * R[6].y;
+    R[6] = t;
+    FwdRad7B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6]);
+    inout[offset_out + (8 * thread + 4) * stride_out]  = R[0];
+    inout[offset_out + (8 * thread + 12) * stride_out] = R[1];
+    inout[offset_out + (8 * thread + 20) * stride_out] = R[2];
+    inout[offset_out + (8 * thread + 28) * stride_out] = R[3];
+    inout[offset_out + (8 * thread + 36) * stride_out] = R[4];
+    inout[offset_out + (8 * thread + 44) * stride_out] = R[5];
+    inout[offset_out + (8 * thread + 52) * stride_out] = R[6];
+
+    R[7]  = lds[offset_lds + 8 * thread + 5];
+    R[8]  = lds[offset_lds + 8 * thread + 13];
+    R[9]  = lds[offset_lds + 8 * thread + 21];
+    R[10] = lds[offset_lds + 8 * thread + 29];
+    R[11] = lds[offset_lds + 8 * thread + 37];
+    R[12] = lds[offset_lds + 8 * thread + 45];
+    R[13] = lds[offset_lds + 8 * thread + 53];
+    W     = twiddles[7 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[8].x - W.y * R[8].y;
+    t.y   = W.y * R[8].x + W.x * R[8].y;
+    R[8]  = t;
+    W     = twiddles[8 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[9].x - W.y * R[9].y;
+    t.y   = W.y * R[9].x + W.x * R[9].y;
+    R[9]  = t;
+    W     = twiddles[9 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[10].x - W.y * R[10].y;
+    t.y   = W.y * R[10].x + W.x * R[10].y;
+    R[10] = t;
+    W     = twiddles[10 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[11].x - W.y * R[11].y;
+    t.y   = W.y * R[11].x + W.x * R[11].y;
+    R[11] = t;
+    W     = twiddles[11 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[12].x - W.y * R[12].y;
+    t.y   = W.y * R[12].x + W.x * R[12].y;
+    R[12] = t;
+    W     = twiddles[12 + 6 * ((8 * thread + 5) % 8)];
+    t.x   = W.x * R[13].x - W.y * R[13].y;
+    t.y   = W.y * R[13].x + W.x * R[13].y;
+    R[13] = t;
+    FwdRad7B1(&R[7], &R[8], &R[9], &R[10], &R[11], &R[12], &R[13]);
+    inout[offset_out + (8 * thread + 5) * stride_out]  = R[7];
+    inout[offset_out + (8 * thread + 13) * stride_out] = R[8];
+    inout[offset_out + (8 * thread + 21) * stride_out] = R[9];
+    inout[offset_out + (8 * thread + 29) * stride_out] = R[10];
+    inout[offset_out + (8 * thread + 37) * stride_out] = R[11];
+    inout[offset_out + (8 * thread + 45) * stride_out] = R[12];
+    inout[offset_out + (8 * thread + 53) * stride_out] = R[13];
+
+    R[0] = lds[offset_lds + 8 * thread + 6];
+    R[1] = lds[offset_lds + 8 * thread + 14];
+    R[2] = lds[offset_lds + 8 * thread + 22];
+    R[3] = lds[offset_lds + 8 * thread + 30];
+    R[4] = lds[offset_lds + 8 * thread + 38];
+    R[5] = lds[offset_lds + 8 * thread + 46];
+    R[6] = lds[offset_lds + 8 * thread + 54];
+    W    = twiddles[7 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[1].x - W.y * R[1].y;
+    t.y  = W.y * R[1].x + W.x * R[1].y;
+    R[1] = t;
+    W    = twiddles[8 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[2].x - W.y * R[2].y;
+    t.y  = W.y * R[2].x + W.x * R[2].y;
+    R[2] = t;
+    W    = twiddles[9 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[3].x - W.y * R[3].y;
+    t.y  = W.y * R[3].x + W.x * R[3].y;
+    R[3] = t;
+    W    = twiddles[10 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[4].x - W.y * R[4].y;
+    t.y  = W.y * R[4].x + W.x * R[4].y;
+    R[4] = t;
+    W    = twiddles[11 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[5].x - W.y * R[5].y;
+    t.y  = W.y * R[5].x + W.x * R[5].y;
+    R[5] = t;
+    W    = twiddles[12 + 6 * ((8 * thread + 6) % 8)];
+    t.x  = W.x * R[6].x - W.y * R[6].y;
+    t.y  = W.y * R[6].x + W.x * R[6].y;
+    R[6] = t;
+    FwdRad7B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6]);
+    inout[offset_out + (8 * thread + 6) * stride_out]  = R[0];
+    inout[offset_out + (8 * thread + 14) * stride_out] = R[1];
+    inout[offset_out + (8 * thread + 22) * stride_out] = R[2];
+    inout[offset_out + (8 * thread + 30) * stride_out] = R[3];
+    inout[offset_out + (8 * thread + 38) * stride_out] = R[4];
+    inout[offset_out + (8 * thread + 46) * stride_out] = R[5];
+    inout[offset_out + (8 * thread + 54) * stride_out] = R[6];
+
+    R[7]  = lds[offset_lds + 8 * thread + 7];
+    R[8]  = lds[offset_lds + 8 * thread + 15];
+    R[9]  = lds[offset_lds + 8 * thread + 23];
+    R[10] = lds[offset_lds + 8 * thread + 31];
+    R[11] = lds[offset_lds + 8 * thread + 39];
+    R[12] = lds[offset_lds + 8 * thread + 47];
+    R[13] = lds[offset_lds + 8 * thread + 55];
+    W     = twiddles[7 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[8].x - W.y * R[8].y;
+    t.y   = W.y * R[8].x + W.x * R[8].y;
+    R[8]  = t;
+    W     = twiddles[8 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[9].x - W.y * R[9].y;
+    t.y   = W.y * R[9].x + W.x * R[9].y;
+    R[9]  = t;
+    W     = twiddles[9 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[10].x - W.y * R[10].y;
+    t.y   = W.y * R[10].x + W.x * R[10].y;
+    R[10] = t;
+    W     = twiddles[10 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[11].x - W.y * R[11].y;
+    t.y   = W.y * R[11].x + W.x * R[11].y;
+    R[11] = t;
+    W     = twiddles[11 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[12].x - W.y * R[12].y;
+    t.y   = W.y * R[12].x + W.x * R[12].y;
+    R[12] = t;
+    W     = twiddles[12 + 6 * ((8 * thread + 7) % 8)];
+    t.x   = W.x * R[13].x - W.y * R[13].y;
+    t.y   = W.y * R[13].x + W.x * R[13].y;
+    R[13] = t;
+    FwdRad7B1(&R[7], &R[8], &R[9], &R[10], &R[11], &R[12], &R[13]);
+    inout[offset_out + (8 * thread + 7) * stride_out]  = R[7];
+    inout[offset_out + (8 * thread + 15) * stride_out] = R[8];
+    inout[offset_out + (8 * thread + 23) * stride_out] = R[9];
+    inout[offset_out + (8 * thread + 31) * stride_out] = R[10];
+    inout[offset_out + (8 * thread + 39) * stride_out] = R[11];
+    inout[offset_out + (8 * thread + 47) * stride_out] = R[12];
+    inout[offset_out + (8 * thread + 55) * stride_out] = R[13];
 }
 
 //
@@ -1022,7 +1772,8 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
     }
     else if(nx == 56)
     {
-        factors = {7, 2, 2, 2};
+      //        factors = {7, 2, 2, 2};
+      factors = {8, 7};
     }
 
     int* d_factors;
@@ -1037,7 +1788,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         vector<dtype> t(nx - 1);
         HIP_CHECK(hipMemcpy(t.data(), twiddles, t.size() * sizeof(dtype), hipMemcpyDeviceToHost));
         for(int i = 0; i < nx - 1; ++i)
-          cout << i << " " << t[i].x << " " << t[i].y << endl;
+            cout << i << " " << t[i].x << " " << t[i].y << endl;
     }
 
     GPUTimer timer;
@@ -1073,7 +1824,9 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         }
         else if(nx == 56)
         {
-            fft_56_fwd<<<nbatch, 4>>>(X, twiddles);
+          //            fft_56_fwd<<<nbatch, 4>>>(X, twiddles);
+          //          fft_56_fwd_fat<<<nbatch, 4>>>(X, twiddles, 1, 1, 0, 0, 0);
+          fft_56_fwd_fat56<<<nbatch, 4>>>(X, twiddles, 1, 1, 0, 0, 0);
         }
         timer.toc();
         if(n > 0)
