@@ -19,9 +19,9 @@ build stockham: link stockham.o
 build throughput.o: hipcc throughput.cpp
 build throughput: link throughput.o
 
-build generator.o: hipcc generator.cpp
-build stockham-generator.o: hipcc stockham-generator.cpp
+build generator.o: hipcc generator.cpp | generator.hpp
+build stockham-generator.o: hipcc stockham-generator.cpp | generator.hpp
 build stockham-generator: link stockham-generator.o generator.o
 
-build stockham-generator-fat-flip-flop.o: hipcc stockham-generator-fat-flip-flop.cpp
+build stockham-generator-fat-flip-flop.o: hipcc stockham-generator-fat-flip-flop.cpp | generator.hpp
 build stockham-generator-fat-flip-flop: link stockham-generator-fat-flip-flop.o generator.o

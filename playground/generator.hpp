@@ -129,15 +129,17 @@ namespace gen
     struct VariableDeclaration : Node
     {
         std::string name, type;
-        VariableDeclaration(std::string name, std::string type)
+        std::shared_ptr<Node> size;
+        VariableDeclaration(std::string name, std::string type, std::shared_ptr<Node> size)
             : name(name)
             , type(type)
+            , size(size)
         {
         }
         std::string render() const override;
     };
 
-    std::shared_ptr<VariableDeclaration> variable_declaration(std::string name, std::string type);
+    std::shared_ptr<VariableDeclaration> variable_declaration(std::string name, std::string type, std::shared_ptr<Node> size);
 
     struct VariableArgument : Node
     {
@@ -155,6 +157,7 @@ namespace gen
     struct Variable : Node
     {
         std::string name, type;
+        std::shared_ptr<Node> size;
         Variable() { }
         Variable(std::string name)
             : name(name)
@@ -163,6 +166,12 @@ namespace gen
         Variable(std::string name, std::string type)
             : name(name)
             , type(type)
+        {
+        }
+        Variable(std::string name, std::string type, std::shared_ptr<Node> size)
+            : name(name)
+            , type(type)
+            , size(size)
         {
         }
         std::string                          render() const override;
@@ -225,6 +234,8 @@ namespace gen
 
     std::shared_ptr<ArrayVariable> array(std::string name);
     std::shared_ptr<ArrayVariable> array(std::string name, std::string type);
+    std::shared_ptr<ArrayVariable> array(std::string name, std::string type, std::shared_ptr<Node> size);
+
     struct Assign : Node
     {
         std::shared_ptr<Node> lhs, rhs;

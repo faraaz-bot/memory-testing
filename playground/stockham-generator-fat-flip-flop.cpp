@@ -269,8 +269,9 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
     // variables definitions
     //
 
-    auto lds       = array("lds", "__shared__ scalar_type"); // XXX declare
-    auto registers = array("R", "scalar_type"); //  XXX how many?
+    // XXX lds size
+    auto lds       = array("lds", "__shared__ scalar_type", literal(1024));
+    auto registers = array("R", "scalar_type", literal(factors[0]*2));
 
     fft->body.push_back(lds->declaration());
     fft->body.push_back(registers->declaration());

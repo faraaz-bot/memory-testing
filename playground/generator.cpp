@@ -111,12 +111,15 @@ namespace gen
 
     std::string VariableDeclaration::render() const
     {
-        return type + " " + name + ";";
+        if(!size)
+            return type + " " + name + ";";
+        return type + " " + name + "[" + size->render() + "];";
     }
 
-    std::shared_ptr<VariableDeclaration> variable_declaration(std::string name, std::string type)
+    std::shared_ptr<VariableDeclaration>
+        variable_declaration(std::string name, std::string type, std::shared_ptr<Node> size)
     {
-        return std::make_shared<VariableDeclaration>(name, type);
+        return std::make_shared<VariableDeclaration>(name, type, size);
     }
 
     std::string VariableArgument::render() const
@@ -136,7 +139,7 @@ namespace gen
 
     std::shared_ptr<VariableDeclaration> Variable::declaration() const
     {
-        return variable_declaration(name, type);
+        return variable_declaration(name, type, size);
     }
 
     std::shared_ptr<VariableArgument> Variable::argument() const
@@ -172,6 +175,12 @@ namespace gen
     std::shared_ptr<ArrayVariable> array(std::string name, std::string type)
     {
         return std::make_shared<ArrayVariable>(name, type);
+    }
+
+    std::shared_ptr<ArrayVariable>
+        array(std::string name, std::string type, std::shared_ptr<Node> size)
+    {
+        return std::make_shared<ArrayVariable>(name, type, size);
     }
 
     std::string Assign::render() const
