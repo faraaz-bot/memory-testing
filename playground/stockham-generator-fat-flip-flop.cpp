@@ -236,7 +236,7 @@ std::shared_ptr<Function> make_device_fft_pass(int pass, std::vector<int> factor
     return fft;
 }
 
-std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
+std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_sets = -1)
 {
     //
     // function and argument definitions
@@ -269,9 +269,12 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
     // variables definitions
     //
 
+    if(working_sets < 0)
+        working_sets = product(factors) / factors[0];
+
     // XXX lds size
     auto lds       = array("lds", "__shared__ scalar_type", literal(1024));
-    auto registers = array("R", "scalar_type", literal(factors[0] * 2));
+    auto registers = array("R", "scalar_type", literal(factors[0] * working_sets));
 
     fft->body.push_back(lds->declaration());
     fft->body.push_back(registers->declaration());
@@ -312,14 +315,14 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                   })
               });
             // clang-format on
-            fft->body.push_back(assign(R[width * (h % 2) + w], Z[idx]));
+            fft->body.push_back(assign(R[width * (h % working_sets) + w], Z[idx]));
         }
 
         // butterly
 
         auto fwd = call("FwdRad" + std::to_string(width) + "B1");
         for(int w = 0; w < width; ++w)
-            fwd->arguments.push_back(R[(h % 2) * width + w]->address());
+            fwd->arguments.push_back(R[(h % working_sets) * width + w]->address());
         fft->body.push_back(fwd);
 
         // write to lds
@@ -332,7 +335,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                 multiply({group(base), literal(width)}),
                 literal(w)});
             // clang-format on
-            fft->body.push_back(assign(X[idx], R[(h % 2) * width + w]));
+            fft->body.push_back(assign(X[idx], R[(h % working_sets) * width + w]));
         }
         fft->body.push_back(line_break());
     }
@@ -361,7 +364,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                       multiply({literal(height), thread}),
                       literal((length / width) * w + h)});
                 // clang-format on
-                fft->body.push_back(assign(R[(h % 2) * width + w], X[idx]));
+                fft->body.push_back(assign(R[(h % working_sets) * width + w], X[idx]));
             }
 
             // twiddle
@@ -381,7 +384,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                                               literal(h)})),
                                     literal(nheight)}))})});
                 // clang-format on
-                auto ridx = (h % 2) * width + w;
+                auto ridx = (h % working_sets) * width + w;
                 fft->body.push_back(assign(W, T[tidx]));
                 fft->body.push_back(assign(
                     t->x, sub({multiply({W->x, R[ridx]->x}), multiply({W->y, R[ridx]->y})})));
@@ -393,7 +396,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
             // butterly
             auto fwd = call("FwdRad" + std::to_string(width) + "B1");
             for(int w = 0; w < width; ++w)
-                fwd->arguments.push_back(R[(h % 2) * width + w]->address());
+                fwd->arguments.push_back(R[(h % working_sets) * width + w]->address());
             fft->body.push_back(fwd);
 
             // write
@@ -412,7 +415,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                                 mod({base, literal(nheight)}),
                                 literal(w*nheight)}))});
                     // clang-format on
-                    fft->body.push_back(assign(X[idx], R[(h % 2) * width + w]));
+                    fft->body.push_back(assign(X[idx], R[(h % working_sets) * width + w]));
                 }
             }
             else
@@ -434,7 +437,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                               stride_out
                             })});
                     // clang-format on
-                    fft->body.push_back(assign(Z[idx], R[width * (h % 2) + w]));
+                    fft->body.push_back(assign(Z[idx], R[width * (h % working_sets) + w]));
                 }
             }
             fft->body.push_back(line_break());
@@ -446,7 +449,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
 
 int main(int argc, char* argv[])
 {
-    std::vector<int> factors = {8, 7};
+    std::vector<int> factors = {7, 2, 2, 2};
     auto             kernel  = make_device_fft(factors);
     std::cout << kernel->render() << std::endl;
 }
