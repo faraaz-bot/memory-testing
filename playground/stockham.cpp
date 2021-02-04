@@ -753,9 +753,10 @@ __device__ void forward_length56_pass3(scalar_type*       input,
 
 __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
 {
-    __shared__ dtype lds[56];
+    dtype __shared__ lds[56];
 
     int thread = threadIdx.x;
+    if (thread >= 4) return;
 
     dtype R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13;
 
@@ -766,8 +767,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  1,
-                                  1,
+                                  0,
+                                  0,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -790,8 +791,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  1,
-                                  1,
+                                  0,
+                                  0,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -814,8 +815,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  1,
-                                  1,
+                                  0,
+                                  0,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -838,8 +839,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  1,
-                                  1,
+                                  0,
+                                  0,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -1010,44 +1011,65 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
 
     GPUTimer total;
     total.tic();
+    vector<int> factors;
     if(nx == 256)
     {
-        vector<int> factors{4, 4, 4, 4};
-        int*        d_factors;
-        HIP_CHECK(hipMalloc(&d_factors, factors.size() * sizeof(int)));
-        HIP_CHECK(hipMemcpy(
-            d_factors, factors.data(), factors.size() * sizeof(int), hipMemcpyHostToDevice));
-        stockham_twiddles<<<1, nx - 1>>>(nx - 1, twiddles, 4, d_factors);
-        HIP_CHECK(hipFree(d_factors));
+        factors = {4, 4, 4, 4};
+    }
+    else if(nx == 56)
+    {
+        factors = {7, 2, 2, 2};
+    }
+
+    int* d_factors;
+    HIP_CHECK(hipMalloc(&d_factors, factors.size() * sizeof(int)));
+    HIP_CHECK(
+        hipMemcpy(d_factors, factors.data(), factors.size() * sizeof(int), hipMemcpyHostToDevice));
+    stockham_twiddles<<<1, nx - 1>>>(nx - 1, twiddles, factors.size(), d_factors);
+    HIP_CHECK(hipFree(d_factors));
+
+    if(false)
+    {
+        vector<dtype> t(nx - 1);
+        HIP_CHECK(hipMemcpy(t.data(), twiddles, t.size() * sizeof(dtype), hipMemcpyDeviceToHost));
+        for(int i = 0; i < nx - 1; ++i)
+          cout << i << " " << t[i].x << " " << t[i].y << endl;
     }
 
     GPUTimer timer;
     for(int n = 0; n <= ntrials; ++n)
     {
         timer.tic();
-        if(nbpt > 1)
+        if(nx == 256)
         {
-            switch(nbpt)
+            if(nbpt > 1)
             {
-            case 2:
-                fft_256_fwd_batchfirst<2><<<nbatch / 2, 64>>>(X, twiddles);
-                break;
-            case 4:
-                fft_256_fwd_batchfirst<4><<<nbatch / 4, 64>>>(X, twiddles);
-                break;
-            case 8:
-                fft_256_fwd_batchfirst<8><<<nbatch / 8, 64>>>(X, twiddles);
-                break;
-            case 16:
-                fft_256_fwd_batchfirst<16><<<nbatch / 16, 64>>>(X, twiddles);
-                break;
-            default:
-                cout << "INVALID NBPT" << endl;
+                switch(nbpt)
+                {
+                case 2:
+                    fft_256_fwd_batchfirst<2><<<nbatch / 2, 64>>>(X, twiddles);
+                    break;
+                case 4:
+                    fft_256_fwd_batchfirst<4><<<nbatch / 4, 64>>>(X, twiddles);
+                    break;
+                case 8:
+                    fft_256_fwd_batchfirst<8><<<nbatch / 8, 64>>>(X, twiddles);
+                    break;
+                case 16:
+                    fft_256_fwd_batchfirst<16><<<nbatch / 16, 64>>>(X, twiddles);
+                    break;
+                default:
+                    cout << "INVALID NBPT" << endl;
+                }
+            }
+            else
+            {
+                fft_256_fwd<<<nbatch, 64>>>(X, twiddles);
             }
         }
-        else
+        else if(nx == 56)
         {
-            fft_256_fwd<<<nbatch, 64>>>(X, twiddles);
+            fft_56_fwd<<<1, 4>>>(X, twiddles);
         }
         timer.toc();
         if(n > 0)
@@ -1074,11 +1096,10 @@ double compare(vector<dtype> const& z1, vector<dtype> const& z2)
     {
         double dx = z1[n].x - z2[n].x;
         double dy = z1[n].y - z2[n].y;
-        // if(dx * dx + dy * dy > 1.e-7)
-        // {
-        //     cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n][0] << " " << z2[n][0]
-        //          << endl;
-        // }
+        if(dx * dx + dy * dy > 1.e-7)
+        {
+            cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n].x << " " << z2[n].x << endl;
+        }
         d += dx * dx + dy * dy;
         r += z1[n].x * z1[n].x + z1[n].y * z1[n].y;
     }
