@@ -751,16 +751,21 @@ __device__ void forward_length56_pass3(scalar_type*       input,
     }
 }
 
-__global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
+__global__ void fft_56_fwd(dtype* gb, dtype* twiddles, int nbatch)
 {
-    dtype __shared__ lds[56];
+    int const batch_per_block = 16;
 
-    int batch  = blockIdx.x;
-    int thread = threadIdx.x;
+    dtype __shared__ lds[batch_per_block*56];
+
+    int batch  = batch_per_block * blockIdx.x + threadIdx.x / 4;
+    int thread = threadIdx.x % 4;
     if(thread >= 4)
         return;
+    if(batch >= nbatch)
+      return;
 
     unsigned int offset = batch * 56;
+    unsigned int ldsoffset = (batch % batch_per_block) * 56;
 
     dtype R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13;
 
@@ -772,7 +777,7 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   1,
                                   1,
                                   offset,
-                                  0,
+                                  ldsoffset,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -795,8 +800,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  0,
-                                  0,
+                                  ldsoffset,
+                                  ldsoffset,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -819,8 +824,8 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  0,
-                                  0,
+                                  ldsoffset,
+                                  ldsoffset,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -843,7 +848,7 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  0,
+                                  ldsoffset,
                                   offset,
                                   &R0,
                                   &R1,
@@ -861,16 +866,16 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   &R13);
 }
 
-template<typename scalar_type>
-__global__ void fft_56_fwd_fat(scalar_type*       inout,
+template <typename scalar_type>
+__global__ void fft_56_fwd_fat(scalar_type* inout,
                                //                    bool               rw,
                                //                    int                thread,
-                    const scalar_type* twiddles,
-                    int                stride_in,
-                    int                stride_out,
-                    int                offset_in,
-                    int                offset_out,
-                    int                offset_lds)
+                               const scalar_type* twiddles,
+                               int                stride_in,
+                               int                stride_out,
+                               int                offset_in,
+                               int                offset_out,
+                               int                offset_lds)
 {
     int thread = threadIdx.x;
     if(thread >= 4)
@@ -1103,7 +1108,8 @@ __global__ void fft_56_fwd_fat(scalar_type*       inout,
 
 #define C8Q 0.70710678118654752440084436210485
 
-__device__ void FwdRad8B1(dtype* R0, dtype* R4, dtype* R2, dtype* R6, dtype* R1, dtype* R5, dtype* R3, dtype* R7)
+__device__ void FwdRad8B1(
+    dtype* R0, dtype* R4, dtype* R2, dtype* R6, dtype* R1, dtype* R5, dtype* R3, dtype* R7)
 {
 
     dtype res;
@@ -1145,21 +1151,22 @@ __device__ void FwdRad8B1(dtype* R0, dtype* R4, dtype* R2, dtype* R6, dtype* R1,
 }
 
 template <typename scalar_type>
-__global__ void           fft_56_fwd_fat56(scalar_type*       inout,
-                          //                          bool               rw,
-                          //                          int                thread,
-                          const scalar_type* twiddles,
-                          int                stride_in,
-                          int                stride_out,
-                          int                offset_in,
-                          int                offset_out,
-                          int                offset_lds)
+__global__ void fft_56_fwd_fat56(
+    scalar_type* inout, const scalar_type* twiddles, int nbatch, int stride_in, int stride_out)
 {
-    int thread = threadIdx.x;
-    if(thread >= 1)
+    int const thread          = 0;
+    int const length          = 56;
+    int const batch_per_block = 64;
+
+    int batch = batch_per_block * blockIdx.x + threadIdx.x;
+    if(batch >= nbatch)
         return;
 
-    __shared__ scalar_type lds[1024];
+    int const offset_in  = length * batch;
+    int const offset_out = length * batch;
+    int const offset_lds = length * (batch % batch_per_block);
+
+    __shared__ scalar_type lds[3584];
     scalar_type            R[16];
     scalar_type            W;
     scalar_type            t;
@@ -1824,9 +1831,9 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         }
         else if(nx == 56)
         {
-          //            fft_56_fwd<<<nbatch, 4>>>(X, twiddles);
+          //fft_56_fwd<<<(nbatch+15)/16, 64>>>(X, twiddles, nbatch); // XXX this doesn't do multiple batches per wavefront yet
           //          fft_56_fwd_fat<<<nbatch, 4>>>(X, twiddles, 1, 1, 0, 0, 0);
-          fft_56_fwd_fat56<<<nbatch, 4>>>(X, twiddles, 1, 1, 0, 0, 0);
+          fft_56_fwd_fat56<<<(nbatch + 63) / 64, 64>>>(X, twiddles, nbatch, 1, 1);
         }
         timer.toc();
         if(n > 0)
