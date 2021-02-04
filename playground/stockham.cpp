@@ -755,8 +755,12 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
 {
     dtype __shared__ lds[56];
 
+    int batch = blockIdx.x;
     int thread = threadIdx.x;
-    if (thread >= 4) return;
+    if (thread >= 4)
+      return;
+
+    unsigned int offset = batch * 56;
 
     dtype R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13;
 
@@ -767,7 +771,7 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   twiddles,
                                   1,
                                   1,
-                                  0,
+                                  offset,
                                   0,
                                   &R0,
                                   &R1,
@@ -840,7 +844,7 @@ __global__ void fft_56_fwd(dtype* gb, dtype* twiddles)
                                   1,
                                   1,
                                   0,
-                                  0,
+                                  offset,
                                   &R0,
                                   &R1,
                                   &R2,
@@ -1069,7 +1073,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         }
         else if(nx == 56)
         {
-            fft_56_fwd<<<1, 4>>>(X, twiddles);
+            fft_56_fwd<<<nbatch, 4>>>(X, twiddles);
         }
         timer.toc();
         if(n > 0)
