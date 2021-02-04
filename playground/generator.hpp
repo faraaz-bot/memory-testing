@@ -138,6 +138,7 @@ namespace gen
     };
 
     std::shared_ptr<VariableDeclaration> variable_declaration(std::string name, std::string type);
+
     struct VariableArgument : Node
     {
         std::string name, type;
@@ -150,9 +151,11 @@ namespace gen
     };
 
     std::shared_ptr<VariableArgument> variable_argument(std::string name, std::string type);
+
     struct Variable : Node
     {
         std::string name, type;
+        Variable() { }
         Variable(std::string name)
             : name(name)
         {
@@ -165,26 +168,42 @@ namespace gen
         std::string                          render() const override;
         std::shared_ptr<VariableDeclaration> declaration() const;
         std::shared_ptr<VariableArgument>    argument() const;
+        std::shared_ptr<Variable>            address() const;
     };
 
     std::shared_ptr<Variable> variable(std::string name, std::string type);
 
     struct ScalarVariable : Variable
     {
-        using Variable::Variable;
+        std::shared_ptr<ScalarVariable> x, y;
+        ScalarVariable() : Variable() { }
+        ScalarVariable(std::string name)
+            : Variable(name)
+        {
+            make_xy();
+        }
+        ScalarVariable(std::string name, std::string type)
+            : Variable(name, type)
+        {
+            make_xy();
+        }
+        void make_xy()
+        {
+            x = std::make_shared<ScalarVariable>();
+            y = std::make_shared<ScalarVariable>();
+            x->type = "real_type_t<" + type + ">";
+            x->name = name + ".x";
+            y->type = "real_type_t<" + type + ">";
+            y->name = name + ".y";
+        }
     };
 
     std::shared_ptr<ScalarVariable> scalar(std::string name);
+    std::shared_ptr<ScalarVariable> scalar(std::string name, std::string type);
 
     struct ArrayVariable : Variable
     {
         using Variable::Variable;
-
-        template <typename T>
-        std::shared_ptr<ScalarVariable> operator[](int i)
-        {
-            return scalar(name + "[" + std::to_string(i) + "]");
-        }
 
         template <typename T>
         std::shared_ptr<ScalarVariable> at(T i)
@@ -196,6 +215,11 @@ namespace gen
         std::shared_ptr<ScalarVariable> operator[](T i)
         {
             return scalar(name + "[" + i->render() + "]");
+        }
+
+        std::shared_ptr<ScalarVariable> operator[](int i)
+        {
+            return scalar(name + "[" + std::to_string(i) + "]");
         }
     };
 

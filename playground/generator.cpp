@@ -144,6 +144,11 @@ namespace gen
         return variable_argument(name, type);
     }
 
+    std::shared_ptr<Variable> Variable::address() const
+    {
+        return variable("&" + name, type + " *");
+    }
+
     std::shared_ptr<Variable> variable(std::string name, std::string type)
     {
         return std::make_shared<Variable>(name, type);
@@ -152,6 +157,11 @@ namespace gen
     std::shared_ptr<ScalarVariable> scalar(std::string name)
     {
         return std::make_shared<ScalarVariable>(name);
+    }
+
+    std::shared_ptr<ScalarVariable> scalar(std::string name, std::string type)
+    {
+        return std::make_shared<ScalarVariable>(name, type);
     }
 
     std::shared_ptr<ArrayVariable> array(std::string name)

@@ -1,5 +1,5 @@
 
-hflags = -fopenmp -std=c++17 -Wall -I/usr/include
+hflags = -g -fopenmp -std=c++17 -Wall -I/usr/include -O3
 ldflags = -fopenmp
 
 rule hipcc
@@ -12,5 +12,16 @@ build cooley_tukey.o: hipcc cooley_tukey.cpp
 build cooley_tukey: link cooley_tukey.o
   libs = -lfftw3 -lfftw3f
 
+build stockham.o: hipcc stockham.cpp
+build stockham: link stockham.o
+  libs = -lfftw3 -lfftw3f
+
 build throughput.o: hipcc throughput.cpp
 build throughput: link throughput.o
+
+build generator.o: hipcc generator.cpp
+build stockham-generator.o: hipcc stockham-generator.cpp
+build stockham-generator: link stockham-generator.o generator.o
+
+build stockham-generator-fat-flip-flop.o: hipcc stockham-generator-fat-flip-flop.cpp
+build stockham-generator-fat-flip-flop: link stockham-generator-fat-flip-flop.o generator.o
