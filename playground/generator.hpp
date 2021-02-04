@@ -23,6 +23,16 @@ namespace gen
         virtual ~Node()                    = default;
     };
 
+    struct LineBreak : Node
+    {
+        std::string render() const override
+        {
+            return "\n\n";
+        }
+    };
+
+    std::shared_ptr<LineBreak> line_break();
+
     //
     // Helpers
     //
@@ -128,7 +138,7 @@ namespace gen
 
     struct VariableDeclaration : Node
     {
-        std::string name, type;
+        std::string           name, type;
         std::shared_ptr<Node> size;
         VariableDeclaration(std::string name, std::string type, std::shared_ptr<Node> size)
             : name(name)
@@ -139,7 +149,8 @@ namespace gen
         std::string render() const override;
     };
 
-    std::shared_ptr<VariableDeclaration> variable_declaration(std::string name, std::string type, std::shared_ptr<Node> size);
+    std::shared_ptr<VariableDeclaration>
+        variable_declaration(std::string name, std::string type, std::shared_ptr<Node> size);
 
     struct VariableArgument : Node
     {
@@ -156,9 +167,9 @@ namespace gen
 
     struct Variable : Node
     {
-        std::string name, type;
+        std::string           name, type;
         std::shared_ptr<Node> size;
-        Variable() { }
+        Variable() {}
         Variable(std::string name)
             : name(name)
         {
@@ -185,7 +196,10 @@ namespace gen
     struct ScalarVariable : Variable
     {
         std::shared_ptr<ScalarVariable> x, y;
-        ScalarVariable() : Variable() { }
+        ScalarVariable()
+            : Variable()
+        {
+        }
         ScalarVariable(std::string name)
             : Variable(name)
         {
@@ -198,8 +212,8 @@ namespace gen
         }
         void make_xy()
         {
-            x = std::make_shared<ScalarVariable>();
-            y = std::make_shared<ScalarVariable>();
+            x       = std::make_shared<ScalarVariable>();
+            y       = std::make_shared<ScalarVariable>();
             x->type = "real_type_t<" + type + ">";
             x->name = name + ".x";
             y->type = "real_type_t<" + type + ">";
@@ -234,7 +248,8 @@ namespace gen
 
     std::shared_ptr<ArrayVariable> array(std::string name);
     std::shared_ptr<ArrayVariable> array(std::string name, std::string type);
-    std::shared_ptr<ArrayVariable> array(std::string name, std::string type, std::shared_ptr<Node> size);
+    std::shared_ptr<ArrayVariable>
+        array(std::string name, std::string type, std::shared_ptr<Node> size);
 
     struct Assign : Node
     {

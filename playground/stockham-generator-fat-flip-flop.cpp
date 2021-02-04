@@ -271,7 +271,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
 
     // XXX lds size
     auto lds       = array("lds", "__shared__ scalar_type", literal(1024));
-    auto registers = array("R", "scalar_type", literal(factors[0]*2));
+    auto registers = array("R", "scalar_type", literal(factors[0] * 2));
 
     fft->body.push_back(lds->declaration());
     fft->body.push_back(registers->declaration());
@@ -281,6 +281,8 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
 
     fft->body.push_back(W->declaration());
     fft->body.push_back(t->declaration());
+
+    fft->body.push_back(line_break());
 
     // shortcuts
     auto Z = *inout;
@@ -314,6 +316,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
         }
 
         // butterly
+
         auto fwd = call("FwdRad" + std::to_string(width) + "B1");
         for(int w = 0; w < width; ++w)
             fwd->arguments.push_back(R[(h % 2) * width + w]->address());
@@ -331,6 +334,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
             // clang-format on
             fft->body.push_back(assign(X[idx], R[(h % 2) * width + w]));
         }
+        fft->body.push_back(line_break());
     }
 
     //
@@ -430,9 +434,10 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
                               stride_out
                             })});
                     // clang-format on
-                    fft->body.push_back(assign(Z[idx], R[width * (h%2) + w]));
+                    fft->body.push_back(assign(Z[idx], R[width * (h % 2) + w]));
                 }
             }
+            fft->body.push_back(line_break());
         }
     }
 
@@ -441,7 +446,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors)
 
 int main(int argc, char* argv[])
 {
-    std::vector<int> factors = {7, 2, 2, 2};
+    std::vector<int> factors = {8, 7};
     auto             kernel  = make_device_fft(factors);
     std::cout << kernel->render() << std::endl;
 }

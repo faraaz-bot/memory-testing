@@ -22,6 +22,11 @@
 namespace gen
 {
 
+    std::shared_ptr<LineBreak> line_break()
+    {
+        return std::make_shared<LineBreak>();
+    }
+
     //
     // Helpers
     //
