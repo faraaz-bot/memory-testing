@@ -373,7 +373,10 @@ std::shared_ptr<Function> make_host_fft(std::vector<int> factors)
 
 int main(int argc, char* argv[])
 {
-    std::vector<int> factors = {7, 6, 2, 2, 2};
+    std::vector<int> factors;
+
+    for (int i = 1; i < argc; ++i)
+      factors.push_back(std::stoi(argv[i]));
 
     auto device = make_device_fft(factors, 1);
     auto global = make_global_fft(factors);
