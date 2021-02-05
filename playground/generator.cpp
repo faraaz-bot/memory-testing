@@ -220,8 +220,15 @@ namespace gen
     {
         std::string s;
         if(!templates.empty())
-            s += "template <" + join(", ", templates) + ">";
-        s += "void " + name + "(" + join(", ", arguments) + ") {";
+            s += "template <" + join(", ", templates) + "> ";
+        if(type_qualifier == DEVICE)
+          s += "__device__ ";
+        if(type_qualifier == GLOBAL)
+          s += "__global__ ";
+        if(type_qualifier == HOST)
+          s += "__host__ ";
+        s += "void ";
+        s += name + "(" + join(", ", arguments) + ") {";
         s += join("\n", body);
         s += "}";
         return s;
@@ -237,6 +244,8 @@ namespace gen
         std::string s = name;
         if(!templates.empty())
             s += "<" + join(", ", templates) + ">";
+        if(!kernel_arguments.empty())
+            s += "<<<" + join(", ", kernel_arguments) + ">>>";
         s += "(" + join(", ", arguments) + ");";
         return s;
     }

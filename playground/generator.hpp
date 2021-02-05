@@ -285,14 +285,24 @@ namespace gen
     // Functions
     //
 
+    enum FunctionTypeQualifier {
+        NONE,
+        DEVICE,
+        GLOBAL,
+        HOST
+    };
+
     struct Function : Node
     {
         std::string                        name;
         std::vector<std::shared_ptr<Node>> templates;
         std::vector<std::shared_ptr<Node>> arguments;
+        std::vector<std::shared_ptr<Node>> kernel_arguments;
         std::vector<std::shared_ptr<Node>> body;
+        enum FunctionTypeQualifier type_qualifier;
         Function(std::string name)
             : name(name)
+            , type_qualifier(NONE)
         {
         }
         std::string render() const override;
