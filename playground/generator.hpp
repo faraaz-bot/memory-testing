@@ -23,6 +23,10 @@ namespace gen
         virtual ~Node()                    = default;
     };
 
+    //
+    //  Simple keywords etc
+    //
+
     struct LineBreak : Node
     {
         std::string render() const override
@@ -32,6 +36,15 @@ namespace gen
     };
 
     std::shared_ptr<LineBreak> line_break();
+
+    struct Keyword : Node
+    {
+        std::string keyword;
+        Keyword(std::string keyword) : keyword(keyword) { }
+        std::string render() const override;
+    };
+
+    std::shared_ptr<Keyword> return_statement();
 
     //
     // Helpers
@@ -114,6 +127,25 @@ namespace gen
     };
 
     std::shared_ptr<Group> group(std::shared_ptr<Node> group);
+
+    //
+    // Operators
+    //
+
+    struct BinaryOperator : Node
+    {
+        std::string           op;
+        std::shared_ptr<Node> lhs, rhs;
+        BinaryOperator(std::string op, std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
+            : op(op)
+            , lhs(lhs)
+            , rhs(rhs)
+        {
+        }
+        std::string render() const override;
+    };
+
+    std::shared_ptr<BinaryOperator> greater_than(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
 
     //
     // Variables
@@ -285,7 +317,8 @@ namespace gen
     // Functions
     //
 
-    enum FunctionTypeQualifier {
+    enum FunctionTypeQualifier
+    {
         NONE,
         DEVICE,
         GLOBAL,
@@ -299,7 +332,7 @@ namespace gen
         std::vector<std::shared_ptr<Node>> arguments;
         std::vector<std::shared_ptr<Node>> kernel_arguments;
         std::vector<std::shared_ptr<Node>> body;
-        enum FunctionTypeQualifier type_qualifier;
+        enum FunctionTypeQualifier         type_qualifier;
         Function(std::string name)
             : name(name)
             , type_qualifier(NONE)

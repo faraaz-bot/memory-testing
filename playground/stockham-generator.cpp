@@ -304,6 +304,10 @@ std::shared_ptr<Function> make_global_fft(std::vector<int> factors)
         assign(offset_lds,
                multiply({literal(length), group(mod({batch, literal(params.batch_per_block)}))})));
 
+    auto early_exit = if_block(greater_than(batch, nbatch));
+    early_exit->body.push_back(return_statement());
+    fft->body.push_back(early_exit);
+
     auto device = call("forward_length" + std::to_string(length) + "_device");
     device->templates.push_back(scalar_type);
     device->arguments.push_back(inout);

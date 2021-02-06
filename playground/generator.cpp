@@ -22,9 +22,23 @@
 namespace gen
 {
 
+    //
+    // Keywords etc
+    //
+
     std::shared_ptr<LineBreak> line_break()
     {
         return std::make_shared<LineBreak>();
+    }
+
+    std::string Keyword::render() const
+    {
+        return keyword + ";";
+    }
+
+    std::shared_ptr<Keyword> return_statement()
+    {
+        return std::make_shared<Keyword>("return");
     }
 
     //
@@ -103,6 +117,21 @@ namespace gen
     std::shared_ptr<Group> group(std::shared_ptr<Node> group)
     {
         return std::make_shared<Group>(group);
+    }
+
+    //
+    // Operators
+    //
+
+    std::string BinaryOperator::render() const
+    {
+        return lhs->render() + " " + op + " " + rhs->render();
+    }
+
+    std::shared_ptr<BinaryOperator> greater_than(std::shared_ptr<Node> lhs,
+                                                 std::shared_ptr<Node> rhs)
+    {
+        return std::make_shared<BinaryOperator>(">", lhs, rhs);
     }
 
     //
@@ -222,11 +251,11 @@ namespace gen
         if(!templates.empty())
             s += "template <" + join(", ", templates) + "> ";
         if(type_qualifier == DEVICE)
-          s += "__device__ ";
+            s += "__device__ ";
         if(type_qualifier == GLOBAL)
-          s += "__global__ ";
+            s += "__global__ ";
         if(type_qualifier == HOST)
-          s += "__host__ ";
+            s += "__host__ ";
         s += "void ";
         s += name + "(" + join(", ", arguments) + ") {";
         s += join("\n", body);
