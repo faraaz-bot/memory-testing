@@ -10,8 +10,14 @@
 using namespace gen;
 
 //
-// FFTs!!!
+// Stockham FFT.
 //
+
+struct LaunchParams
+{
+    int thread_per_batch;
+    int batch_per_block;
+};
 
 std::vector<int> unique_factors(std::vector<int> const& factors)
 {
@@ -32,107 +38,150 @@ T product(std::vector<T> x, int last = -1)
     return std::accumulate(x.cbegin(), x.cend(), T(1), std::multiplies<T>());
 }
 
-//
-// Stockham pass
-//
-std::shared_ptr<Function> make_device_fft_pass(int pass, std::vector<int> factors)
+LaunchParams get_launch_params(std::vector<int> const& factors, int threads_per_block = 64)
+{
+    LaunchParams params;
+    auto         length             = product(factors);
+    auto         outputs_per_thread = factors[0] * factors[1];
+    params.thread_per_batch         = length / outputs_per_thread;
+    params.batch_per_block          = threads_per_block / params.thread_per_batch;
+    return params;
+}
+
+std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_sets = -1)
 {
     //
     // function and argument definitions
     //
-    auto length = product(factors);
-    auto fft = function("forward_length" + std::to_string(length) + "_pass" + std::to_string(pass));
+    auto length      = product(factors);
+    auto fft         = function("forward_length" + std::to_string(length) + "_device");
     auto scalar_type = variable("scalar_type", "typename");
-    auto input       = array("input", "scalar_type *");
-    auto output      = array("output", "scalar_type *");
-    auto rw          = variable("rw", "unsigned int");
-    auto thread      = variable("thread", "unsigned int");
+    auto inout       = array("inout", "scalar_type *");
+    auto lds         = array("lds", "scalar_type *");
+    auto thread      = variable("thread", "int");
     auto twiddles    = array("twiddles", "const scalar_type *");
-    auto stride_in   = variable("stride_in", "const size_t");
-    auto stride_out  = variable("stride_out", "const size_t");
-    auto offset_in   = variable("offset_in", "unsigned int");
-    auto offset_out  = variable("offset_out", "unsigned int");
+    auto stride_in   = variable("stride_in", "int");
+    auto stride_out  = variable("stride_out", "int");
+    auto offset_in   = variable("offset_in", "int");
+    auto offset_out  = variable("offset_out", "int");
+    auto offset_lds  = variable("offset_lds", "int");
 
+    fft->type_qualifier = DEVICE;
     fft->templates.push_back(scalar_type->argument());
-    fft->arguments.push_back(input->argument());
-    fft->arguments.push_back(output->argument());
-    fft->arguments.push_back(rw->argument());
+    fft->arguments.push_back(inout->argument());
+    fft->arguments.push_back(lds->argument());
     fft->arguments.push_back(thread->argument());
     fft->arguments.push_back(twiddles->argument());
     fft->arguments.push_back(stride_in->argument());
     fft->arguments.push_back(stride_out->argument());
     fft->arguments.push_back(offset_in->argument());
     fft->arguments.push_back(offset_out->argument());
+    fft->arguments.push_back(offset_lds->argument());
 
     //
-    // register definitions
+    // variables definitions
     //
-    auto unique  = unique_factors(factors);
-    auto width   = factors[pass];
-    auto height  = product(unique) / width;
-    auto nheight = product(factors, pass);
 
-    for(int r = 0; r < width * height; ++r)
-    {
-        auto R = variable("R" + std::to_string(r), "scalar_type *");
-        fft->arguments.push_back(R->argument());
-    }
+    if(working_sets < 0)
+        working_sets = factors[1];
 
-    std::vector<std::shared_ptr<ScalarVariable>> R(width * height);
-    for(int r = 0; r < width * height; ++r)
-        R[r] = scalar("(*R" + std::to_string(r) + ")");
+    int  nregisters = factors[0] * working_sets;
+    auto registers  = array("R", "scalar_type", literal(nregisters));
+    fft->body.push_back(registers->declaration());
 
-    auto x = *input;
-    auto z = *output;
+    auto W = scalar("W", "scalar_type");
+    auto t = scalar("t", "scalar_type");
+
+    fft->body.push_back(W->declaration());
+    fft->body.push_back(t->declaration());
+
+    fft->body.push_back(line_break());
+
+    // shortcuts
+    auto Z = *inout;
+    auto X = *lds;
+    auto R = *registers;
     auto T = *twiddles;
 
     //
-    // load
+    // pass 0: pipelined load from global + butterfly right away + write to lds
     //
-    if(pass == 0)
+
+    auto width  = factors[0];
+    auto height = factors[1];
+    for(int h = 0; h < height; ++h)
     {
-        auto load = if_block(rw);
+        // load
         for(int w = 0; w < width; ++w)
         {
-            for(int h = 0; h < height; ++h)
-            {
-                // clang-format off
-                auto idx = add({
-                    offset_in,
-                    multiply({
-                        group(add({
-                              multiply({literal(height), thread}),
-                              literal((length / width) * w + h)})),
-                        stride_in
-                      })
-                  });
-                // clang-format on
-                load->body.push_back(assign(R[width * h + w], x[idx]));
-            }
+            // clang-format off
+            auto idx = add({
+                offset_in,
+                multiply({
+                    group(add({
+                          multiply({literal(height), thread}),
+                          literal((length / width) * w + h)})),
+                    stride_in
+                  })
+              });
+            // clang-format on
+            fft->body.push_back(assign(R[(width * h + w) % nregisters], Z[idx]));
         }
-        fft->body.push_back(load);
+
+        // butterly
+
+        auto fwd = call("FwdRad" + std::to_string(width) + "B1");
+        for(int w = 0; w < width; ++w)
+            fwd->arguments.push_back(R[(h * width + w) % nregisters]->address());
+        fft->body.push_back(fwd);
+
+        // write to lds
+        for(int w = 0; w < width; ++w)
+        {
+            // clang-format off
+            auto base = group(add({multiply({literal(height), thread}), literal(h)}));
+            auto idx = add({
+                offset_lds,
+                multiply({group(base), literal(width)}),
+                literal(w)});
+            // clang-format on
+            fft->body.push_back(assign(X[idx], R[(h * width + w) % nregisters]));
+        }
+        fft->body.push_back(line_break());
     }
 
     //
-    // twiddle
+    // subsequent passes: pipelined load from lds + butterfly + write
     //
-    if(pass > 0)
+    auto unique = unique_factors(factors);
+
+    for(int pass = 1; pass < factors.size(); ++pass)
     {
-        auto W  = variable("W", "scalar_type");
-        auto Wx = variable("W.x", "scalar_type");
-        auto Wy = variable("W.y", "scalar_type");
-        auto t  = variable("t", "scalar_type");
-        auto tx = variable("t.x", "scalar_type");
-        auto ty = variable("t.y", "scalar_type");
-        fft->body.push_back(W->declaration());
-        fft->body.push_back(t->declaration());
+        width        = factors[pass];
+        height       = factors[0] * factors[1] / width;
+        auto nheight = product(factors, pass);
 
         for(int h = 0; h < height; ++h)
         {
-            for(int w = 1; w < width; ++w)
+
+            // load
+            for(int w = 0; w < width; ++w)
             {
                 // clang-format off
                 auto idx =
+                  add({
+                      offset_lds,
+                      multiply({literal(height), thread}),
+                      literal((length / width) * w + h)});
+                // clang-format on
+                fft->body.push_back(assign(R[(h * width + w) % nregisters], X[idx]));
+            }
+
+            // twiddle
+            for(int w = 1; w < width; ++w)
+            {
+                // clang-format off
+                auto tidx =
                   add({
                       literal(nheight - 1 + w - 1),
                       multiply({
@@ -145,197 +194,195 @@ std::shared_ptr<Function> make_device_fft_pass(int pass, std::vector<int> factor
                                               literal(h)})),
                                     literal(nheight)}))})});
                 // clang-format on
-                auto ridx = h * width + w;
-                auto Rx   = variable(R[ridx]->name + ".x", "");
-                auto Ry   = variable(R[ridx]->name + ".y", "");
-                fft->body.push_back(assign(W, T[idx]));
-                fft->body.push_back(assign(tx, sub({multiply({Wx, Rx}), multiply({Wy, Ry})})));
-                fft->body.push_back(assign(ty, add({multiply({Wy, Rx}), multiply({Wx, Ry})})));
+                auto ridx = (h * width + w) % nregisters;
+                fft->body.push_back(assign(W, T[tidx]));
+                fft->body.push_back(assign(
+                    t->x, sub({multiply({W->x, R[ridx]->x}), multiply({W->y, R[ridx]->y})})));
+                fft->body.push_back(assign(
+                    t->y, add({multiply({W->y, R[ridx]->x}), multiply({W->x, R[ridx]->y})})));
                 fft->body.push_back(assign(R[ridx], t));
             }
-        }
-    }
 
-    //
-    // butterflies
-    //
-    for(int h = 0; h < height; ++h)
-    {
-        auto fwd = call("FwdRad" + std::to_string(width) + "B1");
-        for(int w = 0; w < width; ++w)
-            fwd->arguments.push_back(scalar("R" + std::to_string(h * width + w)));
-        fft->body.push_back(fwd);
-    }
-
-    //
-    // store
-    //
-    auto store = if_block(rw);
-    if(pass < factors.size() - 1)
-    {
-        for(int h = 0; h < height; ++h)
-        {
+            // butterly
+            auto fwd = call("FwdRad" + std::to_string(width) + "B1");
             for(int w = 0; w < width; ++w)
-            {
-                // clang-format off
-                auto base = group(add({multiply({literal(height), thread}), literal(h)}));
-                auto idx = add({
-                    offset_out,
-                    multiply({
-                        group(add({
-                              multiply({group(divide({base, literal(nheight)})), literal(width*nheight)}),
-                              mod({base, literal(nheight)}),
-                              literal(w*nheight)})),
-                        stride_out
-                      })
-                  });
-                // clang-format on
-                store->body.push_back(assign(z[idx], R[h * width + w]));
-            }
-        }
-    }
-    else
-    {
-        height = factors[0];
-        width  = product(unique) / height;
+                fwd->arguments.push_back(R[(h * width + w) % nregisters]->address());
+            fft->body.push_back(fwd);
 
-        for(int w = 0; w < width; ++w)
-        {
-            for(int h = 0; h < height; ++h)
+            // write
+            if(pass < factors.size() - 1)
             {
-                // clang-format off
-                auto idx = add({
-                    offset_out,
-                    multiply({
-                        group(add({
-                              multiply({literal(height), thread}),
-                              literal((length / width) * w + h)})),
-                        stride_out
-                      })});
-                // clang-format on
-                store->body.push_back(assign(z[idx], R[width * h + w]));
+                // write to lds
+                for(int w = 0; w < width; ++w)
+                {
+                    // clang-format off
+                    auto base = group(add({multiply({literal(height), thread}), literal(h)}));
+                    auto idx =
+                      add({
+                          offset_lds,
+                          group(add({
+                                multiply({group(divide({base, literal(nheight)})), literal(width*nheight)}),
+                                mod({base, literal(nheight)}),
+                                literal(w*nheight)}))});
+                    // clang-format on
+                    fft->body.push_back(assign(X[idx], R[(h * width + w) % nregisters]));
+                }
             }
-        }
-    }
-    fft->body.push_back(store);
-
-    //
-    // reload
-    //
-    // XXX something funky when square
-    if(pass < factors.size() - 1)
-    {
-        height = factors[0];
-        width  = product(unique) / height;
-        //        std::swap(width, height);
-
-        auto reload = if_block(rw);
-        for(int w = 0; w < width; ++w)
-        {
-            for(int h = 0; h < height; ++h)
+            else
             {
-                // clang-format off
-                auto idx = add({
-                    offset_out,
-                    multiply({literal(height), thread}),
-                    literal((length / width) * w + h)});
-                // clang-format on
-                reload->body.push_back(assign(R[h * width + w], z[idx]));
+                for(int w = 0; w < width; ++w)
+                {
+                    // clang-format off
+                    auto idx =
+                      add({
+                          offset_out,
+                          multiply({
+                              group(add({
+                                    multiply({literal(height), thread}),
+                                    literal((length / width) * w + h)})),
+                              stride_out
+                            })});
+                    // clang-format on
+                    fft->body.push_back(assign(Z[idx], R[(h * width + w) % nregisters]));
+                }
             }
+            fft->body.push_back(line_break());
         }
-        fft->body.push_back(reload);
     }
 
     return fft;
 }
 
-std::shared_ptr<Function> make_device_fft(int length, std::vector<int> factors)
+std::shared_ptr<Function> make_global_fft(std::vector<int> factors)
 {
+    auto length = product(factors);
+    auto fft    = function("forward_length" + std::to_string(length));
 
-    auto fft = function("fwd_len" + std::to_string(length) + "_device");
+    auto scalar_type = variable("scalar_type", "typename");
+    auto inout       = array("inout", "scalar_type *");
+    auto twiddles    = array("twiddles", "const scalar_type *");
+    auto stride_in   = variable("stride_in", "int");
+    auto stride_out  = variable("stride_out", "int");
+    auto nbatch      = variable("nbatch", "int");
 
-    auto T          = variable("T", "typename");
-    auto sb         = variable("sb", "StrideBin");
-    auto sync       = variable("sync", "bool");
-    auto twiddles   = variable("twiddles", "const T *");
-    auto stride_in  = variable("stride_in", "const size_t");
-    auto stride_out = variable("stride_out", "const size_t");
-    auto rw         = variable("rw", "unsigned int");
-    auto me         = variable("me", "unsigned int");
-    auto ldsOffset  = variable("ldsOffset", "unsigned int");
-
-    fft->templates.push_back(T->argument());
-    fft->templates.push_back(sync->argument());
+    fft->type_qualifier = GLOBAL;
+    fft->templates.push_back(scalar_type->argument());
+    fft->arguments.push_back(inout->argument());
+    fft->arguments.push_back(nbatch->argument());
     fft->arguments.push_back(twiddles->argument());
     fft->arguments.push_back(stride_in->argument());
     fft->arguments.push_back(stride_out->argument());
-    fft->arguments.push_back(rw->argument());
-    fft->arguments.push_back(me->argument());
-    fft->arguments.push_back(ldsOffset->argument());
 
-    auto lwbIn  = variable("lwbIn", "T *");
-    auto lwbOut = variable("lwbOut", "T *");
-    auto lds    = variable("lds", "T *");
+    auto params = get_launch_params(factors);
 
-    fft->arguments.push_back(lwbIn->argument());
-    fft->arguments.push_back(lwbOut->argument());
-    fft->arguments.push_back(lds->argument());
+    auto lds = array("lds", "__shared__ scalar_type", literal(length * params.batch_per_block));
+    fft->body.push_back(lds->declaration());
+    fft->body.push_back(line_break());
 
-    // XXX
-    int width = 14;
-    for(int i = 0; i < width; ++i)
+    auto thread     = variable("thread", "int");
+    auto block_id   = scalar("blockIdx.x");
+    auto thread_id  = scalar("threadIdx.x");
+    auto offset_in  = variable("offset_in", "int");
+    auto offset_out = variable("offset_out", "int");
+    auto offset_lds = variable("offset_lds", "int");
+    auto batch      = variable("batch", "int");
+
+    fft->body.push_back(thread->declaration());
+    fft->body.push_back(batch->declaration());
+    fft->body.push_back(offset_in->declaration());
+    fft->body.push_back(offset_out->declaration());
+    fft->body.push_back(offset_lds->declaration());
+
+    fft->body.push_back(assign(thread, mod({thread_id, literal(params.thread_per_batch)})));
+    fft->body.push_back(assign(batch,
+                               add({multiply({literal(params.batch_per_block), block_id}),
+                                    divide({thread_id, literal(params.thread_per_batch)})})));
+
+    fft->body.push_back(assign(offset_in, multiply({literal(length), batch})));
+    fft->body.push_back(assign(offset_out, multiply({literal(length), batch})));
+    fft->body.push_back(
+        assign(offset_lds,
+               multiply({literal(length), group(mod({batch, literal(params.batch_per_block)}))})));
+
+    auto device = call("forward_length" + std::to_string(length) + "_device");
+    device->templates.push_back(scalar_type);
+    device->arguments.push_back(inout);
+    device->arguments.push_back(lds);
+    device->arguments.push_back(thread);
+    device->arguments.push_back(twiddles);
+    device->arguments.push_back(stride_in);
+    device->arguments.push_back(stride_out);
+    device->arguments.push_back(offset_in);
+    device->arguments.push_back(offset_out);
+    device->arguments.push_back(offset_lds);
+    fft->body.push_back(device);
+
+    return fft;
+}
+
+std::shared_ptr<Function> make_host_fft(std::vector<int> factors)
+{
+    auto length = product(factors);
+    auto fft    = function("forward_length" + std::to_string(length) + "_launch");
+
+    auto scalar_type = variable("scalar_type", "typename");
+    auto inout       = array("inout", "scalar_type *");
+    auto twiddles    = array("twiddles", "const scalar_type *");
+    auto stride_in   = variable("stride_in", "int");
+    auto stride_out  = variable("stride_out", "int");
+    auto nbatch      = variable("nbatch", "int");
+
+    fft->templates.push_back(scalar_type->argument());
+    fft->arguments.push_back(inout->argument());
+    fft->arguments.push_back(nbatch->argument());
+    fft->arguments.push_back(twiddles->argument());
+    fft->arguments.push_back(stride_in->argument());
+    fft->arguments.push_back(stride_out->argument());
+
+    auto global = call("forward_length" + std::to_string(length) + "");
+    global->templates.push_back(scalar_type);
+    global->arguments.push_back(inout);
+    global->arguments.push_back(nbatch);
+    global->arguments.push_back(twiddles);
+    global->arguments.push_back(stride_in);
+    global->arguments.push_back(stride_out);
+
+    auto params = get_launch_params(factors);
+
+    if(params.thread_per_batch <= 32)
     {
-        auto R = variable("R" + std::to_string(i), "T");
-        fft->body.push_back(R->declaration());
+        auto nblocks = variable("nblocks", "int");
+        fft->body.push_back(nblocks->declaration());
+        fft->body.push_back(
+            assign(nblocks,
+                   divide({group(add({nbatch, literal(params.batch_per_block - 1)})),
+                           literal(params.batch_per_block)})));
+        global->kernel_arguments.push_back(nblocks);
+        global->kernel_arguments.push_back(
+            literal(params.thread_per_batch * params.batch_per_block));
     }
-
-    for(int pass = 0; pass < factors.size(); ++pass)
+    else
     {
-        auto fwd = call("FwdPass" + std::to_string(pass) + "_len" + std::to_string(length));
-        fwd->templates.push_back(T);
-        fwd->templates.push_back(sb);
-        fwd->templates.push_back(sync);
-        fwd->arguments.push_back(twiddles);
-        fwd->arguments.push_back(stride_in);
-        fwd->arguments.push_back(stride_out);
-        fwd->arguments.push_back(rw);
-        fwd->arguments.push_back(me);
-
-        std::shared_ptr<Node> offset_in  = ldsOffset;
-        std::shared_ptr<Node> offset_out = ldsOffset;
-
-        if(pass == 0)
-            offset_in = literal(0);
-        if(pass == factors.size() - 1)
-            offset_out = literal(0);
-
-        fwd->arguments.push_back(offset_in);
-        fwd->arguments.push_back(offset_out);
-        fwd->arguments.push_back(lds);
-        fwd->arguments.push_back(lds);
-        fwd->arguments.push_back(lds);
-        fwd->arguments.push_back(lds);
-
-        for(int i = 0; i < width; ++i)
-        {
-            fwd->arguments.push_back(scalar("&R" + std::to_string(i)));
-        }
-
-        fft->body.push_back(fwd);
+        global->kernel_arguments.push_back(nbatch);
+        global->kernel_arguments.push_back(literal(params.thread_per_batch));
     }
+    fft->body.push_back(global);
 
     return fft;
 }
 
 int main(int argc, char* argv[])
 {
-    //std::vector<int> factors = {4, 4, 4, 4};
-    std::vector<int> factors = {7, 2, 2, 2};
-    //std::vector<int> factors = {7, 8};
-    //std::vector<int> factors = {5, 3};
-    for(int pass = 0; pass < factors.size(); ++pass)
-    {
-        auto pass_kernel = make_device_fft_pass(pass, factors);
-        std::cout << pass_kernel->render() << std::endl;
-    }
+    std::vector<int> factors;
+
+    for (int i = 1; i < argc; ++i)
+      factors.push_back(std::stoi(argv[i]));
+
+    auto device = make_device_fft(factors, 1);
+    auto global = make_global_fft(factors);
+    auto host   = make_host_fft(factors);
+
+    std::cout << device->render() << std::endl;
+    std::cout << global->render() << std::endl;
+    std::cout << host->render() << std::endl;
 }

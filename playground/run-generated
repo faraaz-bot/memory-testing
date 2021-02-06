@@ -10,13 +10,22 @@ from pathlib import Path as path
 @click.argument('factors', nargs=-1, type=int)
 @click.option('--nbatch', type=int, default=1, help='Number of batches')
 def generate_and_run(factors, nbatch):
-    cmd = [ './stockham-generator-fat-flip-flop' ] + [ str(x) for x in factors ]
+
+    length = reduce(lambda x, y: x*y, factors)
+
+    # build the generator
+    cmd = [ 'hipcc', '-std=c++17', '-o', 'stockham-generator', 'stockham-generator.cpp', 'generator.cpp' ]
+    print('COMPILING:', ' '.join(cmd))
+    subprocess.run(cmd)
+
+    # run the generator
+    cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
+    print('GENERATING:', ' '.join(cmd))
     kernel = path('stockham_generated_kernel.h')
     with kernel.open('w') as f:
         subprocess.run(cmd, stdout=f)
 
-    length = reduce(lambda x, y: x*y, factors)
-
+    # build the runner
     cmd = [ 'hipcc',
             '-std=c++17',
             '-DUSE_GENERATED',
@@ -30,6 +39,7 @@ def generate_and_run(factors, nbatch):
     print('COMPILING:', ' '.join(cmd))
     subprocess.run(cmd)
 
+    # run!
     cmd = [ './stockham', str(length), str(nbatch) ]
     print('RUNNING:  ', ' '.join(cmd))
     subprocess.run(cmd)
