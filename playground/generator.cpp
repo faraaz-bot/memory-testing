@@ -41,6 +41,11 @@ namespace gen
         return std::make_shared<Keyword>("return");
     }
 
+    std::shared_ptr<Keyword> sync_threads()
+    {
+        return std::make_shared<Keyword>("__syncthreads()");
+    }
+
     //
     // Helpers
     //
