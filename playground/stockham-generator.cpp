@@ -49,7 +49,7 @@ LaunchParams get_launch_params(std::vector<int> const& factors, int threads_per_
     auto         outputs_per_thread = 1;
     if(product(factors) == 336)
     {
-        params.thread_per_batch = 256; // 256 threads per workgroup
+        params.thread_per_batch = 252; // 256 threads per workgroup
         params.batch_per_block  = 6; // XXX
     }
     else
@@ -122,6 +122,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
     //
     // pass 0: pipelined load from global + butterfly right away + write to lds
     //
+    auto tpb      = literal(length / factors[0]);
 
     for(int pass = 0; pass < factors.size(); ++pass)
     {
@@ -137,11 +138,10 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
             if(subpass == 0)
             {
                 needs_work    = literal_true();
-                thread_assign = assign(thread, mod({thread_id, literal(length / width)}));
+                thread_assign = assign(thread, mod({thread_id, tpb}));
             }
             else
             {
-                auto tpb      = literal(length / factors[0]);
                 needs_work    = less(add({mod({thread_id, tpb}), tpb}), literal(length / width));
                 thread_assign = assign(thread, add({mod({thread_id, tpb}), tpb}));
             }
@@ -217,6 +217,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
             // write
             store[subpass] = if_block(needs_work);
             store[subpass]->body.push_back(thread_assign);
+            store[subpass]->body.push_back(line_break());
 
             if(pass < factors.size() - 1)
             {
@@ -252,10 +253,10 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                     store[subpass]->body.push_back(assign(Z[idx], R[subpass*width+w]));
                 }
             }
-            store[subpass]->body.push_back(sync_threads());
-            store[subpass]->body.push_back(line_break());
         }
 
+        if (pass > 0)
+                    fft->body.push_back(sync_threads());
         fft->body.push_back(load[0]);
         fft->body.push_back(load[1]);
         fft->body.push_back(butterfly[0]);
