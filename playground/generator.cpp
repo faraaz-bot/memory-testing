@@ -46,6 +46,16 @@ namespace gen
         return std::make_shared<Keyword>("__syncthreads()");
     }
 
+    std::shared_ptr<Literal> literal_true()
+    {
+        return literal(std::string("true"));
+    }
+
+    std::shared_ptr<Literal> literal_false()
+    {
+        return literal(std::string("false"));
+    }
+
     //
     // Helpers
     //
@@ -133,10 +143,25 @@ namespace gen
         return lhs->render() + " " + op + " " + rhs->render();
     }
 
-    std::shared_ptr<BinaryOperator> greater_than(std::shared_ptr<Node> lhs,
-                                                 std::shared_ptr<Node> rhs)
+    std::shared_ptr<BinaryOperator> greater(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
     {
         return std::make_shared<BinaryOperator>(">", lhs, rhs);
+    }
+
+    std::shared_ptr<BinaryOperator> greater_equal(std::shared_ptr<Node> lhs,
+                                                  std::shared_ptr<Node> rhs)
+    {
+        return std::make_shared<BinaryOperator>(">=", lhs, rhs);
+    }
+
+    std::shared_ptr<BinaryOperator> less(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
+    {
+        return std::make_shared<BinaryOperator>("<", lhs, rhs);
+    }
+
+    std::shared_ptr<BinaryOperator> less_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
+    {
+        return std::make_shared<BinaryOperator>("<=", lhs, rhs);
     }
 
     //

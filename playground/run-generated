@@ -9,21 +9,23 @@ from pathlib import Path as path
 @click.command()
 @click.argument('factors', nargs=-1, type=int)
 @click.option('--nbatch', type=int, default=1, help='Number of batches')
-def generate_and_run(factors, nbatch):
+@click.option('--manual', type=bool, default=False, is_flag=True, help='I manually modified the thing...')
+def generate_and_run(factors, nbatch, manual):
 
     length = reduce(lambda x, y: x*y, factors)
 
     # build the generator
-    cmd = [ 'hipcc', '-std=c++17', '-o', 'stockham-generator', 'stockham-generator.cpp', 'generator.cpp' ]
-    print('COMPILING:', ' '.join(cmd))
-    subprocess.run(cmd)
+    if not manual:
+        cmd = [ 'hipcc', '-std=c++17', '-o', 'stockham-generator', 'stockham-generator.cpp', 'generator.cpp' ]
+        print('COMPILING:', ' '.join(cmd))
+        subprocess.run(cmd, check=True)
 
-    # run the generator
-    cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
-    print('GENERATING:', ' '.join(cmd))
-    kernel = path('stockham_generated_kernel.h')
-    with kernel.open('w') as f:
-        subprocess.run(cmd, stdout=f)
+        # run the generator
+        cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
+        print('GENERATING:', ' '.join(cmd))
+        kernel = path('stockham_generated_kernel.h')
+        with kernel.open('w') as f:
+            subprocess.run(cmd, stdout=f, check=True)
 
     # build the runner
     cmd = [ 'hipcc',

@@ -474,10 +474,10 @@ double compare(vector<dtype> const& z1, vector<dtype> const& z2)
     {
         double dx = z1[n].x - z2[n].x;
         double dy = z1[n].y - z2[n].y;
-        if(dx * dx + dy * dy > 1.e-7)
-        {
-            cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n].x << " " << z2[n].x << endl;
-        }
+        // if(dx * dx + dy * dy > 1.e-7)
+        // {
+        //     cout << n << " " << sqrt(dx * dx + dy * dy) << " " << z1[n].x << " " << z2[n].x << endl;
+        // }
         d += dx * dx + dy * dy;
         r += z1[n].x * z1[n].x + z1[n].y * z1[n].y;
     }

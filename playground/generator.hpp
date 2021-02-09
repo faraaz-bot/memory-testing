@@ -146,7 +146,10 @@ namespace gen
         std::string render() const override;
     };
 
-    std::shared_ptr<BinaryOperator> greater_than(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
+    std::shared_ptr<BinaryOperator> greater(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
+    std::shared_ptr<BinaryOperator> less(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
+    std::shared_ptr<BinaryOperator> greater_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
+    std::shared_ptr<BinaryOperator> less_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
 
     //
     // Variables
@@ -155,6 +158,10 @@ namespace gen
     struct Literal : Node
     {
         std::string literal;
+        Literal(std::string l)
+        {
+            literal = l;
+        }
         template <typename T>
         Literal(T l)
         {
@@ -168,6 +175,9 @@ namespace gen
     {
         return std::make_shared<Literal>(l);
     }
+
+    std::shared_ptr<Literal> literal_true();
+    std::shared_ptr<Literal> literal_false();
 
     struct VariableDeclaration : Node
     {
