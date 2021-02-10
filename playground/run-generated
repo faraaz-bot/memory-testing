@@ -23,9 +23,7 @@ def generate_and_run(factors, nbatch, manual):
         # run the generator
         cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
         print('GENERATING:', ' '.join(cmd))
-        kernel = path('stockham_generated_kernel.h')
-        with kernel.open('w') as f:
-            subprocess.run(cmd, stdout=f, check=True)
+        subprocess.run(cmd, check=True)
 
     # build the runner
     cmd = [ 'hipcc',

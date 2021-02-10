@@ -11,11 +11,15 @@
 // get started.
 //
 
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <sstream>
 #include <string>
 #include <vector>
+
+#include <unistd.h>
 
 #include "generator.hpp"
 
@@ -312,6 +316,46 @@ namespace gen
     std::shared_ptr<FunctionCall> call(std::string name)
     {
         return std::make_shared<FunctionCall>(name);
+    }
+
+    //
+    // Misc
+    //
+
+    void format_and_write(std::string fname, std::string code)
+    {
+        std::ofstream     ofile;
+        std::ifstream     ifile;
+        std::stringstream formatted, existing;
+
+        auto tname = fname + ".tmp";
+
+        ofile.open(tname);
+        ofile << code;
+        ofile.close();
+
+        std::string cmd = "clang-format-10 -i -style=file " + tname;
+        std::system(cmd.c_str());
+        ifile.open(tname);
+        formatted << ifile.rdbuf();
+        ifile.close();
+
+        unlink(tname.c_str());
+
+        bool exists = static_cast<bool>(std::ifstream(fname));
+        if(exists)
+        {
+            ifile.open(fname);
+            existing << ifile.rdbuf();
+            ifile.close();
+
+            if(formatted.str().compare(existing.str()) == 0)
+                return;
+        }
+
+        ofile.open(fname);
+        ofile << formatted.str();
+        ofile.close();
     }
 
 }

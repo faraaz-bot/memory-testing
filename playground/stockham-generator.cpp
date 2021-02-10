@@ -94,7 +94,6 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
         working_sets = factors[1];
 
     auto unique = unique_factors(factors);
-    auto params = get_launch_params(factors);
 
     int  nregisters = *std::max_element(factors.cbegin(), factors.cend());
     auto registers  = array("R", "scalar_type", literal(2 * nregisters));
@@ -380,7 +379,5 @@ int main(int argc, char* argv[])
     auto global = make_global_fft(factors);
     auto host   = make_host_fft(factors);
 
-    std::cout << device->render() << std::endl;
-    std::cout << global->render() << std::endl;
-    std::cout << host->render() << std::endl;
+    format_and_write("stockham_generated_kernel.h", device->render() + global->render() + host->render());
 }

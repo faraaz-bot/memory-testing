@@ -47,6 +47,8 @@ namespace gen
     std::shared_ptr<Keyword> return_statement();
     std::shared_ptr<Keyword> sync_threads();
 
+    void format_and_write(std::string fname, std::string code);
+
     //
     // Helpers
     //
