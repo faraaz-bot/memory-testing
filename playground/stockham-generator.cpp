@@ -16,8 +16,8 @@ using namespace gen;
 
 struct LaunchParams
 {
-    int thread_per_batch;
-    int batch_per_block;
+    int threads_per_block;
+    int batches_per_block;
 };
 
 std::vector<int> unique_factors(std::vector<int> const& factors)
@@ -42,21 +42,19 @@ T product(std::vector<T> x, int last = -1)
 //
 // ideally: estimate lds usage; try to max out occupancy
 //
-LaunchParams get_launch_params(std::vector<int> const& factors, int threads_per_block = 64)
+LaunchParams get_launch_params(std::vector<int> const& factors,
+                               int                     bytes_per_element = 16,
+                               int                     lds_byte_limit    = 32 * 1024)
 {
     LaunchParams params;
-    auto         length             = product(factors);
-    auto         outputs_per_thread = 1;
-    if(product(factors) == 336)
-    {
-        params.thread_per_batch = 252; // 256 threads per workgroup
-        params.batch_per_block  = 6; // XXX
-    }
-    else
-    {
-        params.thread_per_batch = length / outputs_per_thread;
-        params.batch_per_block  = threads_per_block / params.thread_per_batch;
-    }
+
+    auto length          = product(factors);
+    auto bytes_per_batch = length * bytes_per_element;
+    auto max_factor      = *std::max_element(factors.cbegin(), factors.cend());
+
+    params.batches_per_block = lds_byte_limit / bytes_per_batch;
+    params.threads_per_block = length / max_factor * params.batches_per_block;
+
     return params;
 }
 
@@ -119,10 +117,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
     auto R = *registers;
     auto T = *twiddles;
 
-    //
-    // pass 0: pipelined load from global + butterfly right away + write to lds
-    //
-    auto tpb      = literal(length / factors[0]);
+    auto tpb = literal(length / factors[0]);
 
     for(int pass = 0; pass < factors.size(); ++pass)
     {
@@ -163,8 +158,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                                                                             thread,
                                                                             literal((length / width) * w)})),
                                                     literal(1)//stride_in
-                                            })
-                            });
+                                            })});
                     // clang-format on
                     load[subpass]->body.push_back(assign(R[subpass * width + w], Z[idx]));
                 }
@@ -175,10 +169,10 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                 for(int w = 0; w < width; ++w)
                 {
                     // clang-format off
-                        auto idx = add({
-                                        offset_lds,
-                                        thread,
-                                        literal((length / width) * w)});
+                    auto idx = add({
+                                    offset_lds,
+                                    thread,
+                                    literal((length / width) * w)});
                     // clang-format on
                     load[subpass]->body.push_back(assign(R[subpass * width + w], X[idx]));
                 }
@@ -187,14 +181,14 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                 for(int w = 1; w < width; ++w)
                 {
                     // clang-format off
-                        auto tidx = add({
-                                        literal(nheight - 1 + w - 1),
-                                        multiply({
-                                                        literal(width - 1),
-                                                        group(
-                                                                mod({
-                                                                                thread,
-                                                                                literal(nheight)}))})});
+                    auto tidx = add({
+                                    literal(nheight - 1 + w - 1),
+                                    multiply({
+                                                    literal(width - 1),
+                                                    group(
+                                                            mod({
+                                                                            thread,
+                                                                            literal(nheight)}))})});
                     // clang-format on
                     auto r = subpass * width + w;
                     load[subpass]->body.push_back(assign(W, T[tidx]));
@@ -208,7 +202,7 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
 
             // butterly
             butterfly[subpass] = if_block(needs_work);
-//            butterfly[subpass]->body.push_back(thread_assign);
+            //            butterfly[subpass]->body.push_back(thread_assign);
             auto fwd = call("FwdRad" + std::to_string(width) + "B1");
             for(int w = 0; w < width; ++w)
                 fwd->arguments.push_back(R[subpass * width + w]->address());
@@ -225,14 +219,14 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                 for(int w = 0; w < width; ++w)
                 {
                     // clang-format off
-                auto idx = add({
-                               offset_lds,
-                               group(add({
-                                          multiply({group(divide({thread, literal(nheight)})), literal(width*nheight)}),
-                                          mod({thread, literal(nheight)}),
-                                          literal(w*nheight)}))});
+                    auto idx = add({
+                                    offset_lds,
+                                    group(add({
+                                                            multiply({group(divide({thread, literal(nheight)})), literal(width*nheight)}),
+                                                            mod({thread, literal(nheight)}),
+                                                            literal(w*nheight)}))});
                     // clang-format on
-                    store[subpass]->body.push_back(assign(X[idx], R[subpass*width+w]));
+                    store[subpass]->body.push_back(assign(X[idx], R[subpass * width + w]));
                 }
             }
             else
@@ -240,23 +234,23 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
                 for(int w = 0; w < width; ++w)
                 {
                     // clang-format off
-                auto idx = add({
-                               offset_out,
-                               multiply({
-                                        group(add({
-                                                  thread,
-                                                  literal((length / width) * w)
-                                    })),
-                              literal(1)//stride_out
-                            })});
+                    auto idx = add({
+                                    offset_out,
+                                    multiply({
+                                                    group(add({
+                                                                            thread,
+                                                                            literal((length / width) * w)
+                                                                    })),
+                                                    literal(1)//stride_out
+                                            })});
                     // clang-format on
-                    store[subpass]->body.push_back(assign(Z[idx], R[subpass*width+w]));
+                    store[subpass]->body.push_back(assign(Z[idx], R[subpass * width + w]));
                 }
             }
         }
 
-        if (pass > 0)
-                    fft->body.push_back(sync_threads());
+        if(pass > 0)
+            fft->body.push_back(sync_threads());
         fft->body.push_back(load[0]);
         fft->body.push_back(load[1]);
         fft->body.push_back(butterfly[0]);
@@ -290,10 +284,7 @@ std::shared_ptr<Function> make_global_fft(std::vector<int> factors)
 
     auto params = get_launch_params(factors);
 
-    auto lds = array(
-        "lds",
-        "__shared__ scalar_type",
-        literal(params.batch_per_block * length + 48)); // XXX: need to pad for bogus threads...
+    auto lds = array("lds", "__shared__ scalar_type", literal(params.batches_per_block * length));
     fft->body.push_back(lds->declaration());
     fft->body.push_back(line_break());
 
@@ -304,26 +295,19 @@ std::shared_ptr<Function> make_global_fft(std::vector<int> factors)
     auto offset_lds = variable("offset_lds", "int");
     auto batch      = variable("batch", "int");
 
-    //    fft->body.push_back(thread->declaration());
     fft->body.push_back(batch->declaration());
     fft->body.push_back(offset_in->declaration());
     fft->body.push_back(offset_out->declaration());
     fft->body.push_back(offset_lds->declaration());
 
-    // XXX factors[0] might not be right...
-    // auto thread_early_exit
-    //     = if_block(greater_equal(thread_id, literal(length / factors[0] * params.batch_per_block)));
-    // thread_early_exit->body.push_back(return_statement());
-    // fft->body.push_back(thread_early_exit);
-
     fft->body.push_back(assign(batch,
-                               add({multiply({block_id, literal(params.batch_per_block)}),
+                               add({multiply({block_id, literal(params.batches_per_block)}),
                                     divide({thread_id, literal(length / factors[0])})})));
     fft->body.push_back(assign(offset_in, multiply({literal(length), batch})));
     fft->body.push_back(assign(offset_out, multiply({literal(length), batch})));
-    fft->body.push_back(
-        assign(offset_lds,
-               multiply({literal(length), group(mod({batch, literal(params.batch_per_block)}))})));
+    fft->body.push_back(assign(
+        offset_lds,
+        multiply({literal(length), group(mod({batch, literal(params.batches_per_block)}))})));
 
     auto batch_early_exit = if_block(greater_equal(batch, nbatch));
     batch_early_exit->body.push_back(return_statement());
@@ -373,22 +357,13 @@ std::shared_ptr<Function> make_host_fft(std::vector<int> factors)
 
     auto params = get_launch_params(factors);
 
-    // if(params.thread_per_batch <= 32)
-    // {
     auto nblocks = variable("nblocks", "int");
     fft->body.push_back(nblocks->declaration());
     fft->body.push_back(assign(nblocks,
-                               divide({group(add({nbatch, literal(params.batch_per_block - 1)})),
-                                       literal(params.batch_per_block)})));
+                               divide({group(add({nbatch, literal(params.batches_per_block - 1)})),
+                                       literal(params.batches_per_block)})));
     global->kernel_arguments.push_back(nblocks);
-    global->kernel_arguments.push_back(
-        literal(params.thread_per_batch)); // XXX rename thread_per_batch...
-    // }
-    // else
-    // {
-    //     global->kernel_arguments.push_back(nbatch);
-    //     global->kernel_arguments.push_back(literal(params.thread_per_batch));
-    // }
+    global->kernel_arguments.push_back(literal(params.threads_per_block));
     fft->body.push_back(global);
 
     return fft;
