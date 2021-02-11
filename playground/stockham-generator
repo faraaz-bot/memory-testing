@@ -264,7 +264,11 @@ def get_launch_params(factors, bytes_per_element=16, lds_byte_limit=32*1024):
     bytes_per_batch = length * bytes_per_element
     max_factor = max(factors)
 
+    # do as many batches-per-block as we can without going over 32KiB
+    # per block; also don't go beyond 256 threads-per-block
     bpb = lds_byte_limit // bytes_per_batch
+    while (length // max_factor) * bpb > 64:
+        bpb -= 1
     return LaunchParams(bpb, (length // max_factor) * bpb)
 
 
