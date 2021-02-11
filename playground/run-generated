@@ -14,12 +14,8 @@ def generate_and_run(factors, nbatch, manual):
 
     length = reduce(lambda x, y: x*y, factors)
 
-    # build the generator
+    # run the generator
     if not manual:
-        cmd = [ 'hipcc', '-std=c++17', '-o', 'stockham-generator', 'stockham-generator.cpp', 'generator.cpp' ]
-        print('COMPILING:', ' '.join(cmd))
-        subprocess.run(cmd, check=True)
-
         # run the generator
         cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
         print('GENERATING:', ' '.join(cmd))
