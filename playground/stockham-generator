@@ -301,10 +301,10 @@ def stockham_device(factors):
     def load_lds():
         stmts = ASTList()
         stmts += Assign(thread, thread_id % width0 + nsubpass * width0)
-        stmts += line_break
         for w in range(width):
             idx = offset_lds + thread + length//width * w
             stmts += Assign(R[nsubpass*width+w], X[idx])
+        stmts += line_break
         return stmts
 
     def twiddle():
@@ -317,6 +317,7 @@ def stockham_device(factors):
             stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y)
             stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y)
             stmts += Assign(R[ridx], t)
+            stmts += line_break
         return stmts
 
     def butterfly():
@@ -325,17 +326,17 @@ def stockham_device(factors):
     def store_lds():
         stmts = ASTList()
         stmts += Assign(thread, thread_id % width0 + nsubpass * width0)
-        stmts += line_break
         for w in range(width):
             idx = offset_lds + B(thread / nheight) * (width * nheight) + thread % nheight + w * nheight
             stmts += Assign(X[idx], R[nsubpass*width+w])
+        stmts += line_break
         return stmts
 
 
     def add_work(generator):
-        if nsubpass == 0:
+        if nsubpass < height - 1:
             return generator()
-        needs_work = thread_id % width0 + width0 < length // width
+        needs_work = thread_id % width0 + nsubpass * width0 < length // width
         return If(needs_work, generator())
 
 
@@ -353,20 +354,21 @@ def stockham_device(factors):
         nheight = product(factors[:npass])
         body += sync_threads
 
-        for nsubpass in range(2):
+        height = max(2, width0 // width)
+
+        for nsubpass in range(height):
             body += add_work(load_lds)
-            body += line_break
-
-            # butterfly
-            if npass > 0:
+        if npass > 0:
+            for nsubpass in range(height):
                 body += add_work(twiddle)
+        body += line_break
+        for nsubpass in range(height):
             body += add_work(butterfly)
-            body += line_break
-
-        # store lds
-        for nsubpass in range(2):
+        body += line_break
+        for nsubpass in range(height):
             body += add_work(store_lds)
-            body += line_break
+
+        body += line_break
 
 
     # store global
