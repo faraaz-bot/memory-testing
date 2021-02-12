@@ -4,7 +4,10 @@ import functools
 import sys
 
 from collections import namedtuple
+from math import ceil
+
 from generator import *
+
 
 #
 # Stockham FFTs!
@@ -35,29 +38,31 @@ def get_launch_params(factors, bytes_per_element=16, lds_byte_limit=32*1024):
 def stockham_device(factors):
     length = product(factors)
 
+    # arguments
     scalar_type = Variable('scalar_type', 'typename')
-    stride_in = Variable('stride_in', 'int')
-    stride_out = Variable('stride_out', 'int')
-    offset_in = Variable('offset_in', 'int')
-    offset_out = Variable('offset_out', 'int')
-    offset_lds = Variable('offset_lds', 'int')
-    thread = Variable('thread', 'int')
-    thread_id = Variable('threadIdx.x', 'int')
+    Z           = Variable('inout', 'scalar_type', array=True)
+    X           = Variable('lds', 'scalar_type', array=True)
+    T           = Variable('twiddles', 'const scalar_type', array=True)
+    stride_in   = Variable('stride_in', 'int')
+    stride_out  = Variable('stride_out', 'int')
+    offset_in   = Variable('offset_in', 'int')
+    offset_out  = Variable('offset_out', 'int')
+    offset_lds  = Variable('offset_lds', 'int')
 
-    W = Variable('W', 'scalar_type')
-    t = Variable('t', 'scalar_type')
-    R = Variable('R', 'scalar_type', 2*max(factors))
-    X = Variable('lds', 'scalar_type', array=True)
-    Z = Variable('inout', 'scalar_type', array=True)
-    T = Variable('twiddles', 'const scalar_type', array=True)
+    # locals
+    thread    = Variable('thread', 'int')
+    thread_id = Variable('threadIdx.x', 'int')
+    W         = Variable('W', 'scalar_type')
+    t         = Variable('t', 'scalar_type')
+    R         = Variable('R', 'scalar_type', 2*max(factors))
 
     width0 = length // factors[0]
 
     def load_global():
         stmts = [ Assign(thread, thread_id % width0),
                   line_break ]
-        for b in range(length // width):
-            idx = thread + b * width
+        for b in range(length // width0):
+            idx = thread + b * width0
             stmts += [ Assign(X[offset_lds + idx], Z[offset_in + idx]) ]
         return stmts
 
@@ -83,7 +88,8 @@ def stockham_device(factors):
         return stmts
 
     def butterfly():
-        return [ Call(f'FwdRad{width}B1', arguments=ArgumentList(*[R[nsubpass*width+w].address() for w in range(width)])) ]
+        return [ Call(name = f'FwdRad{width}B1',
+                      arguments = ArgumentList(*[R[nsubpass*width+w].address() for w in range(width)])) ]
 
     def store_lds():
         stmts = [ Assign(thread, thread_id % width0 + nsubpass * width0),
@@ -96,7 +102,7 @@ def stockham_device(factors):
 
 
     def add_work(generator):
-        if nsubpass < height - 1:
+        if height == 1 or nsubpass < height - 1:
             return generator()
         needs_work = thread_id % width0 + nsubpass * width0 < length // width
         return If(needs_work, generator())
@@ -110,14 +116,13 @@ def stockham_device(factors):
     body += line_break
 
     #
-    # tranform
+    # transform
     #
     for npass, width in enumerate(factors):
         nheight = product(factors[:npass])
         body += sync_threads
 
-        #height = max(2, width0 // width)
-        height = 2
+        height = ceil(factors[0] / factors[npass])
 
         for nsubpass in range(height):
             body += add_work(load_lds)
@@ -151,7 +156,9 @@ def stockham_device(factors):
 
 def stockham_global(factors):
     length = product(factors)
+    params = get_launch_params(factors)
 
+    # arguments
     scalar_type = Variable('scalar_type', 'typename')
     inout       = Variable('inout', 'scalar_type', array=True)
     twiddles    = Variable('twiddles', 'const scalar_type', array=True)
@@ -159,12 +166,8 @@ def stockham_global(factors):
     stride_out  = Variable('stride_out', 'int')
     nbatch      = Variable('nbatch', 'int')
 
-
-    body = StatementList()
-
-    params = get_launch_params(factors)
-
-    lds = Variable('lds', '__shared__ scalar_type', size=length * params.batches_per_block)
+    # locals
+    lds        = Variable('lds', '__shared__ scalar_type', size=length * params.batches_per_block)
     block_id   = Variable('blockIdx.x')
     thread_id  = Variable('threadIdx.x')
     offset_in  = Variable('offset_in', 'int')
@@ -172,14 +175,13 @@ def stockham_global(factors):
     offset_lds = Variable('offset_lds', 'int')
     batch      = Variable('batch', 'int')
 
+    body = StatementList()
     body += declarations([ lds, offset_in, offset_out, offset_lds, batch ])
     body += Assign(batch, block_id * params.batches_per_block + thread_id / (length // factors[0]));
     body += Assign(offset_in, length * batch)
     body += Assign(offset_out, length * batch)
     body += Assign(offset_lds, length * B(batch % params.batches_per_block))
-
     body += If(GreaterEqual(batch, nbatch), [ return_statement ])
-
     body += Call(f'forward_length{length}_device',
                  arguments = ArgumentList(inout, lds, twiddles, stride_in, stride_out, offset_in, offset_out, offset_lds),
                  templates = TemplateList(scalar_type))
@@ -188,13 +190,14 @@ def stockham_global(factors):
                     qualifier = '__global__',
                     templates = TemplateList(scalar_type),
                     arguments = ArgumentList(inout, nbatch, twiddles, stride_in, stride_out),
-                    body = body
-                   )
+                    body = body)
 
 
 def stockham_launch(factors):
     length = product(factors)
+    params = get_launch_params(factors)
 
+    # arguments
     scalar_type = Variable('scalar_type', 'typename')
     inout       = Variable('inout', 'scalar_type', array=True)
     twiddles    = Variable('twiddles', 'const scalar_type', array=True)
@@ -202,24 +205,21 @@ def stockham_launch(factors):
     stride_out  = Variable('stride_out', 'int')
     nbatch      = Variable('nbatch', 'int')
 
+    # locals
     nblocks = Variable('nblocks', 'int')
-
-    params = get_launch_params(factors)
 
     body = StatementList()
     body += declarations([ nblocks ])
     body += Assign(nblocks, B(nbatch + (params.batches_per_block - 1)) / params.batches_per_block)
-
     body += Call(f'forward_length{length}',
                  arguments = ArgumentList(inout, nbatch, twiddles, stride_in, stride_out),
                  templates = TemplateList(scalar_type),
                  launch_params = ArgumentList(nblocks, params.threads_per_block))
 
-    return Function(f'forward_length{length}_launch',
+    return Function(name = f'forward_length{length}_launch',
                     templates = TemplateList(scalar_type),
                     arguments = ArgumentList(inout,  nbatch, twiddles, stride_in, stride_out),
-                    body = body
-                    )
+                    body = body)
 
 
 def make_planar(kernel, varname):
