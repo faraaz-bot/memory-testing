@@ -22,20 +22,20 @@ def product(factors):
     return 1
 
 
-def get_launch_params(factors, bytes_per_element=16, lds_byte_limit=32*1024):
+def get_launch_params(factors, bytes_per_element=16, lds_byte_limit=32*1024, threads_per_block=256):
     length = product(factors)
     bytes_per_batch = length * bytes_per_element
     max_factor = max(factors)
 
     # do as many batches-per-block as we can without going over 32KiB
-    # per block; also don't go beyond 256 threads-per-block
+    # per block; also don't go beyond threads-per-block
     bpb = lds_byte_limit // bytes_per_batch
-    while (length // max_factor) * bpb > 64:
+    while (length // max_factor) * bpb > threads_per_block:
         bpb -= 1
     return LaunchParams(bpb, (length // max_factor) * bpb)
 
 
-def stockham_device(factors):
+def stockham_device(factors, **kwargs):
     length = product(factors)
 
     # arguments
@@ -154,9 +154,9 @@ def stockham_device(factors):
                    qualifier = '__device__')
 
 
-def stockham_global(factors):
+def stockham_global(factors, **kwargs):
     length = product(factors)
-    params = get_launch_params(factors)
+    params = get_launch_params(factors, **kwargs)
 
     # arguments
     scalar_type = Variable('scalar_type', 'typename')
@@ -193,9 +193,9 @@ def stockham_global(factors):
                     body = body)
 
 
-def stockham_launch(factors):
+def stockham_launch(factors, **kwargs):
     length = product(factors)
-    params = get_launch_params(factors)
+    params = get_launch_params(factors, **kwargs)
 
     # arguments
     scalar_type = Variable('scalar_type', 'typename')
@@ -300,8 +300,8 @@ def make_planar(kernel, varname):
     return depth_first(kernel, visitor)
 
 
-def generate(factors):
-    kernels = [ g(factors) for g in
+def generate(factors, **kwargs):
+    kernels = [ g(factors, **kwargs) for g in
                 [stockham_device, stockham_global, stockham_launch] ]
 
     # planar_kernels = [ make_planar(kernel, 'inout') for kernel in kernels ]
@@ -311,5 +311,18 @@ def generate(factors):
 
 
 if __name__ == '__main__':
-    factors = [ int(x) for x in sys.argv[1:] ]
-    generate(factors)
+    factors = []
+    kwargs = {}
+    for x in sys.argv[1:]:
+        try:
+            i = int(x)
+            factors.append(i)
+        except:
+            pass
+        try:
+            key, value = x.split('=')
+            kwargs[key] = int(value)
+        except:
+            pass
+
+    generate(factors, **kwargs)
