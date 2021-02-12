@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import *
 import sys
@@ -12,21 +13,20 @@ from pathlib import Path as path
 # Helpers
 #
 
-def join(sep, args):
-    return sep.join([ str(x) for x in args ])
+def join(sep, n):
+    if isinstance(n, BaseNode):
+        return sep.join([ str(x) for x in n.args ])
+    return sep.join([ str(x) for x in n ])
+
 
 def declarations(xs):
     return [ x.declaration() for x in xs ]
 
-def arguments(xs):
-    return [ x.argument() for x in xs ]
-
-def render(stmts : List[Any]) -> str:
-    return '\n'.join([ str(s) for s in stmts ] + [''])
 
 def format(code):
-    p = subprocess.run(['clang-format-10', '-style=file'], stdout=subprocess.PIPE, input=code, encoding='ascii', check=True)
+    p = subprocess.run(['clang-format-10', '-style=file'], stdout=subprocess.PIPE, input=str(code), encoding='ascii', check=True)
     return p.stdout
+
 
 def format_and_write(fname, code):
     code = format(code)
@@ -38,23 +38,50 @@ def format_and_write(fname, code):
     f.write_text(code)
 
 
+def walk(x):
+    if isinstance(x, BaseNode):
+        yield x
+        for a in x.args:
+            if isinstance(a, BaseNode):
+                yield from a
+            else:
+                yield a
+
+
 #
 # Code generator classes
 #
 
-class BaseOperators:
+class BaseNode:
+    args: List[Any]
+    kwargs = None
+    sep: str = None
+    def __init__(self, *args, **kwargs):
+        self.args = list(args)
+        self.kwargs = kwargs
+        if hasattr(self, '__post_init__'):
+            getattr(self, '__post_init__')(self)
+    def __str__(self):
+        if self.sep is not None:
+            return self.sep.join([str(x) for x in self.args])
+        return str(self.args[0])
+    def __iter__(self):
+        return walk(self)
+
+
+class BaseNodeOps(BaseNode):
     def __add__(self, a):
-        return Add([self, a])
+        return Add(self, a)
     def __radd__(self, a):
-        return Add([a, self])
+        return Add(a, self)
     def __sub__(self, a):
-        return Sub([self, a])
+        return Sub(self, a)
     def __rsub__(self, a):
-        return Sub([a, self])
+        return Sub(a, self)
     def __mul__(self, a):
-        return Multiply([self, a])
+        return Multiply(self, a)
     def __rmul__(self, a):
-        return Multiply([a, self])
+        return Multiply(a, self)
     def __mod__(self, a):
         return Mod(self, a)
     def __rmod__(self, a):
@@ -69,181 +96,235 @@ class BaseOperators:
         return Less(self, a)
 
 
-@dataclass
-class Variable(BaseOperators):
-    '''Variable.'''
-    name: Any
-    type: Any = None
+class StatementList(BaseNode):
+    def __add__(self, lst):
+        if isinstance(lst, list):
+            self.args.extend(lst)
+        elif isinstance(lst, StatementList):
+            self.args.extend(lst.statements)
+        else:
+            self.args.append(lst)
+        return self
+
+
+class ArgumentList(BaseNode):
+    def __str__(self):
+        args = []
+        for x in self.args:
+            if isinstance(x, Variable):
+                args.append(x.argument())
+            else:
+                args.append(str(x))
+        return ', '.join(args)
+
+
+class TemplateList(ArgumentList):
+    pass
+
+
+class String(BaseNode):
+    pass
+
+
+class Declaration(String):
+    pass
+
+
+class Address(BaseNode):
+    def __str__(self):
+        return '&' + self.args[0]
+
+
+def make_binary(separator):
+    def decorator(target):
+        target.sep = separator
+        return target
+    return decorator
+
+
+@make_binary('.')
+class Component(BaseNodeOps):
+    pass
+
+@make_binary(' + ')
+class Add(BaseNodeOps):
+    pass
+
+@make_binary(' - ')
+class Sub(BaseNodeOps):
+    pass
+
+@make_binary(' / ')
+class Divide(BaseNodeOps):
+    pass
+
+@make_binary(' * ')
+class Multiply(BaseNodeOps):
+    pass
+
+class Assign(BaseNode):
+    def __str__(self):
+        return str(self.args[0]) + ' = ' + str(self.args[1]) + ';'
+
+@make_binary(' % ')
+class Mod(BaseNodeOps):
+    pass
+
+@make_binary(' >= ')
+class GreaterEqual(BaseNodeOps):
+    pass
+
+@make_binary(' < ')
+class Less(BaseNodeOps):
+    pass
+
+class ArrayElement(BaseNodeOps):
+    @property
+    def variable(self):
+        return self.args[0]
+    @property
+    def index(self):
+        return self.args[1]
+
     def __str__(self) -> str:
-        return str(self.name)
+        return str(self.variable) + '[' + str(self.index) + ']'
+
+    def address(self):
+        return Address(str(self))
+
     @property
     def x(self):
-        return Variable(self.name + '.x')
+        return Component(str(self), 'x')
     @property
     def y(self):
-        return Variable(self.name + '.y')
+        return Component(str(self), 'y')
+
+
+class Variable(BaseNodeOps):
+    '''Variable.'''
+    @property
+    def name(self):
+        return self.args[0]
+    @property
+    def type(self):
+        return self.args[1]
+    @property
+    def size(self):
+        return self.args[2]
+    @property
+    def array(self):
+        return self.args[3]
+    def __str__(self) -> str:
+        return str(self.name)
+    def __init__(self, name: str, type=None, size=None, array=False):
+        self.args = [ name, type, size, array ]
+
+    @property
+    def x(self):
+        return Component(self.name, 'x')
+    @property
+    def y(self):
+        return Component(self.name, 'y')
     def address(self):
-        return Variable('&' + self.name)
+        return Address(self.name)
     def declaration(self):
-        return f'{self.type} {self.name};'
+        if self.size is not None:
+            return Declaration(f'{self.type} {self.name}[{self.size}];')
+        return Declaration(f'{self.type} {self.name};')
     def argument(self):
+        if self.array:
+            return f'{self.type} *{self.name}'
         return f'{self.type} {self.name}'
-
-
-@dataclass
-class Array:
-    name: str
-    type: Any
-    size: Any = None
     def __getitem__(self, idx):
-        return Variable(self.name + '[' + str(idx) + ']')
-    def declaration(self):
-        return f'{self.type} {self.name}[{self.size}];'
-    def argument(self):
-        return f'{self.type} *{self.name}'
+        return ArrayElement(self.name, idx)
+
+
+class Group(BaseNodeOps):
     def __str__(self):
-        return self.name
-
-
-@dataclass
-class Assign:
-    '''Assignment (=) operator; lhs is normally a Variable.'''
-    lhs: Any
-    rhs: Any
-    def __str__(self) -> str:
-        return str(self.lhs) + ' = ' + str(self.rhs) + ';'
-
-
-@dataclass
-class Add(BaseOperators):
-    '''Add operator.'''
-    args: List[Any]
-    def __str__(self) -> str:
-        return join(' + ', self.args)
-
-@dataclass
-class Sub(BaseOperators):
-    '''Sub operator.'''
-    args: List[Any]
-    def __str__(self) -> str:
-        return join(' - ', self.args)
-
-
-@dataclass
-class Group(BaseOperators):
-    '''Add operator.'''
-    x: Any
-    def __str__(self) -> str:
-        return '(' + str(self.x) + ')'
+        return '(' + str(self.args[0]) + ')'
 
 B = Group
 
-@dataclass
-class Multiply(BaseOperators):
-    '''Multiply operator (list of operands).'''
-    args: List[Any]
-    def __str__(self) -> str:
-        return join(' * ', self.args)
-
-@dataclass
-class Divide(BaseOperators):
-    '''Divide (bindary) operator.'''
-    lhs: Any
-    rhs: Any
-    def __str__(self) -> str:
-        return str(self.lhs) + ' / ' + str(self.rhs)
-
-@dataclass
-class Mod(BaseOperators):
-    '''Mod (bindary) operator.'''
-    lhs: Any
-    rhs: Any
-    def __str__(self) -> str:
-        return str(self.lhs) + ' % ' + str(self.rhs)
-
-@dataclass
-class GreaterEqual(BaseOperators):
-    lhs: Any
-    rhs: Any
-    def __str__(self) -> str:
-        return str(self.lhs) + ' >= ' + str(self.rhs)
-
-@dataclass
-class Less(BaseOperators):
-    lhs: Any
-    rhs: Any
-    def __str__(self) -> str:
-        return str(self.lhs) + ' < ' + str(self.rhs)
-
-@dataclass
-class If:
-    condition: Any
-    body: List[Any] = field(default_factory = lambda: [])
+class If(BaseNode):
+    @property
+    def condition(self):
+        return self.args[0]
+    @property
+    def body(self):
+        return self.args[1]
     def __str__(self) -> str:
         f = 'if( ' + str(self.condition) + ')'
         f += '{' + join('\n', self.body) + '}'
         return f
 
-@dataclass
-class Function:
-    name: str
-    arguments: List[Any] = field(default_factory=lambda: [])
-    templates: List[Any] = field(default_factory=lambda: [])
-    body: List[Any] = field(default_factory=lambda: [])
-    qualifier: str = ''
+class Function(BaseNode):
+    @property
+    def name(self):
+        return self.args[0]
+    @property
+    def arguments(self):
+        return self.args[1]
+    @property
+    def templates(self):
+        return self.args[2]
+    @property
+    def qualifier(self):
+        return self.args[3]
+    @property
+    def body(self):
+        return self.args[4]
+
+    def __init__(self, name: str, arguments=None, templates=None, body=None, qualifier=None):
+        self.args = [ name, arguments, templates, qualifier, body ]
+
     def __str__(self) -> str:
         f = ''
         if self.templates:
-            f += 'template<' + join(', ', arguments(self.templates)) + '>'
-        if self.qualifier:
+            f += 'template<' + str(self.templates) + '>'
+        if self.qualifier is not None:
             f += self.qualifier + ' '
         f += ' void ' + self.name
-        f += '(' + join(', ', arguments(self.arguments)) + ')'
+        f += '(' + str(self.arguments) + ')'
         f += '{' + join('\n', self.body) + '}'
         return f
 
 
-@dataclass
-class Call:
-    name: str
-    arguments: List[Any]
-    templates: List[Any] = field(default_factory=lambda: [])
-    launch_params: List[Any] = field(default_factory=lambda: [])
+class Call(BaseNode):
+    @property
+    def name(self):
+        return self.args[0]
+    @property
+    def arguments(self):
+        return self.args[1]
+    @property
+    def templates(self):
+        return self.args[2]
+    @property
+    def launch_params(self):
+        return self.args[3]
+
+    def __init__(self, name: str, arguments=None, templates=None, launch_params=None):
+        self.args = [ name, arguments, templates, launch_params ]
+
     def __str__(self) -> str:
         f = self.name
         if self.templates:
             f += '<' + join(', ', self.templates) + '>'
         if self.launch_params:
-            f += '<<<' + join(', ', self.launch_params) + '>>>'
+            f += '<<<' + join(',  ', self.launch_params) + '>>>'
         f += '(' + join(', ', self.arguments) + ');'
         return f
 
+# class Define:
+#     '''CPP definition.'''
+#     lhs: str
+#     rhs: str
+#     def __str__(self) -> str:
+#         return f'#define {str(self.lhs)} {str(self.rhs)}'
 
-@dataclass
-class Define:
-    '''CPP definition.'''
-    lhs: str
-    rhs: str
-    def __str__(self) -> str:
-        return f'#define {str(self.lhs)} {str(self.rhs)}'
-
-@dataclass
-class ASTList:
-    statements: List[Any] = field(default_factory=lambda: [])
-    def __add__(self, lst):
-        if isinstance(lst, list):
-            self.statements.extend(lst)
-        elif isinstance(lst, ASTList):
-            self.statements.extend(lst.statements)
-        else:
-            self.statements.append(lst)
-        return self
-    def __iter__(self):
-        return iter(self.statements)
-
-return_statement = "return;"
-line_break = "\n\n"
-sync_threads = "__syncthreads();"
+return_statement = String("return;")
+line_break = String("\n\n")
+sync_threads = String("__syncthreads();")
 
 #
 # Stockham FFTs!
@@ -286,54 +367,52 @@ def stockham_device(factors):
 
     W = Variable('W', 'scalar_type')
     t = Variable('t', 'scalar_type')
-    R = Array('R', 'scalar_type', 2*max(factors))
-    X = Array('lds', 'scalar_type')
-    Z = Array('inout', 'scalar_type')
-    T = Array('twiddles', 'const scalar_type')
+    R = Variable('R', 'scalar_type', 2*max(factors))
+    X = Variable('lds', 'scalar_type', array=True)
+    Z = Variable('inout', 'scalar_type', array=True)
+    T = Variable('twiddles', 'const scalar_type', array=True)
 
     width0 = length // factors[0]
 
     def load_global():
-        stmts = ASTList()
-        stmts += Assign(thread, thread_id % width0)
-        stmts += line_break
+        stmts = [ Assign(thread, thread_id % width0),
+                  line_break ]
         for b in range(length // width):
             idx = thread + b * width
-            stmts += Assign(X[offset_lds + idx], Z[offset_in + idx])
+            stmts += [ Assign(X[offset_lds + idx], Z[offset_in + idx]) ]
         return stmts
 
     def load_lds():
-        stmts = ASTList()
-        stmts += Assign(thread, thread_id % width0 + nsubpass * width0)
+        stmts = [ Assign(thread, thread_id % width0 + nsubpass * width0),
+                  line_break ]
         for w in range(width):
             idx = offset_lds + thread + length//width * w
-            stmts += Assign(R[nsubpass*width+w], X[idx])
-        stmts += line_break
+            stmts += [ Assign(R[nsubpass*width+w], X[idx]) ]
         return stmts
 
     def twiddle():
-        stmts = ASTList()
-        stmts += Assign(thread, thread_id % width0 + nsubpass * width0)
+        stmts = [ Assign(thread, thread_id % width0 + nsubpass * width0),
+                  line_break ]
         for w in range(1, width):
             tidx = nheight - 1 + w - 1 + (width - 1) * B(thread % nheight)
             ridx = nsubpass*width + w
-            stmts += Assign(W, T[tidx])
-            stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y)
-            stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y)
-            stmts += Assign(R[ridx], t)
-            stmts += line_break
+            stmts += [ Assign(W, T[tidx]),
+                       Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y),
+                       Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y),
+                       Assign(R[ridx], t),
+                       line_break ]
         return stmts
 
     def butterfly():
-        return [ Call(f'FwdRad{width}B1', [ R[nsubpass*width+w].address() for w in range(width) ]) ]
+        return [ Call(f'FwdRad{width}B1', arguments=ArgumentList(*[R[nsubpass*width+w].address() for w in range(width)])) ]
 
     def store_lds():
-        stmts = ASTList()
-        stmts += Assign(thread, thread_id % width0 + nsubpass * width0)
+        stmts = [ Assign(thread, thread_id % width0 + nsubpass * width0),
+                  line_break ]
         for w in range(width):
             idx = offset_lds + B(thread / nheight) * (width * nheight) + thread % nheight + w * nheight
-            stmts += Assign(X[idx], R[nsubpass*width+w])
-        stmts += line_break
+            stmts += [ Assign(X[idx], R[nsubpass*width+w]) ]
+        stmts += [ line_break ]
         return stmts
 
 
@@ -346,7 +425,7 @@ def stockham_device(factors):
 
     width = length // factors[0]
 
-    body = ASTList()
+    body = StatementList()
     body += declarations([thread, R, W, t])
     body += load_global()
     body += line_break
@@ -358,7 +437,8 @@ def stockham_device(factors):
         nheight = product(factors[:npass])
         body += sync_threads
 
-        height = max(2, width0 // width)
+        #height = max(2, width0 // width)
+        height = 2
 
         for nsubpass in range(height):
             body += add_work(load_lds)
@@ -383,9 +463,9 @@ def stockham_device(factors):
         idx = thread + length//width * w
         body += Assign(Z[offset_out + idx], X[offset_lds + idx])
 
-    yield Function(f'forward_length{length}_device',
-                   arguments = [Z, X, T, stride_in, stride_out, offset_in, offset_out, offset_lds],
-                   templates = [scalar_type],
+    return Function(f'forward_length{length}_device',
+                   arguments = ArgumentList(Z, X, T, stride_in, stride_out, offset_in, offset_out, offset_lds),
+                   templates = TemplateList(scalar_type),
                    body = body,
                    qualifier = '__device__')
 
@@ -394,18 +474,18 @@ def stockham_global(factors):
     length = product(factors)
 
     scalar_type = Variable('scalar_type', 'typename')
-    inout       = Array('inout', 'scalar_type')
-    twiddles    = Array('twiddles', 'const scalar_type')
+    inout       = Variable('inout', 'scalar_type', array=True)
+    twiddles    = Variable('twiddles', 'const scalar_type', array=True)
     stride_in   = Variable('stride_in', 'int')
     stride_out  = Variable('stride_out', 'int')
     nbatch      = Variable('nbatch', 'int')
 
 
-    body = ASTList()
+    body = StatementList()
 
     params = get_launch_params(factors)
 
-    lds = Array('lds', '__shared__ scalar_type', length * params.batches_per_block)
+    lds = Variable('lds', '__shared__ scalar_type', size=length * params.batches_per_block)
     block_id   = Variable('blockIdx.x')
     thread_id  = Variable('threadIdx.x')
     offset_in  = Variable('offset_in', 'int')
@@ -422,23 +502,23 @@ def stockham_global(factors):
     body += If(GreaterEqual(batch, nbatch), [ return_statement ])
 
     body += Call(f'forward_length{length}_device',
-                 [ inout, lds, twiddles, stride_in, stride_out, offset_in, offset_out, offset_lds],
-                 [ scalar_type ])
+                 arguments = ArgumentList(inout, lds, twiddles, stride_in, stride_out, offset_in, offset_out, offset_lds),
+                 templates = TemplateList(scalar_type))
 
-    fft = Function(f'forward_length{length}',
-                   qualifier = '__global__',
-                   templates = [ scalar_type ],
-                   arguments = [ inout, nbatch, twiddles, stride_in, stride_out ],
-                   body = body
+    return Function(name = f'forward_length{length}',
+                    qualifier = '__global__',
+                    templates = TemplateList(scalar_type),
+                    arguments = ArgumentList(inout, nbatch, twiddles, stride_in, stride_out),
+                    body = body
                    )
-    yield fft
+
 
 def stockham_launch(factors):
     length = product(factors)
 
     scalar_type = Variable('scalar_type', 'typename')
-    inout       = Array('inout', 'scalar_type')
-    twiddles    = Array('twiddles', 'const scalar_type')
+    inout       = Variable('inout', 'scalar_type', array=True)
+    twiddles    = Variable('twiddles', 'const scalar_type', array=True)
     stride_in   = Variable('stride_in', 'int')
     stride_out  = Variable('stride_out', 'int')
     nbatch      = Variable('nbatch', 'int')
@@ -447,27 +527,37 @@ def stockham_launch(factors):
 
     params = get_launch_params(factors)
 
-    body = ASTList()
+    body = StatementList()
     body += declarations([ nblocks ])
     body += Assign(nblocks, B(nbatch + (params.batches_per_block - 1)) / params.batches_per_block)
 
     body += Call(f'forward_length{length}',
-                 [ inout, nbatch, twiddles, stride_in, stride_out ],
-                 [ scalar_type ],
-                 [ nblocks, params.threads_per_block ])
+                 arguments = ArgumentList(inout, nbatch, twiddles, stride_in, stride_out),
+                 templates = TemplateList(scalar_type),
+                 launch_params = ArgumentList(nblocks, params.threads_per_block))
 
-    fft = Function(f'forward_length{length}_launch',
-                   templates = [ scalar_type ],
-                   arguments = [ inout,  nbatch, twiddles, stride_in, stride_out ],
-                   body = body
-                   )
-    yield fft
+    return Function(f'forward_length{length}_launch',
+                    templates = TemplateList(scalar_type),
+                    arguments = ArgumentList(inout,  nbatch, twiddles, stride_in, stride_out),
+                    body = body
+                    )
+
+
+def make_planar(ast, interleaved, planar):
+    for e in ast:
+        if isinstance(e, Variable) or isinstance(e, ArrayElement):
+            if e.name == interleaved:
+                print("FOUND IT")
+
 
 
 def generate(factors):
-    kernels = [ render(generate(factors)) for generate in [stockham_device, stockham_global, stockham_launch] ]
-    format_and_write("stockham_generated_kernel.h", join("\n", kernels))
+    kernels = [ g(factors) for g in
+                [stockham_device, stockham_global, stockham_launch] ]
+    # make_planar(kernels[-1], "inout", None)
+    # print(format(kernels[0]))
 
+    format_and_write("stockham_generated_kernel.h", join("\n", [ str(x) for x in kernels ]))
 
 if __name__ == '__main__':
     factors = [ int(x) for x in sys.argv[1:] ]
