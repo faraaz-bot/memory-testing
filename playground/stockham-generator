@@ -47,6 +47,12 @@ def walk(x):
             else:
                 yield a
 
+def depth_first(x, f):
+    if isinstance(x, BaseNode):
+        y = type(x)()
+        y.args = [ depth_first(a, f) for a in x.args ]
+        return f(y)
+    return f(x)
 
 #
 # Code generator classes
@@ -216,7 +222,7 @@ class Variable(BaseNodeOps):
         return self.args[3]
     def __str__(self) -> str:
         return str(self.name)
-    def __init__(self, name: str, type=None, size=None, array=False):
+    def __init__(self, name=None, type=None, size=None, array=False):
         self.args = [ name, type, size, array ]
 
     @property
@@ -238,12 +244,21 @@ class Variable(BaseNodeOps):
     def __getitem__(self, idx):
         return ArrayElement(self.name, idx)
 
+class ComplexLiteral(BaseNodeOps):
+    def __str__(self):
+        return '{' + str(self.args[0]) + ', ' + str(self.args[1]) + '}'
+
 
 class Group(BaseNodeOps):
     def __str__(self):
         return '(' + str(self.args[0]) + ')'
 
 B = Group
+
+class Block(BaseNode):
+    def __str__(self):
+        return '{' + join('\n', self.args) + '}'
+
 
 class If(BaseNode):
     @property
@@ -274,7 +289,7 @@ class Function(BaseNode):
     def body(self):
         return self.args[4]
 
-    def __init__(self, name: str, arguments=None, templates=None, body=None, qualifier=None):
+    def __init__(self, name=None, arguments=None, templates=None, body=None, qualifier=None):
         self.args = [ name, arguments, templates, qualifier, body ]
 
     def __str__(self) -> str:
@@ -303,7 +318,7 @@ class Call(BaseNode):
     def launch_params(self):
         return self.args[3]
 
-    def __init__(self, name: str, arguments=None, templates=None, launch_params=None):
+    def __init__(self, name=None, arguments=None, templates=None, launch_params=None):
         self.args = [ name, arguments, templates, launch_params ]
 
     def __str__(self) -> str:
@@ -543,19 +558,49 @@ def stockham_launch(factors):
                     )
 
 
-def make_planar(ast, interleaved, planar):
-    for e in ast:
-        if isinstance(e, Variable) or isinstance(e, ArrayElement):
-            if e.name == interleaved:
-                print("FOUND IT")
+def make_inout_planar_visitor(x):
+    if isinstance(x, Assign):
+        lhs, rhs = x.args
 
+        # on rhs
+        if isinstance(rhs, ArrayElement):
+            name, index = rhs.args
+            if name == "inout":
+                return Assign(lhs,
+                              ComplexLiteral(ArrayElement("inoutRe", index),
+                                             ArrayElement("inoutIm", index)))
 
+        # on lhs
+        if isinstance(lhs, ArrayElement):
+            name, index = lhs.args
+            if name == "inout":
+                return Block(Assign(ArrayElement("inoutRe", index),
+                                    Component(rhs, 'x')),
+                             Assign(ArrayElement("inoutIm", index),
+                                    Component(rhs, 'y')))
+
+    if isinstance(x, ArgumentList):
+        args = []
+        for arg in x.args:
+            if isinstance(arg, Variable):
+                if arg.name == "inout":
+                    real_type = f'real_type_t<{arg.type}>'
+                    args.append(Variable("inoutRe", type=real_type, array=True))
+                    args.append(Variable("inoutIm", type=real_type, array=True))
+                else:
+                    args.append(arg)
+            else:
+                args.append(arg)
+        return ArgumentList(*args)
+
+    return x
 
 def generate(factors):
     kernels = [ g(factors) for g in
                 [stockham_device, stockham_global, stockham_launch] ]
-    # make_planar(kernels[-1], "inout", None)
-    # print(format(kernels[0]))
+
+    planar_kernels = [ depth_first(kernel, make_inout_planar_visitor) for kernel in kernels ]
+    print(format(planar_kernels[0]))
 
     format_and_write("stockham_generated_kernel.h", join("\n", [ str(x) for x in kernels ]))
 
