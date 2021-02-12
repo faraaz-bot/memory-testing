@@ -1,353 +1,23 @@
 #!/usr/bin/env python3
 
-import dataclasses
-from dataclasses import dataclass, field
-from typing import *
+import functools
 import sys
 
-import functools
-import subprocess
-from pathlib import Path as path
-
-#
-# Helpers
-#
-
-def join(sep, n):
-    if isinstance(n, BaseNode):
-        return sep.join([ str(x) for x in n.args ])
-    return sep.join([ str(x) for x in n ])
-
-
-def declarations(xs):
-    return [ x.declaration() for x in xs ]
-
-
-def format(code):
-    p = subprocess.run(['clang-format-10', '-style=file'], stdout=subprocess.PIPE, input=str(code), encoding='ascii', check=True)
-    return p.stdout
-
-
-def format_and_write(fname, code):
-    code = format(code)
-    f = path(fname)
-    if f.exists():
-        existing = f.read_text()
-        if existing == code:
-            return
-    f.write_text(code)
-
-
-def walk(x):
-    if isinstance(x, BaseNode):
-        yield x
-        for a in x.args:
-            if isinstance(a, BaseNode):
-                yield from a
-            else:
-                yield a
-
-def depth_first(x, f):
-    if isinstance(x, BaseNode):
-        y = type(x)()
-        y.args = [ depth_first(a, f) for a in x.args ]
-        return f(y)
-    return f(x)
-
-#
-# Code generator classes
-#
-
-class BaseNode:
-    args: List[Any]
-    kwargs = None
-    sep: str = None
-    def __init__(self, *args, **kwargs):
-        self.args = list(args)
-        self.kwargs = kwargs
-        if hasattr(self, '__post_init__'):
-            getattr(self, '__post_init__')(self)
-    def __str__(self):
-        if self.sep is not None:
-            return self.sep.join([str(x) for x in self.args])
-        return str(self.args[0])
-    def __iter__(self):
-        return walk(self)
-
-
-class BaseNodeOps(BaseNode):
-    def __add__(self, a):
-        return Add(self, a)
-    def __radd__(self, a):
-        return Add(a, self)
-    def __sub__(self, a):
-        return Sub(self, a)
-    def __rsub__(self, a):
-        return Sub(a, self)
-    def __mul__(self, a):
-        return Multiply(self, a)
-    def __rmul__(self, a):
-        return Multiply(a, self)
-    def __mod__(self, a):
-        return Mod(self, a)
-    def __rmod__(self, a):
-        return Mod(a, self)
-    def __truediv__(self, a):
-        return Divide(self, a)
-    def __rtruediv__(self, a):
-        return Divide(a, self)
-    def __ge__(self, a):
-        return GreaterEqual(self, a)
-    def __lt__(self, a):
-        return Less(self, a)
-
-
-class StatementList(BaseNode):
-    def __add__(self, lst):
-        if isinstance(lst, list):
-            self.args.extend(lst)
-        elif isinstance(lst, StatementList):
-            self.args.extend(lst.statements)
-        else:
-            self.args.append(lst)
-        return self
-
-
-class ArgumentList(BaseNode):
-    def __str__(self):
-        args = []
-        for x in self.args:
-            if isinstance(x, Variable):
-                args.append(x.argument())
-            else:
-                args.append(str(x))
-        return ', '.join(args)
-
-
-class TemplateList(ArgumentList):
-    pass
-
-
-class String(BaseNode):
-    pass
-
-
-class Declaration(String):
-    pass
-
-
-class Address(BaseNode):
-    def __str__(self):
-        return '&' + self.args[0]
-
-
-def make_binary(separator):
-    def decorator(target):
-        target.sep = separator
-        return target
-    return decorator
-
-
-@make_binary('.')
-class Component(BaseNodeOps):
-    pass
-
-@make_binary(' + ')
-class Add(BaseNodeOps):
-    pass
-
-@make_binary(' - ')
-class Sub(BaseNodeOps):
-    pass
-
-@make_binary(' / ')
-class Divide(BaseNodeOps):
-    pass
-
-@make_binary(' * ')
-class Multiply(BaseNodeOps):
-    pass
-
-class Assign(BaseNode):
-    def __str__(self):
-        return str(self.args[0]) + ' = ' + str(self.args[1]) + ';'
-
-@make_binary(' % ')
-class Mod(BaseNodeOps):
-    pass
-
-@make_binary(' >= ')
-class GreaterEqual(BaseNodeOps):
-    pass
-
-@make_binary(' < ')
-class Less(BaseNodeOps):
-    pass
-
-class ArrayElement(BaseNodeOps):
-    @property
-    def variable(self):
-        return self.args[0]
-    @property
-    def index(self):
-        return self.args[1]
-
-    def __str__(self) -> str:
-        return str(self.variable) + '[' + str(self.index) + ']'
-
-    def address(self):
-        return Address(str(self))
-
-    @property
-    def x(self):
-        return Component(str(self), 'x')
-    @property
-    def y(self):
-        return Component(str(self), 'y')
-
-
-class Variable(BaseNodeOps):
-    '''Variable.'''
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def type(self):
-        return self.args[1]
-    @property
-    def size(self):
-        return self.args[2]
-    @property
-    def array(self):
-        return self.args[3]
-    def __str__(self) -> str:
-        return str(self.name)
-    def __init__(self, name=None, type=None, size=None, array=False):
-        self.args = [ name, type, size, array ]
-
-    @property
-    def x(self):
-        return Component(self.name, 'x')
-    @property
-    def y(self):
-        return Component(self.name, 'y')
-    def address(self):
-        return Address(self.name)
-    def declaration(self):
-        if self.size is not None:
-            return Declaration(f'{self.type} {self.name}[{self.size}];')
-        return Declaration(f'{self.type} {self.name};')
-    def argument(self):
-        if self.array:
-            return f'{self.type} *{self.name}'
-        return f'{self.type} {self.name}'
-    def __getitem__(self, idx):
-        return ArrayElement(self.name, idx)
-
-class ComplexLiteral(BaseNodeOps):
-    def __str__(self):
-        return '{' + str(self.args[0]) + ', ' + str(self.args[1]) + '}'
-
-
-class Group(BaseNodeOps):
-    def __str__(self):
-        return '(' + str(self.args[0]) + ')'
-
-B = Group
-
-class Block(BaseNode):
-    def __str__(self):
-        return '{' + join('\n', self.args) + '}'
-
-
-class If(BaseNode):
-    @property
-    def condition(self):
-        return self.args[0]
-    @property
-    def body(self):
-        return self.args[1]
-    def __str__(self) -> str:
-        f = 'if( ' + str(self.condition) + ')'
-        f += '{' + join('\n', self.body) + '}'
-        return f
-
-class Function(BaseNode):
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def arguments(self):
-        return self.args[1]
-    @property
-    def templates(self):
-        return self.args[2]
-    @property
-    def qualifier(self):
-        return self.args[3]
-    @property
-    def body(self):
-        return self.args[4]
-
-    def __init__(self, name=None, arguments=None, templates=None, body=None, qualifier=None):
-        self.args = [ name, arguments, templates, qualifier, body ]
-
-    def __str__(self) -> str:
-        f = ''
-        if self.templates:
-            f += 'template<' + str(self.templates) + '>'
-        if self.qualifier is not None:
-            f += self.qualifier + ' '
-        f += ' void ' + self.name
-        f += '(' + str(self.arguments) + ')'
-        f += '{' + join('\n', self.body) + '}'
-        return f
-
-
-class Call(BaseNode):
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def arguments(self):
-        return self.args[1]
-    @property
-    def templates(self):
-        return self.args[2]
-    @property
-    def launch_params(self):
-        return self.args[3]
-
-    def __init__(self, name=None, arguments=None, templates=None, launch_params=None):
-        self.args = [ name, arguments, templates, launch_params ]
-
-    def __str__(self) -> str:
-        f = self.name
-        if self.templates:
-            f += '<' + join(', ', self.templates) + '>'
-        if self.launch_params:
-            f += '<<<' + join(',  ', self.launch_params) + '>>>'
-        f += '(' + join(', ', self.arguments) + ');'
-        return f
-
-
-return_statement = String("return;")
-line_break = String("\n\n")
-sync_threads = String("__syncthreads();")
+from collections import namedtuple
+from generator import *
 
 #
 # Stockham FFTs!
 #
+
+LaunchParams = namedtuple('LaunchParams', ['batches_per_block', 'threads_per_block'])
+
 
 def product(factors):
     if factors:
         return functools.reduce(lambda a, b: a*b, factors)
     return 1
 
-@dataclass
-class LaunchParams:
-    batches_per_block: int
-    threads_per_block: int
 
 def get_launch_params(factors, bytes_per_element=16, lds_byte_limit=32*1024):
     length = product(factors)
@@ -629,14 +299,16 @@ def make_planar(kernel, varname):
 
     return depth_first(kernel, visitor)
 
+
 def generate(factors):
     kernels = [ g(factors) for g in
                 [stockham_device, stockham_global, stockham_launch] ]
 
-    planar_kernels = [ make_planar(kernel, 'inout') for kernel in kernels ]
-    print(format(planar_kernels[0]))
+    # planar_kernels = [ make_planar(kernel, 'inout') for kernel in kernels ]
+    # print(format(planar_kernels[0]))
 
     format_and_write("stockham_generated_kernel.h", join("\n", [ str(x) for x in kernels ]))
+
 
 if __name__ == '__main__':
     factors = [ int(x) for x in sys.argv[1:] ]
