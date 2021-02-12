@@ -330,12 +330,6 @@ class Call(BaseNode):
         f += '(' + join(', ', self.arguments) + ');'
         return f
 
-# class Define:
-#     '''CPP definition.'''
-#     lhs: str
-#     rhs: str
-#     def __str__(self) -> str:
-#         return f'#define {str(self.lhs)} {str(self.rhs)}'
 
 return_statement = String("return;")
 line_break = String("\n\n")
@@ -558,48 +552,88 @@ def stockham_launch(factors):
                     )
 
 
-def make_inout_planar_visitor(x):
-    if isinstance(x, Assign):
-        lhs, rhs = x.args
+def make_planar(kernel, varname):
+    '''Rewrite 'kernel' to use planar i/o instead of interleaved i/o.
 
-        # on rhs
-        if isinstance(rhs, ArrayElement):
-            name, index = rhs.args
-            if name == "inout":
-                return Assign(lhs,
-                              ComplexLiteral(ArrayElement("inoutRe", index),
-                                             ArrayElement("inoutIm", index)))
+    The interleaved array 'varname' is replaced with planar arrays.
+    We assume that, in the body of the kernel, the i/o array is only
+    used in assignments (that is, typically loaded to and from LDS).
 
-        # on lhs
-        if isinstance(lhs, ArrayElement):
-            name, index = lhs.args
-            if name == "inout":
-                return Block(Assign(ArrayElement("inoutRe", index),
-                                    Component(rhs, 'x')),
-                             Assign(ArrayElement("inoutIm", index),
-                                    Component(rhs, 'y')))
+    For example, suppose we want to make the 'inout' array planar.
+    Assignments like
 
-    if isinstance(x, ArgumentList):
-        args = []
-        for arg in x.args:
-            if isinstance(arg, Variable):
-                if arg.name == "inout":
-                    real_type = f'real_type_t<{arg.type}>'
-                    args.append(Variable("inoutRe", type=real_type, array=True))
-                    args.append(Variable("inoutIm", type=real_type, array=True))
+       lds[idx] = inout[idx];
+
+    become
+
+       lds[idx] = { inoutre[idx], inoutim[idx] };
+
+    Assignments like
+
+       inout[idx] = lds[idx];
+
+    become
+
+       inoutre[idx] = lds[idx].x;
+       inoutim[idx] = lds[idx].y;
+
+    Finally, argument lists like:
+
+       devive_kernel(scalar_type *inout);
+
+    become
+
+       devive_kernel(real_type_t<scalar_type> *inoutre, real_type_t<scalar_type> *inoutim);
+
+    '''
+
+    rname = varname + 're'
+    iname = varname + 'im'
+
+    def visitor(x):
+        if isinstance(x, Assign):
+            lhs, rhs = x.args
+
+            # on rhs
+            if isinstance(rhs, ArrayElement):
+                name, index = rhs.args
+                if name == varname:
+                    return Assign(lhs,
+                                  ComplexLiteral(ArrayElement(rname, index),
+                                                 ArrayElement(iname, index)))
+
+            # on lhs
+            if isinstance(lhs, ArrayElement):
+                name, index = lhs.args
+                if name == varname:
+                    return Block(Assign(ArrayElement(rname, index),
+                                        Component(rhs, 'x')),
+                                 Assign(ArrayElement(iname, index),
+                                        Component(rhs, 'y')))
+
+        if isinstance(x, ArgumentList):
+            args = []
+            for arg in x.args:
+                if isinstance(arg, Variable):
+                    if arg.name == varname:
+                        real_type = f'real_type_t<{arg.type}>'
+                        args.append(Variable(rname, type=real_type, array=True))
+                        args.append(Variable(iname, type=real_type, array=True))
+                    else:
+                        args.append(arg)
                 else:
                     args.append(arg)
-            else:
-                args.append(arg)
-        return ArgumentList(*args)
+            return ArgumentList(*args)
 
-    return x
+        return x
+
+    return depth_first(kernel, visitor)
 
 def generate(factors):
     kernels = [ g(factors) for g in
                 [stockham_device, stockham_global, stockham_launch] ]
 
-    planar_kernels = [ depth_first(kernel, make_inout_planar_visitor) for kernel in kernels ]
+    planar_kernels = [ make_planar(kernel, 'inout') for kernel in kernels ]
     print(format(planar_kernels[0]))
 
     format_and_write("stockham_generated_kernel.h", join("\n", [ str(x) for x in kernels ]))
