@@ -55,6 +55,22 @@ def depth_first(x, f):
 # Code generator base classes
 #
 
+def name_args(names):
+    def name_args_decorator(target):
+        for i, name in enumerate(names):
+            setattr(target, name, property(lambda self, idx=i: self.args[idx]))
+        def new_init(self, *args, **kwargs):
+            self.args = [ None for x in names ]
+            for i, arg in enumerate(args):
+                self.args[i] = arg
+            for i, name in enumerate(names):
+                if name in kwargs:
+                    self.args[i] = kwargs[name]
+        target.__init__ = new_init
+        return target
+    return name_args_decorator
+
+
 class BaseNode:
     args: List[Any]
     kwargs = None
@@ -159,7 +175,7 @@ def make_binary(separator):
 class Address(BaseNode):
     pass
 
-
+@name_args(['lhs', 'rhs'])
 class Assign(BaseNode):
     def __str__(self):
         return str(self.args[0]) + ' = ' + str(self.args[1]) + ';'
@@ -219,13 +235,10 @@ class LessEqual(BaseNodeOps):
 # Variables
 #
 
+
+
+@name_args(['variable', 'index'])
 class ArrayElement(BaseNodeOps):
-    @property
-    def variable(self):
-        return self.args[0]
-    @property
-    def index(self):
-        return self.args[1]
     @property
     def x(self):
         return Component(str(self), 'x')
@@ -238,19 +251,8 @@ class ArrayElement(BaseNodeOps):
         return str(self.variable) + '[' + str(self.index) + ']'
 
 
+@name_args(['name', 'type', 'size', 'array'])
 class Variable(BaseNodeOps):
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def type(self):
-        return self.args[1]
-    @property
-    def size(self):
-        return self.args[2]
-    @property
-    def array(self):
-        return self.args[3]
     @property
     def x(self):
         return Component(self.name, 'x')
@@ -269,8 +271,6 @@ class Variable(BaseNodeOps):
         return f'{self.type} {self.name}'
     def __str__(self) -> str:
         return str(self.name)
-    def __init__(self, name=None, type=None, size=None, array=False):
-        self.args = [ name, type, size, array ]
     def __getitem__(self, idx):
         return ArrayElement(self.name, idx)
 
@@ -295,14 +295,8 @@ class Block(BaseNode):
     def __str__(self):
         return '{' + join('\n', self.args) + '}'
 
-
+@name_args(['condition', 'body'])
 class If(BaseNode):
-    @property
-    def condition(self):
-        return self.args[0]
-    @property
-    def body(self):
-        return self.args[1]
     def __str__(self) -> str:
         f = 'if( ' + str(self.condition) + ')'
         f += '{' + join('\n', self.body) + '}'
@@ -313,24 +307,8 @@ class If(BaseNode):
 # Functions
 #
 
+@name_args(['name', 'arguments', 'templates', 'qualifier', 'body'])
 class Function(BaseNode):
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def arguments(self):
-        return self.args[1]
-    @property
-    def templates(self):
-        return self.args[2]
-    @property
-    def qualifier(self):
-        return self.args[3]
-    @property
-    def body(self):
-        return self.args[4]
-    def __init__(self, name=None, arguments=None, templates=None, body=None, qualifier=None):
-        self.args = [ name, arguments, templates, qualifier, body ]
     def __str__(self) -> str:
         f = ''
         if self.templates:
@@ -342,23 +320,8 @@ class Function(BaseNode):
         f += '{' + join('\n', self.body) + '}'
         return f
 
-
+@name_args(['name', 'arguments', 'templates', 'launch_params'])
 class Call(BaseNode):
-    @property
-    def name(self):
-        return self.args[0]
-    @property
-    def arguments(self):
-        return self.args[1]
-    @property
-    def templates(self):
-        return self.args[2]
-    @property
-    def launch_params(self):
-        return self.args[3]
-    def __init__(self, name=None, arguments=None, templates=None, launch_params=None):
-        self.args = [ name, arguments, templates, launch_params ]
-
     def __str__(self) -> str:
         f = self.name
         if self.templates:
