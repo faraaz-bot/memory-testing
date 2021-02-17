@@ -135,7 +135,7 @@ class StatementList(BaseNode):
         if isinstance(lst, list):
             self.args.extend(lst)
         elif isinstance(lst, StatementList):
-            self.args.extend(lst.statements)
+            self.args.extend(lst.args)
         else:
             self.args.append(lst)
         return self
