@@ -12,13 +12,5 @@ build cooley_tukey.o: hipcc cooley_tukey.cpp
 build cooley_tukey: link cooley_tukey.o
   libs = -lfftw3 -lfftw3f
 
-build stockham.o: hipcc stockham.cpp
-build stockham: link stockham.o
-  libs = -lfftw3 -lfftw3f
-
 build throughput.o: hipcc throughput.cpp
 build throughput: link throughput.o
-
-build generator.o: hipcc generator.cpp | generator.hpp
-build stockham-generator.o: hipcc stockham-generator.cpp | generator.hpp
-build stockham-generator: link stockham-generator.o generator.o
