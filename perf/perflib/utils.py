@@ -1,6 +1,5 @@
 
 from pathlib import Path as path
-import pandas as pd
 
 
 def sjoin(s):
@@ -13,13 +12,6 @@ def njoin(s):
 
 def cjoin(s):
     return ','.join(list((map(str, s))))
-
-
-# remove this at some point and then remove "import pandas" above
-def write_csv(fname, results):
-    if results:
-        df = pd.DataFrame(sum(results, []))
-        df.to_csv(fname, index=False)
 
 
 def write_dat(fname, length, nbatch, seconds):
