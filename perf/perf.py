@@ -2,6 +2,8 @@
 '''Performance tracker for rocFFT vs cuFFT.'''
 
 import click
+import rich.console
+import rich.traceback
 
 import numpy as np
 import os
@@ -9,6 +11,7 @@ import sys
 import subprocess
 
 from pathlib import Path as path
+from types import SimpleNamespace as NS
 
 top = path(__file__).resolve().parent
 sys.path.append(str(top))
@@ -16,9 +19,15 @@ sys.path.append(str(top))
 import perflib.utils
 import perflib.git as git
 
+console = rich.console.Console()
+rich.traceback.install()
+
 #
 # build
 #
+
+env = NS()
+env.docker = False
 
 def sjoin(s):
     '''Join `s` with spaces.'''
@@ -30,9 +39,11 @@ def local(cmd, echo=True, **kwargs):
 
     Keyword arguments are passed down to `subprocess.run`.
     '''
+
     if echo:
-        print('#### ' + cmd)
+        console.print('[magenta]local:[/magenta] ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
+
 
 
 def build_rocfft(commit, dest=None):
@@ -70,7 +81,7 @@ def build_hipfft(commit, dest, cuda):
     top = path('.').resolve() / ('hipFFT-' + commit)
 
     if not top.exists():
-        git.clone('git@github.com:ROCmSoftwarePlatform/hipFFT.git', top)
+        git.clone('git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git', top)
     git.checkout(top, commit)
 
     if git.is_dirty(top):
@@ -102,7 +113,7 @@ def build_wrapper(dest, cuda):
     libs = sjoin([ '-L' + str(x) for x in libs ])
 
     src = top.parent / 'pyhipfft' / 'pyhipfft.cpp'
-    so  = 'hipfft.so'
+    so  = dest / 'hipfft.so'
     defs = None
     if cuda:
         defs = sjoin([ '-Xcompiler', '-fPIC', '-std=c++14', '-shared' ])
@@ -124,7 +135,8 @@ def cli():
 @click.option('--rocfft', type=str, default=None, help='rocFFT git branch/tag/commit.')
 @click.option('--hipfft', type=str, default=None, help='hipFFT git branch/tag/commit.')
 @click.option('--cuda', type=bool, default=False, is_flag=True, help='Use CUDA backend for hipFFT.')
-def build(hipfft, rocfft, cuda):
+@click.option('--destination', type=str, default=None, help='Destination directory for builds.')
+def build(destination, hipfft, rocfft, cuda):
     '''Clone and build rocFFT and/or hipFFT.
 
     Builds are installed into the 'build' directory.  All shared
@@ -132,7 +144,12 @@ def build(hipfft, rocfft, cuda):
 
     '''
 
-    build = path('.').resolve() / 'build'
+    build = path('.').resolve()
+    if destination is None:
+        build = build / 'build'
+    else:
+        build = build / destination
+
     build.mkdir(exist_ok=True)
 
     if rocfft:
@@ -147,8 +164,10 @@ def build(hipfft, rocfft, cuda):
     if cuda:
         rpath.append(os.getenv('CUDA_PATH', '/usr/local/cuda') + '/lib64')
     rpath.append(str(libdir))
-    for lib in list(libdir.glob('*.so*')) + [ 'hipfft.so' ]:
+    rpath.append('/opt/rocm/lib')
+    for lib in list(libdir.glob('*.so*')) + [ build / 'hipfft.so' ]:
         local(f'patchelf --set-rpath {":".join(rpath)} {lib}', check=True)
+
 
 def load_suite(suite):
 
@@ -165,7 +184,8 @@ def load_suite(suite):
 @click.option('--ntrials', type=int, default=10, help='Number of trials (default 10).')
 @click.option('--verify', type=bool, default=False, is_flag=True, help='Verify results (default False).')
 @click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
-def run(ntrials, verify, suite):
+@click.option('--build', type=str, default='build', help='Build directory to use libraries from.')
+def run(ntrials, verify, suite, build):
     '''Run performance tests using a single build.
 
     Tests are loaded from 'performance-tests.py'.
@@ -175,10 +195,14 @@ def run(ntrials, verify, suite):
 
     '''
 
+    sys.path.insert(0, build)
+    import hipfft
+    console.print(f'Using hipfft wrapper: [red]{hipfft.__file__}[/red]')
+
     generator = load_suite(suite)
 
     for test in generator(ntrials, verify):
-        print(f'# running {test.label}')
+        console.print(f'[green]# running {test.label}[/green]')
         test.run()
         test.write(test.label + '.dat')
 
