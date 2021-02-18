@@ -15,7 +15,7 @@ def readdata(filename):
         reader = csv.reader(decomment(fp), delimiter="\t")
         for row in reader:
             dimension = int(row[0])
-            size = int(row[1])
+            size = [int(i) for i in row[1:1+dimension]]
             rdata = []
             for val in row[1 + dimension + 1 + 1:]:
                 rdata.append(float(val))
