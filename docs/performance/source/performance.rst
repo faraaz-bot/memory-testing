@@ -22,11 +22,24 @@ Proposed remedies may include algorithmic changes and/or optimization
 work.  Optimization work may require interacting with the compiler
 team.
 
+Please see the `rocFFT-misc`_ repository for instructions on running
+the performance suites.
+
+..  _rocFFT-misc: https://github.com/ROCmSoftwarePlatform/rocFFT-misc/
+
+
 Cases of interest
 -----------------
 
 For each application of interest, please choose a small handful of
 representative cases that we can focus on.
+
+
+Frontier acceptance
+^^^^^^^^^^^^^^^^^^^
+
+FLOP target?  Talk with Malcolm and Chris; start tracking this.
+
 
 UBER ALLES TICKETS
 ^^^^^^^^^^^^^^^^^^
@@ -35,6 +48,7 @@ UBER ALLES TICKETS
 * `SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_
 * `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_
 * `SWDEV-240859 <http://ontrack-internal.amd.com/browse/SWDEV-240859>`_
+
 
 CHOLLA
 ^^^^^^
@@ -54,13 +68,19 @@ Representative transforms for tickets 240404 and 268238:
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
 * 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
 
+Results:
+
+* `SWDEV-240404 RESULTS (develop is 173a6b1) <_static/cholla21-vs-release.html>`_
+
+
 Representative transforms for ticket 257111 (low priority):
 
 * 2D Z2D: ``rocfft-rider -t 3 -b 256 --length 256 256 --double``
 * 2D D2Z: ``rocfft-rider -t 2 -b 256 --length 256 256 --double``
 
-CINES
-^^^^^
+
+VASP
+^^^^
 
 JIRA tickets
 
@@ -69,6 +89,7 @@ JIRA tickets
 Representative transforms:
 
 * 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
+
 
 HACC
 ^^^^
@@ -80,6 +101,7 @@ JIRA tickets
 Representative transforms (stride is 1):
 
 * 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
+
 
 GROMACS
 ^^^^^^^
@@ -124,6 +146,7 @@ ECP APPS
 
 * heFFTe
 * FFTX
+
 
 Misc but interesting
 ^^^^^^^^^^^^^^^^^^^^
