@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+import click
+import subprocess
+
+from functools import reduce
+from pathlib import Path as path
+
+@click.command()
+@click.argument('factors', nargs=-1, type=int)
+@click.option('--nbatch', type=int, default=1, help='Number of batches')
+@click.option('--tpb', type=int, default=-1, help='Maximum number of threads per block.')
+@click.option('--manual', type=bool, default=False, is_flag=True, help='I manually modified the thing...')
+def generate_and_run(factors, nbatch, manual, tpb):
+
+    length = reduce(lambda x, y: x*y, factors)
+
+    # run the generator
+    if not manual:
+        # run the generatorn
+        cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
+        if tpb > 0:
+            cmd += [ f'threads_per_block={tpb}' ]
+        print('GENERATING:', ' '.join(cmd))
+        subprocess.run(cmd, check=True)
+
+    # build the runner
+    cmd = [ 'hipcc',
+            '-std=c++17',
+            '-DUSE_GENERATED',
+            '-DGENERATED_FACTORS={' + ','.join([str(x) for x in factors]) + '}',
+            '-DGENERATED_KERNEL_LAUNCH=forward_length' + str(length) + "_launch",
+            '-o', 'stockham',
+            'stockham.cpp',
+            '-lfftw3',
+            '-lfftw3f'
+           ]
+    print('COMPILING:', ' '.join(cmd))
+    subprocess.run(cmd)
+
+    # run!
+    cmd = [ './stockham', str(length), str(nbatch) ]
+    print('RUNNING:  ', ' '.join(cmd))
+    subprocess.run(cmd)
+
+if __name__ == '__main__':
+    generate_and_run()
