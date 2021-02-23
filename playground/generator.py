@@ -1,5 +1,6 @@
 '''HIP code generator.'''
 
+import inspect
 import subprocess
 
 from pathlib import Path as path
@@ -66,6 +67,9 @@ def name_args(names):
             for i, name in enumerate(names):
                 if name in kwargs:
                     self.args[i] = kwargs[name]
+            previous_frame = inspect.currentframe().f_back
+            self.file_name, self.line_number, *_ = inspect.getframeinfo(previous_frame)
+
         target.__init__ = new_init
         return target
     return name_args_decorator
@@ -76,6 +80,8 @@ class BaseNode:
     kwargs = None
     sep: str = None
     def __init__(self, *args, **kwargs):
+        previous_frame = inspect.currentframe().f_back
+        self.file_name, self.line_number, *_ = inspect.getframeinfo(previous_frame)
         self.args = list(args)
         self.kwargs = kwargs
         if hasattr(self, '__post_init__'):
@@ -86,6 +92,8 @@ class BaseNode:
         return str(self.args[0])
     def __iter__(self):
         return walk(self)
+    def provenance(self):
+        return '/* ' + self.file_name + ':' + str(self.line_number) + ' */'
 
 
 class BaseNodeOps(BaseNode):
@@ -153,6 +161,15 @@ class TemplateList(ArgumentList):
     pass
 
 
+class CommentBlock(BaseNode):
+    def __str__(self):
+        s = '/*\n'
+        for a in self.args:
+            s += ' * ' + str(a) + '\n'
+        s += ' */\n'
+        return s
+
+
 #
 # Operators
 #
@@ -178,7 +195,7 @@ class Address(BaseNode):
 @name_args(['lhs', 'rhs'])
 class Assign(BaseNode):
     def __str__(self):
-        return str(self.args[0]) + ' = ' + str(self.args[1]) + ';'
+        return str(self.args[0]) + ' = ' + str(self.args[1]) + ';' + self.provenance()
 
 
 @make_binary('.')
@@ -310,7 +327,7 @@ class If(BaseNode):
 @name_args(['name', 'arguments', 'templates', 'qualifier', 'body'])
 class Function(BaseNode):
     def __str__(self) -> str:
-        f = ''
+        f = self.provenance()
         if self.templates:
             f += 'template<' + str(self.templates) + '>'
         if self.qualifier is not None:
