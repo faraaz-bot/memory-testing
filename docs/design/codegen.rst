@@ -25,6 +25,30 @@ How the generator is designed and implemented is crucial for both
 conciseness and ease-of-use.
 
 
+Design considerations
+---------------------
+
+Some ideas from the team:
+
+* should we treat "batch == 4th dimension"
+* should we start to design to support N dimension?
+* how to organize all device and global function in files?
+* how to make it easy to debug/backtrack/hack the generator and generated code?
+* how easy to insert asm code, and/or maintain arch specific code?
+* auto-tuning (at least partial) capability or interfaces
+
+Related projects:
+
+* Spiral FFT
+* FFTX
+* FFTW
+
+Ideas gleaned from looking at related projects:
+
+* FFTW: GURU interface
+* FFTX: codelets?
+
+
 Required kernels (scope)
 ------------------------
 
