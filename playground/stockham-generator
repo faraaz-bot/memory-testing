@@ -57,13 +57,13 @@ def stockham_device(factors, **kwargs):
     t         = Variable('t', 'scalar_type')
     R         = Variable('R', 'scalar_type', 2*max(factors))
 
-    height0 = length // factors[0]
+    height0 = length // max(factors)
 
     def load_global():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0)
         stmts += LineBreak()
-        for b in range(factors[0]):
+        for b in range(max(factors)):
             idx = thread + b * height0
             stmts += Assign(X[offset_lds + idx], Z[offset_in + idx])
         return stmts
@@ -109,7 +109,7 @@ def stockham_device(factors, **kwargs):
         stmts = StatementList()
         stmts += SyncThreads()
         stmts += Assign(thread, thread_id % height0)
-        for b in range(factors[0]):
+        for b in range(max(factors)):
             idx = thread + b * height0
             stmts += Assign(Z[offset_out + idx], X[offset_lds + idx])
         return stmts
@@ -136,7 +136,7 @@ def stockham_device(factors, **kwargs):
     #
     for npass, width in enumerate(factors):
         cumheight = product(factors[:npass])
-        nsubpasses = ceil(factors[0] / factors[npass])
+        nsubpasses = ceil(max(factors) / factors[npass])
 
         body += Comments(f'pass {npass}')
 
@@ -197,7 +197,7 @@ def stockham_global(factors, **kwargs):
 
     body = StatementList()
     body += declarations([ lds, offset_in, offset_out, offset_lds, batch ])
-    body += Assign(batch, block_id * params.batches_per_block + thread_id / (length // factors[0]));
+    body += Assign(batch, block_id * params.batches_per_block + thread_id / (length // max(factors)));
     body += Assign(offset_in, length * batch)
     body += Assign(offset_out, length * batch)
     body += Assign(offset_lds, length * B(batch % params.batches_per_block))
