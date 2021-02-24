@@ -40,6 +40,17 @@ Frontier acceptance
 
 FLOP target?  Talk with Malcolm and Chris; start tracking this.
 
+FOM - Figure of Merit; Need to hit 4x FOM on Frontier compared to Summit.
+
+Main bottleneck used to be Poisson solver, using 2D FFTs.  They are
+moving to 1D FFTs.  Therefore the length 16807 is very important.
+
+Contract:
+- MI200 FFT estimated C2C double precision 3.2 TF.
+- MI300 FFT estimated C2C double precicion 5.3 TF.
+
+
+
 
 UBER ALLES TICKETS
 ^^^^^^^^^^^^^^^^^^
