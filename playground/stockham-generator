@@ -62,7 +62,7 @@ def stockham_device(factors, **kwargs):
     def load_global():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0)
-        stmts += line_break
+        stmts += LineBreak()
         for b in range(factors[0]):
             idx = thread + b * height0
             stmts += Assign(X[offset_lds + idx], Z[offset_in + idx])
@@ -71,7 +71,7 @@ def stockham_device(factors, **kwargs):
     def load_lds():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0 + nsubpass * height0)
-        stmts += line_break
+        stmts += LineBreak()
         for w in range(width):
             idx = offset_lds + thread + length//width * w
             stmts += Assign(R[nsubpass*width+w], X[idx])
@@ -80,7 +80,7 @@ def stockham_device(factors, **kwargs):
     def twiddle():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0 + nsubpass * height0)
-        stmts += line_break
+        stmts += LineBreak()
         for w in range(1, width):
             tidx = cumheight - 1 + w - 1 + (width - 1) * B(thread % cumheight)
             ridx = nsubpass*width + w
@@ -88,7 +88,7 @@ def stockham_device(factors, **kwargs):
             stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y)
             stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y)
             stmts += Assign(R[ridx], t)
-            stmts += line_break
+            stmts += LineBreak()
         return stmts
 
     def butterfly():
@@ -98,17 +98,17 @@ def stockham_device(factors, **kwargs):
     def store_lds():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0 + nsubpass * height0)
-        stmts += line_break
+        stmts += LineBreak()
         for w in range(width):
             idx = offset_lds + B(thread / cumheight) * (width * cumheight) + thread % cumheight + w * cumheight
             stmts += Assign(X[idx], R[nsubpass*width+w])
-        stmts += line_break
+        stmts += LineBreak()
         return stmts
 
 
     def store_global():
         stmts = StatementList()
-        stmts += sync_threads
+        stmts += SyncThreads()
         stmts += Assign(thread, thread_id % height0)
         for b in range(factors[0]):
             idx = thread + b * height0
@@ -126,7 +126,7 @@ def stockham_device(factors, **kwargs):
     body = StatementList()
     body += declarations([thread, R, W, t])
     body += load_global()
-    body += line_break
+    body += LineBreak()
 
     #
     # transform
@@ -135,20 +135,20 @@ def stockham_device(factors, **kwargs):
         cumheight = product(factors[:npass])
         nsubpasses = ceil(factors[0] / factors[npass])
 
-        body += sync_threads
+        body += SyncThreads()
         for nsubpass in range(nsubpasses):
             body += add_work(load_lds)
         if npass > 0:
             for nsubpass in range(nsubpasses):
                 body += add_work(twiddle)
-        body += line_break
+        body += LineBreak()
         for nsubpass in range(nsubpasses):
             body += add_work(butterfly)
-        body += line_break
+        body += LineBreak()
         for nsubpass in range(nsubpasses):
             body += add_work(store_lds)
 
-        body += line_break
+        body += LineBreak()
 
     body += store_global()
 
@@ -186,7 +186,7 @@ def stockham_global(factors, **kwargs):
     body += Assign(offset_in, length * batch)
     body += Assign(offset_out, length * batch)
     body += Assign(offset_lds, length * B(batch % params.batches_per_block))
-    body += If(GreaterEqual(batch, nbatch), [ return_statement ])
+    body += If(GreaterEqual(batch, nbatch), [ ReturnStatement() ])
     body += Call(f'forward_length{length}_device',
                  arguments = ArgumentList(inout, lds, twiddles, stride_in, stride_out, offset_in, offset_out, offset_lds),
                  templates = TemplateList(scalar_type))

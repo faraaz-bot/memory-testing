@@ -56,6 +56,13 @@ def depth_first(x, f):
 # Code generator base classes
 #
 
+def make_raw(string):
+    def decorator(target):
+        target.__str__ = lambda self: string
+        return target
+    return decorator
+
+
 def name_args(names):
     def name_args_decorator(target):
         for i, name in enumerate(names):
@@ -168,6 +175,21 @@ class CommentBlock(BaseNode):
             s += ' * ' + str(a) + '\n'
         s += ' */\n'
         return s
+
+
+@make_raw('\n\n')
+class LineBreak(BaseNode):
+    pass
+
+
+@make_raw('return;')
+class ReturnStatement(BaseNode):
+    pass
+
+
+@make_raw('__syncthreads();')
+class SyncThreads(BaseNode):
+    pass
 
 
 #
@@ -348,10 +370,3 @@ class Call(BaseNode):
         f += '(' + join(', ', self.arguments) + ');'
         return f
 
-#
-# Misc
-#
-
-return_statement = String("return;")
-line_break = String("\n\n")
-sync_threads = String("__syncthreads();")
