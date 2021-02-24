@@ -71,7 +71,6 @@ def stockham_device(factors, **kwargs):
     def load_lds():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0 + nsubpass * height0)
-        stmts += LineBreak()
         for w in range(width):
             idx = offset_lds + thread + length//width * w
             stmts += Assign(R[nsubpass*width+w], X[idx])
@@ -80,7 +79,6 @@ def stockham_device(factors, **kwargs):
     def twiddle():
         stmts = StatementList()
         stmts += Assign(thread, thread_id % height0 + nsubpass * height0)
-        stmts += LineBreak()
         for w in range(1, width):
             tidx = cumheight - 1 + w - 1 + (width - 1) * B(thread % cumheight)
             ridx = nsubpass*width + w
@@ -88,12 +86,13 @@ def stockham_device(factors, **kwargs):
             stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y)
             stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y)
             stmts += Assign(R[ridx], t)
-            stmts += LineBreak()
         return stmts
 
     def butterfly():
-        return Call(name=f'FwdRad{width}B1',
+        stmts = StatementList()
+        stmts += Call(name=f'FwdRad{width}B1',
                     arguments=ArgumentList(*[R[nsubpass*width+w].address() for w in range(width)]))
+        return stmts
 
     def store_lds():
         stmts = StatementList()
@@ -125,6 +124,8 @@ def stockham_device(factors, **kwargs):
 
     body = StatementList()
     body += declarations([thread, R, W, t])
+    body += LineBreak()
+    body += Comments('load global')
     body += load_global()
     body += LineBreak()
 
@@ -135,21 +136,33 @@ def stockham_device(factors, **kwargs):
         cumheight = product(factors[:npass])
         nsubpasses = ceil(factors[0] / factors[npass])
 
-        body += SyncThreads()
+        body += Comments(f'pass {npass}')
+
+        if npass > 0:
+            body += SyncThreads()
+            body += LineBreak()
+
+
+        body += Comments('load lds')
         for nsubpass in range(nsubpasses):
             body += add_work(load_lds)
+        body += LineBreak()
         if npass > 0:
+            body += Comments('twiddle')
             for nsubpass in range(nsubpasses):
                 body += add_work(twiddle)
-        body += LineBreak()
+            body += LineBreak()
+        body += Comments('butterfly')
         for nsubpass in range(nsubpasses):
             body += add_work(butterfly)
         body += LineBreak()
+        body += Comments('store lds')
         for nsubpass in range(nsubpasses):
             body += add_work(store_lds)
 
         body += LineBreak()
 
+    body += Comments('store global')
     body += store_global()
 
     return Function(f'forward_length{length}_device',

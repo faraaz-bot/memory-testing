@@ -160,10 +160,6 @@ class Declaration(BaseNode):
     pass
 
 
-class String(BaseNode):
-    pass
-
-
 class TemplateList(ArgumentList):
     pass
 
@@ -174,6 +170,14 @@ class CommentBlock(BaseNode):
         for a in self.args:
             s += ' * ' + str(a) + '\n'
         s += ' */\n'
+        return s
+
+
+class Comments(BaseNode):
+    def __str__(self):
+        s = ''
+        for a in self.args:
+            s += '// ' + str(a) + '\n'
         return s
 
 
@@ -349,7 +353,7 @@ class If(BaseNode):
 @name_args(['name', 'arguments', 'templates', 'qualifier', 'body'])
 class Function(BaseNode):
     def __str__(self) -> str:
-        f = self.provenance()
+        f = self.provenance() + '\n'
         if self.templates:
             f += 'template<' + str(self.templates) + '>'
         if self.qualifier is not None:
@@ -367,6 +371,6 @@ class Call(BaseNode):
             f += '<' + join(', ', self.templates) + '>'
         if self.launch_params:
             f += '<<<' + join(',  ', self.launch_params) + '>>>'
-        f += '(' + join(', ', self.arguments) + ');'
+        f += '(' + join(', ', self.arguments) + ');' + self.provenance() + '\n'
         return f
 
