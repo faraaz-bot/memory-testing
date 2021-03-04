@@ -36,6 +36,7 @@ Some ideas from the team:
 * how to make it easy to debug/backtrack/hack the generator and generated code?
 * how easy to insert asm code, and/or maintain arch specific code?
 * auto-tuning (at least partial) capability or interfaces
+* support generation of HIP or MLIR
 
 Related projects:
 
@@ -47,6 +48,13 @@ Ideas gleaned from looking at related projects:
 
 * FFTW: GURU interface
 * FFTX: codelets?
+
+
+Known issues
+------------
+
+The current generator uses the single-precision large-threshold when
+generating double-precision kernels.
 
 
 Required kernels (scope)
@@ -90,8 +98,13 @@ Batches
 
 XXX
 
-Launching FFT kernels
----------------------
+Large twiddle tables
+^^^^^^^^^^^^^^^^^^^^
+
+XXX
+
+Launching
+^^^^^^^^^
 
 Currently kernels are lauched with:
 
