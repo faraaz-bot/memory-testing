@@ -119,3 +119,56 @@ Currently kernels are lauched with:
 * in/out buffers
 
 We have a lot of flexibility here.
+
+
+Implementation
+--------------
+
+The code generator will by implemented in Python; targetting version
+3.6 and using only standard modules.
+
+The AST will be represented as a tree structure, with nodes in the
+tree representing operations, such as assignment, addition, or a block
+containing multiple operations.  Nodes will be represented as objects
+(eg, `Add`) extending the base class `BaseNode`.  Operands will be
+stored in a simple list called `args`:
+
+.. code_block: python
+
+    class BaseNode:
+        args: List[Any]
+
+
+To facilitate building ASTs, the base node will have a constructor
+that simply stores it's arguments as operands:
+
+.. code_block: python
+
+    class BaseNode:
+        args: List[Any]
+        def __init__(self, *args, **kwargs):
+            self.args = list(args)
+
+
+To facilitate rewriting ASTs, node object's constructors should accept
+a simple list of argument/operands.
+
+This, for example, allows a depth-first tree re-write to be
+implemented trivially as:
+
+.. code_block: python
+
+    def depth_first(x, f):
+        '''Depth first traveral of the AST in 'x'.  Each node is transformed by 'f(x)'.'''
+        if isinstance(x, BaseNode):
+            y = type(x)(*[ depth_first(a, f) for a in x.args ])
+            return f(y)
+        return f(x)
+
+To emit code, each node must implement `__str__`.  For example:
+
+.. code_block: python
+
+    class Add(BaseNode):
+        def __str__(self):
+            return ' + '.join([ str(x) for x in self.args ])
