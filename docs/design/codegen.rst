@@ -133,7 +133,7 @@ containing multiple operations.  Nodes will be represented as objects
 (eg, `Add`) extending the base class `BaseNode`.  Operands will be
 stored in a simple list called `args`:
 
-.. code_block:: python
+.. code-block:: python
 
     class BaseNode:
         args: List[Any]
@@ -142,7 +142,7 @@ stored in a simple list called `args`:
 To facilitate building ASTs, the base node will have a constructor
 that simply stores it's arguments as operands:
 
-.. code_block:: python
+.. code-block:: python
 
     class BaseNode:
         args: List[Any]
@@ -156,7 +156,7 @@ a simple list of argument/operands.
 This, for example, allows a depth-first tree re-write to be
 implemented trivially as:
 
-.. code_block:: python
+.. code-block:: python
 
     def depth_first(x, f):
         '''Depth first traveral of the AST in 'x'.  Each node is transformed by 'f(x)'.'''
@@ -167,7 +167,7 @@ implemented trivially as:
 
 To emit code, each node must implement `__str__`.  For example:
 
-.. code_block:: python
+.. code-block:: python
 
     class Add(BaseNode):
         def __str__(self):
