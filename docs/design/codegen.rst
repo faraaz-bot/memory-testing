@@ -30,13 +30,13 @@ Design considerations
 
 Some ideas from the team:
 
-* should we treat "batch == 4th dimension"
-* should we start to design to support N dimension?
-* how to organize all device and global function in files?
-* how to make it easy to debug/backtrack/hack the generator and generated code?
-* how easy to insert asm code, and/or maintain arch specific code?
-* auto-tuning (at least partial) capability or interfaces
-* support generation of HIP or MLIR
+* Should we treat "batch == 4th dimension"?
+* Should we start to design to support N dimension?
+* How to organize all device and global function in files?
+* How to make it easy to debug/backtrack/hack the generator and generated code?
+* How easy to insert asm code, and/or maintain arch specific code?
+* Auto-tuning (at least partial) capability or interfaces
+* Support generation of HIP or MLIR
 
 Related projects:
 
@@ -83,20 +83,93 @@ run-time.  For example, multiple kernels could be generated for
 single/double precision, but unit/non-unit stride could be handled at
 runtime.
 
+Fundamentally, all multidimensional and batched FFTs can be written in
+terms of 1D transforms (with affine indexing).  As such, an FFT is
+broken down into:
+
+* A *host* function that is aware of dimensions, strides, batches, and
+  tiling.  This function would be responsible for determining how the
+  problem will be broken down into GPU thread blocks.
+* A *global* function that is aware of GPU thread blocks, dimensions,
+  strides, batches, and tiling.  This function would be responsible
+  for determining offsets and strides for the device function, and
+  declaring LDS memory buffers.
+* A *device* function that is passed offsets and strides, and is aware
+  of GPU threads.  The device function would perform a (short) 1D
+  transform.
+
+A device function may be called so that a thread block is actually
+transforming multiple batches.  As such, indexes (the spatial index in
+the FFT) should be computed as:
+
+.. code-block::
+
+   int fft_index = threadIdx.x % length;
+
+
 Tiling
 ^^^^^^
 
-XXX
+Launching device kernels in a way that traverses memory in tiles will
+be handled at the host/global level.
 
-Strides
-^^^^^^^
+XXX large twiddle tables?
 
-XXX
+Strides and batches
+^^^^^^^^^^^^^^^^^^^
 
-Batches
-^^^^^^^
+Host
+~~~~
 
-XXX
+Host/global functions should support arbitrary dimensions, lengths,
+strides, offsets, and batches.
+
+Users should be allowed to store their arrays arbitrarily.  For an
+:math:`N` dimensional dataset, the array index :math:`a` corresponding
+to indices :math:`(i_1,\ldots,i_N,i_b)`, where :math:`i_b` is the
+batch index, is given by
+
+.. math::
+
+   a(i_1,\ldots,i_N,i_b) = \sum_{d=1}^N s_d i_d + s_b i_b
+
+where :math:`s_d` is the stride along dimension :math:`d`.  To support
+these strides, the device function to compute the FFT along dimension
+:math:`D` would be passed:
+
+.. code-block:: c
+
+   int offset = 0;
+   offset += batch_index * batch_stride;
+   for (int d=0; d < N; ++d)
+     if (d != D)
+       offset += spatial_index[d] * strides[d];
+
+   int stride = strides[D];
+
+For example, in three dimensions, to compute the FFT along the
+y-dimension given x and z indicies ``i`` and ``k`` for batch ``b``,
+the device function would be passed:
+
+.. code-block:: c
+
+   int offset = 0;
+   offset += b * batch_stride;
+   offset += i * strides[0];
+   offset += k * strides[2];
+
+   int stride = strides[1];
+
+Device
+~~~~~~
+
+Device functions should support arbitrary offsets and strides.  Array
+indexes in device functions should be computed as:
+
+.. code-block::
+
+   int array_index = offset + fft_index * stride;
+
 
 Large twiddle tables
 ^^^^^^^^^^^^^^^^^^^^
@@ -130,8 +203,8 @@ The code generator will by implemented in Python; targetting version
 The AST will be represented as a tree structure, with nodes in the
 tree representing operations, such as assignment, addition, or a block
 containing multiple operations.  Nodes will be represented as objects
-(eg, `Add`) extending the base class `BaseNode`.  Operands will be
-stored in a simple list called `args`:
+(eg, ``Add``) extending the base class ``BaseNode``.  Operands will be
+stored in a simple list called ``args``:
 
 .. code-block:: python
 
@@ -165,10 +238,14 @@ implemented trivially as:
             return f(y)
         return f(x)
 
-To emit code, each node must implement `__str__`.  For example:
+To emit code, each node must implement ``__str__``.  For example:
 
 .. code-block:: python
 
     class Add(BaseNode):
         def __str__(self):
             return ' + '.join([ str(x) for x in self.args ])
+
+
+Launching
+^^^^^^^^^
