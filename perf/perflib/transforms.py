@@ -1,37 +1,48 @@
 
-import hipfft
+try:
+    import hipfft
+except ImportError as e:
+    pass
+
 import numpy as np
 import numpy.linalg as la
 import numpy.random as nr
 
-from dataclasses import dataclass
-from numpy.fft import *
 from typing import List, Any
+from dataclasses import dataclass
+
+from numpy.fft import *
 
 import perflib.utils
+
 
 def GiB(y):
     return y.nbytes/1024**3
 
 
+def shape(n, nbatch):
+    if isinstance(n, list) or isinstance(n, tuple):
+        return [nbatch] + list(n)
+    return [nbatch, n]
+
+
+def product(x):
+    p = 1
+    for f in x:
+        p *= f
+    return p
+
+
 def real_input(n, nbatch, dtype):
-    y = np.zeros((nbatch, n), dtype)
+    s = shape(n, nbatch)
+    y = np.zeros(s, dtype)
     for i in range(nbatch):
-        y[i] = nr.rand(n)
+        y[i] = nr.rand(*s[1:])
     return y
 
 
 def complex_input(n, nbatch, dtype):
     return real_input(n, nbatch, dtype) + 1j * real_input(n, nbatch, dtype)
-
-
-def enforce_hermitian(y):
-    n = y.shape[1]
-    y = y.copy()
-    y[:,0]    = y[:,0].real
-    y[:,n//2] = y[:,n//2].real
-    y[:,-1]   = y[:,-1].real
-    return y
 
 
 def compare(k1, k2):
@@ -58,7 +69,7 @@ def complex_forward(n, ntrials, nbatch, dtype, verify):
         y = complex_input(n, nbatch, dtype)
         z, t = hipfft.forward(y, time=True, batched=True)
         if verify:
-            r = fftn(y, axes=[1])
+            r = fftn(y, s=y.shape[1:])
             compare(z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y)})
     return results
@@ -70,8 +81,8 @@ def complex_backward(n, ntrials, nbatch, dtype, verify):
         y = complex_input(n, nbatch, dtype)
         z, t = hipfft.backward(y, time=True, batched=True)
         if verify:
-            r = ifftn(y, axes=[1])
-            s = np.asarray(1.0/z.shape[1], dtype)
+            r = ifftn(y, s=y.shape[1:])
+            s = np.asarray(1.0/product(z.shape[1:]), dtype)
             compare(s*z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
     return results
@@ -83,43 +94,45 @@ def real_forward(n, ntrials, nbatch, dtype, verify):
         y = real_input(n, nbatch, dtype)
         z, t = hipfft.forward(y, real=True, time=True, batched=True)
         if verify:
-            r = rfftn(y, axes=[1])
+            r = rfftn(y, s=y.shape[1:])
             compare(z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
     return results
 
 
 def real_backward(n, ntrials, nbatch, dtype, verify):
-    if n % 2 > 0:
-        return []
     results = []
+    rshape = shape(n, nbatch)
+    if rshape[-1] % 2:
+        return []
     for trial in range(ntrials):
-        y = enforce_hermitian(complex_input(n, nbatch, dtype))
+        y = hipfft.forward(real_input(n, nbatch, dtype), real=True, batched=True)
         z, t = hipfft.backward(y, real=True, time=True, batched=True)
         if verify:
-            r = irfftn(y, axes=[1])
-            s = np.asarray(1.0/z.shape[1], dtype)
+            r = irfftn(y, s=rshape[1:])
+            s = np.asarray(1.0/product(rshape[1:]), dtype)
             compare(s*z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
     return results
 
 
 @dataclass
-class FFTRunner:
+class FFTTestRunner:
     label: str
     transform: Any
-    lengths: List[int]
+    lengths: List[Any]
     ntrials: int
     nbatch: int
     dtype: Any
     verify: bool
 
     def run(self):
-        self.results = [ self.transform(x, self.ntrials, self.nbatch, self.dtype, self.verify) for x in self.lengths ]
-
-    def write(self, fname):
-        results = sum(self.results, [])
+        timings = []
         for length in self.lengths:
-            # XXX assumes 1d...
+            timings.extend(self.transform(length, self.ntrials, self.nbatch, self.dtype, self.verify))
+        return timings
+
+    def write(self, fname, results):
+        for length in self.lengths:
             seconds = [ t['time'] for t in results if t['n'] == length ]
-            perflib.utils.write_dat(fname, [length], self.nbatch, seconds)
+            perflib.utils.write_dat(fname, length, self.nbatch, seconds)

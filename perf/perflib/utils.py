@@ -15,7 +15,9 @@ def cjoin(s):
 
 
 def write_dat(fname, length, nbatch, seconds):
-    d = [ len(length) ] + length + [ nbatch, len(seconds) ] + seconds
+    if isinstance(length, int):
+        length = [length]
+    d = [ len(length) ] + list(length) + [ nbatch, len(seconds) ] + seconds
     t = '\t'.join([str(x) for x in d]) + '\n'
     with path(fname).open('a') as f:
         f.write(t)

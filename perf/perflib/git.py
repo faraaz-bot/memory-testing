@@ -10,3 +10,8 @@ def checkout(repo, commit):
 def is_dirty(repo):
     p = subprocess.run(['git', 'diff-index', '--quiet', 'HEAD'], check=False, cwd=str(repo))
     return p.returncode != 0
+
+def branch(repo):
+    p = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                       cwd=str(repo), stdout=subprocess.PIPE, encoding='ascii', check=True)
+    return p.stdout.strip()

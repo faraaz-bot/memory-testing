@@ -214,10 +214,14 @@ def run(ntrials, verify, suite, build, output):
     output = path(output)
     output.mkdir(exist_ok=True)
 
+    specs = output / 'specs.txt'
+    specs.write_text(str(perflib.get_machine_specs(0)))
+
     for test in generator(ntrials, verify):
         print(f'# running {test.label}')
-        test.run()
-        test.write(output / (test.label + '.dat'))
+        fname = output / (test.label + '.dat')
+        results = test.run()
+        test.write(fname, results)
 
 
 @cli.command()
