@@ -104,7 +104,7 @@ the FFT) should be computed as:
 
 .. code-block::
 
-   int fft_index = threadIdx.x % length;
+   int fft_index = threadIdx.x % width;
 
 
 Tiling
@@ -113,7 +113,10 @@ Tiling
 Launching device kernels in a way that traverses memory in tiles will
 be handled at the host/global level.
 
-XXX large twiddle tables?
+Kernels need to support reading/writing in columns/rows.  These are
+the block CC/RC/CR flavours (where C and R refer to column and row) of
+the existing kernels.
+
 
 Strides and batches
 ^^^^^^^^^^^^^^^^^^^
@@ -164,17 +167,26 @@ Device
 ~~~~~~
 
 Device functions should support arbitrary offsets and strides.  Array
-indexes in device functions should be computed as:
+indexes in device functions should be computed as, eg:
 
 .. code-block::
 
+   int fft_index = threadIdx.x % width;
    int array_index = offset + fft_index * stride;
 
 
 Large twiddle tables
 ^^^^^^^^^^^^^^^^^^^^
 
-XXX
+Large 1D transforms are decomposed into multiple transforms.  To
+reduce the size of twiddle tables, rotations can be decomposed into
+multiple stages as well.  For example, the rotation through
+:math:`2\pi \cdot 280 / 256^2` can be decomposed into :math:`2\pi
+\cdot 1 / 256 + 2\pi 24 / 256^2`.  The resulting twiddle table
+contains 512 entries instead of 65536 entries.
+
+Generated kernels should support these "large twiddle tables".
+
 
 Launching
 ^^^^^^^^^
@@ -245,7 +257,3 @@ To emit code, each node must implement ``__str__``.  For example:
     class Add(BaseNode):
         def __str__(self):
             return ' + '.join([ str(x) for x in self.args ])
-
-
-Launching
-^^^^^^^^^
