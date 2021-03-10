@@ -145,9 +145,10 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
 
     size_t total_bytes_in  = (size_t)PyArray_NBYTES(x);
     size_t total_bytes_out = (size_t)PyArray_NBYTES(z);
-    void*  d_in_out;
-    hipMalloc(&d_in_out, std::max(total_bytes_in, total_bytes_out));
-    HIP_CHECK(hipMemcpy(d_in_out, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
+    void  *d_in, *d_out;
+    HIP_CHECK(hipMalloc(&d_in, total_bytes_in));
+    HIP_CHECK(hipMalloc(&d_out, total_bytes_out));
+    HIP_CHECK(hipMemcpy(d_in, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
 
     if(time)
     {
@@ -158,25 +159,25 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
     {
     case HIPFFT_C2C:
         HIPFFT_CHECK(
-            hipfftExecC2C(plan, (hipfftComplex*)d_in_out, (hipfftComplex*)d_in_out, direction));
+            hipfftExecC2C(plan, (hipfftComplex*)d_in, (hipfftComplex*)d_out, direction));
         break;
     case HIPFFT_R2C:
-        HIPFFT_CHECK(hipfftExecR2C(plan, (hipfftReal*)d_in_out, (hipfftComplex*)d_in_out));
+        HIPFFT_CHECK(hipfftExecR2C(plan, (hipfftReal*)d_in, (hipfftComplex*)d_out));
         break;
     case HIPFFT_C2R:
-        HIPFFT_CHECK(hipfftExecC2R(plan, (hipfftComplex*)d_in_out, (hipfftReal*)d_in_out));
+        HIPFFT_CHECK(hipfftExecC2R(plan, (hipfftComplex*)d_in, (hipfftReal*)d_out));
         break;
     case HIPFFT_D2Z:
         HIPFFT_CHECK(
-            hipfftExecD2Z(plan, (hipfftDoubleReal*)d_in_out, (hipfftDoubleComplex*)d_in_out));
+            hipfftExecD2Z(plan, (hipfftDoubleReal*)d_in, (hipfftDoubleComplex*)d_out));
         break;
     case HIPFFT_Z2D:
         HIPFFT_CHECK(
-            hipfftExecZ2D(plan, (hipfftDoubleComplex*)d_in_out, (hipfftDoubleReal*)d_in_out));
+            hipfftExecZ2D(plan, (hipfftDoubleComplex*)d_in, (hipfftDoubleReal*)d_out));
         break;
     case HIPFFT_Z2Z:
         HIPFFT_CHECK(hipfftExecZ2Z(
-            plan, (hipfftDoubleComplex*)d_in_out, (hipfftDoubleComplex*)d_in_out, direction));
+            plan, (hipfftDoubleComplex*)d_in, (hipfftDoubleComplex*)d_out, direction));
         break;
     default:
         HIPFFT_CHECK(HIPFFT_INVALID_TYPE);
@@ -192,13 +193,16 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
         HIP_CHECK(hipEventDestroy(start));
     }
 
-    HIP_CHECK(hipMemcpy(PyArray_DATA(z), d_in_out, total_bytes_out, hipMemcpyDeviceToHost));
-    HIP_CHECK(hipFree(d_in_out));
+    HIP_CHECK(hipMemcpy(PyArray_DATA(z), d_out, total_bytes_out, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(d_in));
+    HIP_CHECK(hipFree(d_out));
     HIPFFT_CHECK(hipfftDestroy(plan));
 
     if(time)
     {
-        return Py_BuildValue("Of", Z, elapsed);
+        PyObject *R = Py_BuildValue("Of", Z, elapsed);
+        Py_XDECREF(Z);
+        return R;
     }
 
     return Z;
