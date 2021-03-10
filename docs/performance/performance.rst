@@ -38,37 +38,37 @@ representative cases that we can focus on.
 Frontier acceptance
 ^^^^^^^^^^^^^^^^^^^
 
-FLOP target?  Talk with Malcolm and Chris; start tracking this.
+According to Chris, in our contract there are some FLOP targets:
 
-FOM - Figure of Merit; Need to hit 4x FOM on Frontier compared to Summit.
+* MI200 FFT estimated C2C double precision 3.2 TF.
+* MI300 FFT estimated C2C double precicion 5.3 TF.
+
+Frontier acceptance is driven by: Need to hit 4x FOM (Figure of Merit)
+on Frontier compared to Summit.
 
 Main bottleneck used to be Poisson solver, using 2D FFTs.  They are
 moving to 1D FFTs.  Therefore the length 16807 is very important.
 
-Contract:
-- MI200 FFT estimated C2C double precision 3.2 TF.
-- MI300 FFT estimated C2C double precicion 5.3 TF.
 
+Generic tickets
+^^^^^^^^^^^^^^^
 
+JIRA tickets:
 
-
-UBER ALLES TICKETS
-^^^^^^^^^^^^^^^^^^
-
-* `SWDEV-190718 <http://ontrack-internal.amd.com/browse/SWDEV-190718>`_
-* `SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_
-* `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_
-* `SWDEV-240859 <http://ontrack-internal.amd.com/browse/SWDEV-240859>`_
+* `SWDEV-190718 <http://ontrack-internal.amd.com/browse/SWDEV-190718>`_: Real FFT performance
+* `SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_: Optimize large 1D complex FFT power-of-2 transform sizes
+* `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_: C2C 2D Optimisations with Fused Kernels
+* `SWDEV-240859 <http://ontrack-internal.amd.com/browse/SWDEV-240859>`_: Improve 3D complex FFT performance
 
 
 CHOLLA
 ^^^^^^
 
-JIRA tickets
+JIRA tickets:
 
-* 1D Multiples of 21 and radix-7: `SWDEV-240404 <http://ontrack-internal.amd.com/browse/SWDEV-240404>`_
-* 1D Multiples of 21 `SWDEV-268238 <http://ontrack-internal.amd.com/browse/SWDEV-268238>`_
-* 2D batched 256x256 (lower priority): `SWDEV-257111 <http://ontrack-internal.amd.com/browse/SWDEV-257111>`_
+* `SWDEV-240404 <http://ontrack-internal.amd.com/browse/SWDEV-240404>`_: 1D Multiples of 21 and radix-7
+* `SWDEV-268238 <http://ontrack-internal.amd.com/browse/SWDEV-268238>`_: 1D Multiples of 21
+* `SWDEV-257111 <http://ontrack-internal.amd.com/browse/SWDEV-257111>`_: 2D batched 256x256 (lower priority)
 
 Representative transforms for tickets 240404 and 268238:
 
@@ -79,15 +79,18 @@ Representative transforms for tickets 240404 and 268238:
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
 * 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
 
+These cases are represented in the ``cholla`` performance suite.
+
 Results:
 
-* `SWDEV-240404 RESULTS (develop is 173a6b1) <_static/cholla21-vs-release.html>`_
-
+* `2021-02-24 (rocFFT 173a6b1) cholla <_static/cholla21-vs-release.html>`_
 
 Representative transforms for ticket 257111 (low priority):
 
 * 2D Z2D: ``rocfft-rider -t 3 -b 256 --length 256 256 --double``
 * 2D D2Z: ``rocfft-rider -t 2 -b 256 --length 256 256 --double``
+
+This case is represented in the ``cholla2d`` performance suite.
 
 
 VASP
@@ -95,12 +98,13 @@ VASP
 
 JIRA tickets
 
-* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_
+* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_: Optimize Z2Z 3D Performance for MI200
 
 Representative transforms:
 
 * 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
 
+This case is represented in the ``vasp`` performance suite.
 
 HACC
 ^^^^

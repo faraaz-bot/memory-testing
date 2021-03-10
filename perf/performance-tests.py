@@ -34,15 +34,6 @@ def make_suite(suite):
                 yield perflib.transforms.FFTTestRunner(label, transform.transform, suite.lengths, ntrials, suite.nbatch, dtype, verify)
     return fft_test_generator
 
-def make_suite_2d(suite):
-    lengths = list(itertools.product(suite.lengths, suite.lengths))
-    def fft_test_generator(ntrials, verify):
-        for transform in transforms:
-            for dtype in dtypes:
-                label = '_'.join([suite.label, transform.label, dtype.label])
-                yield perflib.transforms.FFTTestRunner(label, transform.transform, lengths, ntrials, suite.nbatch, dtype, verify)
-    return fft_test_generator
-
 
 pow2  = make_suite(NS(label='pow2', lengths=[ 2**k for k in range(9,17) ], nbatch=2048))
 pow5  = make_suite(NS(label='pow5', lengths=[ 5**k for k in range(4,8) ], nbatch=2000))
@@ -72,7 +63,9 @@ mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958,
 
 
 cholla = make_suite(NS(label='cholla', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
-cholla2d = make_suite_2d(NS(label='cholla2d', lengths=[256], nbatch=100))
+cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
+
+vasp = make_suite(NS(label='vasp', lengths=[(336,336,56)], nbatch=10))
 
 def all(ntrials, verify):
     generators = [ pow2, pow5, pow7, prime, mixed, cholla ]
