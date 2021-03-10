@@ -38,16 +38,25 @@ representative cases that we can focus on.
 Frontier acceptance
 ^^^^^^^^^^^^^^^^^^^
 
-According to Chris, in our contract there are some FLOP targets:
+According to Chris, in our Frontier contract there are some FLOP
+targets:
 
 * MI200 FFT estimated C2C double precision 3.2 TF.
 * MI300 FFT estimated C2C double precicion 5.3 TF.
 
-Frontier acceptance is driven by: Need to hit 4x FOM (Figure of Merit)
-on Frontier compared to Summit.
+For computing FLOP counts, we assume that a length-N FFT there are:
 
-Main bottleneck used to be Poisson solver, using 2D FFTs.  They are
-moving to 1D FFTs.  Therefore the length 16807 is very important.
+.. math::
+
+   5 N \log_2 N
+
+FLOPS.
+
+
+According to Alessandro, Frontier acceptance is driven by: Need to hit
+4x FOM (Figure of Merit) on Frontier compared to Summit.  Main
+bottleneck is the Poisson solver, using 2D FFTs.  They are moving to
+1D FFTs.  Therefore the length 16807 is very important.
 
 
 Generic tickets
@@ -105,6 +114,11 @@ Representative transforms:
 * 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
 
 This case is represented in the ``vasp`` performance suite.
+
+Results:
+
+* `2021-03-10 (rocFFT 173a6b1) vasp <_static/vasp-17ea6b1-vs-release.html>`_
+
 
 HACC
 ^^^^
