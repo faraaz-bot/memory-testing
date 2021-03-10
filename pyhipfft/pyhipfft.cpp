@@ -3,6 +3,8 @@
 //
 
 #include <exception>
+#include <stdexcept>
+#include <algorithm>
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -144,7 +146,7 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
     size_t total_bytes_in  = (size_t)PyArray_NBYTES(x);
     size_t total_bytes_out = (size_t)PyArray_NBYTES(z);
     void*  d_in_out;
-    hipMalloc(&d_in_out, max(total_bytes_in, total_bytes_out));
+    hipMalloc(&d_in_out, std::max(total_bytes_in, total_bytes_out));
     HIP_CHECK(hipMemcpy(d_in_out, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
 
     if(time)
