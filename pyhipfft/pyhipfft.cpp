@@ -3,6 +3,8 @@
 //
 
 #include <exception>
+#include <stdexcept>
+#include <algorithm>
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
