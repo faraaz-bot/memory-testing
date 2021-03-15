@@ -11,7 +11,8 @@ from pathlib import Path as path
 @click.option('--nbatch', type=int, default=1, help='Number of batches')
 @click.option('--tpb', type=int, default=-1, help='Maximum number of threads per block.')
 @click.option('--manual', type=bool, default=False, is_flag=True, help='I manually modified the thing...')
-def generate_and_run(factors, nbatch, manual, tpb):
+@click.option('--single', type=bool, default=False, is_flag=True, help='Single complex data type')
+def generate_and_run(factors, nbatch, manual, tpb, single):
 
     length = reduce(lambda x, y: x*y, factors)
 
@@ -19,6 +20,8 @@ def generate_and_run(factors, nbatch, manual, tpb):
     if not manual:
         # run the generatorn
         cmd = [ './stockham-generator' ] + [ str(x) for x in factors ]
+        if single:
+            cmd += [ f'bytes_per_element=8' ]
         if tpb > 0:
             cmd += [ f'threads_per_block={tpb}' ]
         print('GENERATING:', ' '.join(cmd))
@@ -39,7 +42,7 @@ def generate_and_run(factors, nbatch, manual, tpb):
     subprocess.run(cmd)
 
     # run!
-    cmd = [ './stockham', str(length), str(nbatch) ]
+    cmd = [ './stockham', str(length), str(nbatch), str(1 if single else 0) ]
     print('RUNNING:  ', ' '.join(cmd))
     subprocess.run(cmd)
 

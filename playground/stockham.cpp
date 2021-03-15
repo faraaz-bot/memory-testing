@@ -19,9 +19,6 @@
         return {};
 
 using namespace std;
-using dtype       = hipDoubleComplex;
-using fft_result  = pair<float, vector<dtype>>;
-using fft_result2 = tuple<float, float, vector<dtype>>;
 
 template <class T>
 struct real_type;
@@ -46,15 +43,17 @@ using real_type_t = typename real_type<T>::type;
 //
 // Random inputs
 //
-vector<dtype> random_vector(size_t n)
+template <typename T>
+vector<T> random_vector(size_t n)
 {
-    vector<dtype>                     x(n);
+    vector<T>                         x(n);
     random_device                     rd;
     mt19937                           gen(rd());
     uniform_real_distribution<double> dis(0.0, 1.0);
 #pragma omp parallel for
     for(size_t i = 0; i < n; ++i)
     {
+        // always use double for dis(gen), save as real type
         x[i].x = dis(gen);
         x[i].y = dis(gen);
     }
@@ -86,6 +85,7 @@ float average(vector<float> x)
 pair<float, vector<hipDoubleComplex>>
     fft_fftw(vector<hipDoubleComplex> const& x, int nx, int nbatch)
 {
+    // std::cout << "Complex Double" << std::endl;
     auto z = copy(x);
     // clang-format off
     auto p = fftw_plan_many_dft(1, &nx, nbatch,
@@ -103,6 +103,7 @@ pair<float, vector<hipDoubleComplex>>
 
 pair<float, vector<hipComplex>> fft_fftw(vector<hipComplex> const& x, int nx, int nbatch)
 {
+    // std::cout << "Complex Single" << std::endl;
     auto z = copy(x);
     // clang-format off
     auto p = fftwf_plan_many_dft(1, &nx, nbatch,
@@ -121,8 +122,8 @@ pair<float, vector<hipComplex>> fft_fftw(vector<hipComplex> const& x, int nx, in
 //
 // Stockham
 //
-
-__global__ void stockham_twiddles(int ntwiddles, dtype* twiddles, int nfactors, int* factors)
+template <typename T>
+__global__ void stockham_twiddles(int ntwiddles, T* twiddles, int nfactors, int* factors)
 {
     int m = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
 
@@ -144,31 +145,33 @@ __global__ void stockham_twiddles(int ntwiddles, dtype* twiddles, int nfactors, 
     int j  = (m - m0) % (factor - 1) + 1;
     int k  = (m - m0) / (factor - 1);
 
-    real_type_t<dtype> cost, sint;
-    sincospi(-2 * real_type_t<dtype>(j) * k / nroots, &sint, &cost);
-    twiddles[m].x = cost;
-    twiddles[m].y = sint;
+    // always use double for sine cosine, cast to real type when saving to twiddles
+    double cost, sint;
+    sincospi(-2 * double(j) * k / nroots, &sint, &cost);
+    twiddles[m].x = real_type_t<T>(cost);
+    twiddles[m].y = real_type_t<T>(sint);
 }
 
 #define TWIDDLE_MUL_FWD(TWIDDLES, INDEX, REG)   \
     {                                           \
-        dtype              W = TWIDDLES[INDEX]; \
-        real_type_t<dtype> TR, TI;              \
+        T              W = TWIDDLES[INDEX]; \
+        real_type_t<T> TR, TI;              \
         TR    = (W.x * REG.x) - (W.y * REG.y);  \
         TI    = (W.y * REG.x) + (W.x * REG.y);  \
         REG.x = TR;                             \
         REG.y = TI;                             \
     }
 
-__global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
+template <typename T>
+__global__ void fft_256_fwd(T* gb, T* twiddles)
 {
-    __shared__ dtype lds[256];
+    __shared__ T lds[256];
 
-    int    ioOffset = 256 * blockIdx.x;
-    dtype* lwb      = gb + ioOffset;
-    int    me       = threadIdx.x;
+    int ioOffset = 256 * blockIdx.x;
+    T*  lwb      = gb + ioOffset;
+    int me       = threadIdx.x;
 
-    dtype X[4];
+    T X[4];
 
     X[0] = lwb[me + 0];
     X[1] = lwb[me + 64];
@@ -239,12 +242,12 @@ __global__ void fft_256_fwd(dtype* gb, dtype* twiddles)
 #define GLBIDX(b, i) (256 * nbpt * blockIdx.x + 256 * b + i)
 #define LCLIDX(b, i) (256 * b + i)
 
-template <int nbpt>
-__global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
+template <int nbpt, typename T>
+__global__ void fft_256_fwd_batchfirst(T* gb, T* twiddles)
 {
-    dtype __shared__ lds[256 * nbpt];
-    dtype            X[4], W[4];
-    dtype            t;
+    T __shared__ lds[256 * nbpt];
+    T            X[4], W[4];
+    T            t;
 
     int me = threadIdx.x;
     int idx;
@@ -373,19 +376,20 @@ __global__ void fft_256_fwd_batchfirst(dtype* gb, dtype* twiddles)
 #include "stockham_generated_kernel.h"
 #endif
 
-fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbpt)
+template <typename T>
+tuple<float, float, vector<T>> fft_stockham_gpu(vector<T> const& x, int nx, int nbatch, int nbpt)
 {
     vector<float> times;
     int           ntrials = 10;
 
     auto z = copy(x);
 
-    dtype* X;
-    HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(dtype)));
-    HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(dtype), hipMemcpyHostToDevice));
+    T* X;
+    HIP_CHECK(hipMalloc(&X, nx * nbatch * sizeof(T)));
+    HIP_CHECK(hipMemcpy(X, z.data(), nx * nbatch * sizeof(T), hipMemcpyHostToDevice));
 
-    dtype* twiddles;
-    HIP_CHECK(hipMalloc(&twiddles, (nx - 1) * sizeof(dtype)));
+    T* twiddles;
+    HIP_CHECK(hipMalloc(&twiddles, (nx - 1) * sizeof(T)));
 
     GPUTimer total;
     total.tic();
@@ -407,8 +411,8 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
 
     if(false)
     {
-        vector<dtype> t(nx - 1);
-        HIP_CHECK(hipMemcpy(t.data(), twiddles, t.size() * sizeof(dtype), hipMemcpyDeviceToHost));
+        vector<T> t(nx - 1);
+        HIP_CHECK(hipMemcpy(t.data(), twiddles, t.size() * sizeof(T), hipMemcpyDeviceToHost));
         for(int i = 0; i < nx - 1; ++i)
             cout << i << " " << t[i].x << " " << t[i].y << endl;
     }
@@ -446,6 +450,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
             }
         }
 #else
+        // 1,1 means unit-stride (TODO: arbitrary stride)
         GENERATED_KERNEL_LAUNCH(X, nbatch, twiddles, 1, 1);
 #endif
 
@@ -453,7 +458,7 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
         if(n > 0)
             times.push_back(timer.elapsed());
         if(n == 0)
-            HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(dtype), hipMemcpyDeviceToHost));
+            HIP_CHECK(hipMemcpy(z.data(), X, nx * nbatch * sizeof(T), hipMemcpyDeviceToHost));
     }
     total.toc();
 
@@ -466,7 +471,8 @@ fft_result2 fft_stockham_gpu(vector<dtype> const& x, int nx, int nbatch, int nbp
 //
 // Relative difference
 //
-double compare(vector<dtype> const& z1, vector<dtype> const& z2)
+template <typename T>
+double compare(vector<T> const& z1, vector<T> const& z2)
 {
     double d = 0.0;
     double r = 0.0;
@@ -487,14 +493,15 @@ double compare(vector<dtype> const& z1, vector<dtype> const& z2)
 //
 // Some tests!
 //
+template <typename T>
 void test1d(size_t n, size_t nbatch, size_t nbpt)
 {
-    double GiB = double(n * nbatch * sizeof(dtype)) / 1024 / 1024 / 1024;
+    double GiB = double(n * nbatch * sizeof(T)) / 1024 / 1024 / 1024;
     cout << "# 1d test" << endl;
     cout << "1d input length: " << n << " (" << nbatch << ")" << endl;
     cout << "1d input size:   " << GiB << "GiB" << endl;
 
-    auto x = random_vector(n * nbatch);
+    auto x = random_vector<T>(n * nbatch);
 
     auto [t1, z1] = fft_fftw(x, n, nbatch);
     cout << "FFTW time:       " << t1 << "ms" << endl;
@@ -512,12 +519,18 @@ int main(int argc, char* argv[])
     size_t length = 256;
     size_t nbatch = 1;
     size_t nbpt   = 1;
+    size_t single = 1;
     if(argc > 1)
         length = stoi(argv[1]);
     if(argc > 2)
         nbatch = stoi(argv[2]);
     if(argc > 3)
-        nbpt = stoi(argv[3]);
+        single = stoi(argv[3]);
+    if(argc > 4)
+        nbpt = stoi(argv[4]);
 
-    test1d(length, nbatch, nbpt);
+    if (single)
+        test1d<hipComplex>(length, nbatch, nbpt);
+    else
+        test1d<hipDoubleComplex>(length, nbatch, nbpt);
 }
