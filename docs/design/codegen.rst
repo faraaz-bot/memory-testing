@@ -1,5 +1,5 @@
-Code generator
-==============
+Code Generator Design Document
+==============================
 
 Proposal
 --------
@@ -76,6 +76,7 @@ Kernels need to handle all combinations of:
 * small/large twiddle tables
 * unit/non-unit stride
 * transposed output, including with twiddle multiplies for large 1D
+* fusing with pre and post-processing kernels (eg real even-length)
 
 Ideally any configuration/runtime parameters required by the kernels
 would be defined in a single place to avoid repetition between rocFFT
@@ -131,13 +132,13 @@ Host/global functions should support arbitrary dimensions, lengths,
 strides, offsets, and batches.
 
 Users should be allowed to store their arrays arbitrarily.  For an
-:math:`N` dimensional dataset, the array index :math:`a` corresponding
+:math:`N` dimensional dataset, the flat index :math:`a` corresponding
 to indices :math:`(i_1,\ldots,i_N,i_b)`, where :math:`i_b` is the
 batch index, is given by
 
 .. math::
 
-   a(i_1,\ldots,i_N,i_b) = \sum_{d=1}^N s_d i_d + s_b i_b
+   a(i_1,\ldots,i_N,i_b) = s_b i_b + \sum_{d=1}^N s_d i_d
 
 where :math:`s_d` is the stride along dimension :math:`d`.  To support
 these strides, the device function to compute the FFT along dimension
