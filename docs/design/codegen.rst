@@ -1,21 +1,28 @@
 Code generator
 ==============
 
+Proposal
+--------
+
+Create a new code generator for rocFFT.
+
 Rationale
 ---------
 
-The previous code generator:
+The current code generator:
 
-* is not (well) documented
+* dates from clFFT in 2013
+* needs improved documentation documented
 * is based on string concatenation
-* can be (subjectively) cumbersome to work with
+* can be cumbersome to work with
 
 Ideadlly, a new code generator:
 
 * would be concise
-* resonably documented
+* would have improved documentation
 * based on an abstract-syntax-tree (AST)
 * easy to work with
+* generates faster, more robust kernels
 
 ASTs allow generated code to be transformed and manipulated before
 being emitted.  A concrete example of this for FFT kernels would be:
@@ -43,19 +50,13 @@ Related projects:
 * Spiral FFT
 * FFTX
 * FFTW
+* vkFFT
+* clFFT
 
 Ideas gleaned from looking at related projects:
 
 * FFTW: GURU interface
 * FFTX: codelets?
-
-
-Known issues
-------------
-
-The current generator uses the single-precision large-threshold when
-generating double-precision kernels.
-
 
 Required kernels (scope)
 ------------------------
@@ -64,15 +65,17 @@ For rocFFT, we need/want to generate:
 
 * Host functions to launch the FFT kernels
 * Tiled (row/column) + strided + batched Stockham kernels for arbitrary factorisations
-
+* May want to extend to Cooley-Tukey kernels as well
+  
 Kernels need to handle all combinations of:
 
-* single/double precision
+* single/double precision (and be extendable to half-float and bfloat)
 * in-place/out-of-place
 * planar/interleaved
 * real/complex
 * small/large twiddle tables
 * unit/non-unit stride
+* transposed output, including with twiddle multiplies for large 1D
 
 Ideally any configuration/runtime parameters required by the kernels
 would be defined in a single place to avoid repetition between rocFFT
@@ -191,7 +194,7 @@ Generated kernels should support these "large twiddle tables".
 Launching
 ^^^^^^^^^
 
-Currently kernels are lauched with:
+Currently kernels are launched with:
 
 * dimension
 * number of blocks (batches)
@@ -209,8 +212,8 @@ We have a lot of flexibility here.
 Implementation
 --------------
 
-The code generator will by implemented in Python; targetting version
-3.6 and using only standard modules.
+The code generator will by implemented in Python using only standard
+modules.
 
 The AST will be represented as a tree structure, with nodes in the
 tree representing operations, such as assignment, addition, or a block
@@ -225,7 +228,7 @@ stored in a simple list called ``args``:
 
 
 To facilitate building ASTs, the base node will have a constructor
-that simply stores it's arguments as operands:
+that simply stores its arguments as operands:
 
 .. code-block:: python
 
