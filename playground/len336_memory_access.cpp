@@ -2,7 +2,7 @@
  * build with hipcc:
  *      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access -I /opt/rocm/hip/include/hip
  * build with nvcc:
- *      nvcc -x cu -D CUDA len336_memory_access.cpp  -o len336_memory_access
+ *      nvcc -x cu -std=c++11 -D CUDA len336_memory_access.cpp  -o len336_memory_access
  */
 
 #include <assert.h>
@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <tuple>
 #include <vector>
+#include <algorithm>
+#include <functional>
 
 #ifdef CUDA
 #include <cuda_runtime.h>
