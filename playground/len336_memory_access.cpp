@@ -99,7 +99,7 @@ template <typename T>
 __global__ void copy_direct(const T* __restrict__ idata,
                             T* __restrict__ odata,
                             const int n,
-                            const int elem_per_row,
+                            const int elem_per_thread,
                             const int rows,
                             const int padding)
 {
@@ -107,7 +107,7 @@ __global__ void copy_direct(const T* __restrict__ idata,
     int base = blockIdx.x * (n + padding) * rows;
 
     for(int j = 0; j < rows; j++)
-        for(int i = 0; i < elem_per_row; i++)
+        for(int i = 0; i < elem_per_thread; i++)
         {
             int idx    = base + j * (n + padding) + i * blockDim.x + threadIdx.x;
             odata[idx] = idata[idx];
@@ -119,7 +119,7 @@ template <typename T>
 __global__ void copy_lds(const T* __restrict__ idata,
                          T* __restrict__ odata,
                          const int n,
-                         const int elem_per_row,
+                         const int elem_per_thread,
                          const int rows,
                          const int padding)
 {
@@ -132,7 +132,7 @@ __global__ void copy_lds(const T* __restrict__ idata,
     int base = blockIdx.x * (n + padding) * rows;
 
     for(int j = 0; j < rows; j++)
-        for(int i = 0; i < elem_per_row; i++)
+        for(int i = 0; i < elem_per_thread; i++)
         {
             int idx  = j * n + i * blockDim.x + threadIdx.x;
             lds[idx] = idata[base + j * padding + idx];
@@ -141,7 +141,7 @@ __global__ void copy_lds(const T* __restrict__ idata,
     __syncthreads();
 
     for(int j = 0; j < rows; j++)
-        for(int i = 0; i < elem_per_row; i++)
+        for(int i = 0; i < elem_per_thread; i++)
         {
             int idx                         = j * n + i * blockDim.x + threadIdx.x;
             odata[base + j * padding + idx] = lds[idx];
@@ -153,7 +153,7 @@ template <typename T>
 __global__ void transpose_lds(const T* __restrict__ idata,
                               T* __restrict__ odata,
                               const int n,
-                              const int elem_per_row,
+                              const int elem_per_thread,
                               const int rows,
                               const int padding)
 {
@@ -167,7 +167,7 @@ __global__ void transpose_lds(const T* __restrict__ idata,
     int i_base = o_base + blockIdx.x * padding * rows;
 
     for(int j = 0; j < rows; j++)
-        for(int i = 0; i < elem_per_row; i++)
+        for(int i = 0; i < elem_per_thread; i++)
         {
             int idx  = j * n + i * blockDim.x + threadIdx.x;
             lds[idx] = idata[i_base + j * padding + idx];
@@ -177,7 +177,7 @@ __global__ void transpose_lds(const T* __restrict__ idata,
 
     __syncthreads();
 
-    for(int i = 0; i < elem_per_row; i++)
+    for(int i = 0; i < elem_per_thread; i++)
         for(int j = 0; j < rows; j++)
         {
             int lds_idx = i * blockDim.x + (blockDim.x * j + threadIdx.x) % rows * n
@@ -189,11 +189,24 @@ __global__ void transpose_lds(const T* __restrict__ idata,
         }
 }
 
+// Benchmark memory bandwidth efficiency with specific pattern
+//
+//   kernel_id       : 0 for copy_direct, 1 for copy_lds, 2 for transpose_lds
+//   len             : the size of one row(the fast dimension)
+//   batch           : the total size of how many rows(the second fast dimension)
+//   elem_per_thread : element number handled by each thread
+//   rows            : tile width
+//   padding         : padding element number at the end of each row
+//   trial           : repeat times
+//   verbose         : show details
+//   grid_x          : -1 for auto-calc
+//   block_x         : -1 for auto-calc
+//
 template <typename T>
 float mem_access_test(const int  kernel_id,
                       const int  len,
                       const int  batch,
-                      const int  elem_per_row,
+                      const int  elem_per_thread,
                       const int  rows,
                       const int  padding,
                       const int  trial   = 10,
@@ -204,7 +217,7 @@ float mem_access_test(const int  kernel_id,
     size_t i_total_size  = len * batch;
     size_t o_total_size  = len * batch;
     size_t i_total_bytes = i_total_size * sizeof(T);
-    size_t o_total_bytes = i_total_bytes;
+    size_t o_total_bytes = o_total_size * sizeof(T);
     size_t lds_bytes     = len * rows * sizeof(T);
 
     size_t i_padded_bytes = (len + padding) * batch * sizeof(T);
@@ -215,10 +228,10 @@ float mem_access_test(const int  kernel_id,
     std::vector<float> efficiency_pct_samples;
 
     assert(batch % rows == 0);
-    assert(len % elem_per_row == 0);
+    assert(len % elem_per_thread == 0);
 
     dim3 grid((grid_x == -1) ? (batch / rows) : grid_x);
-    dim3 block((block_x == -1) ? (len / elem_per_row) : block_x);
+    dim3 block((block_x == -1) ? (len / elem_per_thread) : block_x);
 
     std::ofstream   null_file("/dev/null");
     std::streambuf* stream_buffer = std::cout.rdbuf();
@@ -226,11 +239,12 @@ float mem_access_test(const int  kernel_id,
         std::cout.rdbuf(null_file.rdbuf());
 
     std::cout << "--------------------------------------------------------------------------------"
-              << "\nkernel_id " << kernel_id << ",  len " << len << ", batch " << batch << ", rows "
-              << rows << ", elem_per_row " << elem_per_row << ", padding " << padding
+              << "\nkernel_id " << kernel_id << "\nlen " << len << ", batch " << batch
+              << ", tile len " << len / elem_per_thread << ", tile width " << rows
+              << "\nelem_per_thread " << elem_per_thread << ", padding for each row " << padding
               << "\ngrid: " << grid.x << ", " << grid.y << ", " << grid.z << ", block: " << block.x
               << ", " << block.y << ", " << block.z << std::endl;
-    if(kernel_id == 1)
+    if(kernel_id != 0)
         std::cout << "lds bytes: " << lds_bytes << std::endl;
 
     std::vector<T> in(i_padded_bytes);
@@ -238,8 +252,8 @@ float mem_access_test(const int  kernel_id,
     T *            d_in, *d_out;
 
     std::cout << "Generate input...\n";
-    for(int i = 0; i < batch; i++)
-        for(int j = 0; j < len; j++)
+    for(auto i = 0; i < batch; i++)
+        for(auto j = 0; j < len; j++)
         {
             in[i * (len + padding) + j].x = in[i * (len + padding) + j].y = i * len + j;
         }
@@ -264,7 +278,7 @@ float mem_access_test(const int  kernel_id,
     hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice);
 #endif
 
-    for(int i = 0; i < trial; i++)
+    for(auto i = 0; i < trial; i++)
     {
 #ifdef CUDA
         cudaEvent_t start, stop;
@@ -281,14 +295,15 @@ float mem_access_test(const int  kernel_id,
         switch(kernel_id)
         {
         case 0:
-            copy_direct<T><<<grid, block>>>(d_in, d_out, len, elem_per_row, rows, padding);
+            copy_direct<T><<<grid, block>>>(d_in, d_out, len, elem_per_thread, rows, padding);
             break;
         case 1:
-            copy_lds<T><<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_row, rows, padding);
+            copy_lds<T>
+                <<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_thread, rows, padding);
             break;
         case 2:
             transpose_lds<T>
-                <<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_row, rows, padding);
+                <<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_thread, rows, padding);
             break;
         default:
             break;
@@ -350,10 +365,10 @@ float mem_access_test(const int  kernel_id,
 
     if(kernel_id == 2)
     {
-        for(int i = 0; i < batch / rows; i++)
+        for(auto i = 0; i < batch / rows; i++)
         {
-            int base = i * len * rows;
-            for(int j = 0; j < len * rows; j++) // check rows x len transpose
+            auto base = i * len * rows;
+            for(auto j = 0; j < len * rows; j++) // check rows x len transpose
             {
                 //std::cout << "(" << std::setw(2) << out[i*len*rows + j].x << ", "
                 //    << std::setw(2) <<  out[i*len*rows + j].y  << ")\n";
@@ -372,13 +387,13 @@ float mem_access_test(const int  kernel_id,
     }
     else
     {
-        for(int i = 0; i < batch; i++)
+        for(auto i = 0; i < batch; i++)
         {
-            for(int j = 0; j < len; j++)
+            for(auto j = 0; j < len; j++)
             {
                 //std::cout << "(" << std::setw(2) << out[i*len + j].x << ", "
                 //    << std::setw(2) <<  out[i*len + j].y  << "), ";
-                int idx = i * (len + padding) + j;
+                auto idx = i * (len + padding) + j;
                 if(((int)(out[idx].x) != i * len + j) || ((int)(out[idx].y) != i * len + j))
                 {
                     std::cerr << "failed at [" << idx << "]: " << out[idx].x << ", " << out[idx].y
@@ -408,30 +423,40 @@ float mem_access_test(const int  kernel_id,
     return std::get<2>(stats);
 }
 
-int main()
+// A wrapper to run mem_access_test() with various params
+template <typename T>
+void tuning_mem_access_test(const int len,
+                            const int batch,
+                            const int elem_per_thread_max,
+                            const int rows_max,
+                            const int padding_max,
+                            const int trial = 10)
 {
-    const int len   = 336;
-    const int batch = 18816;
-
-    const int trial = 10;
-
     typedef std::tuple<int, int, int, int, int> key_t;
 
     std::map<key_t, float> results[3];
 
-    for(int padding = 0; padding < 10; padding++)
-        for(int rows = 1; rows < 6; rows++)
-            for(int elem_per_row = 1; elem_per_row < 9; elem_per_row++)
-                for(int kernel_id = 0; kernel_id < 3; kernel_id++)
+    for(auto padding = 0; padding < padding_max; padding++)
+        for(auto rows = 1; rows < rows_max; rows++)
+            for(auto elem_per_thread = 1; elem_per_thread < elem_per_thread_max; elem_per_thread++)
+                for(auto kernel_id = 0; kernel_id < 3; kernel_id++)
                 {
-                    if(batch % rows == 0 && len % elem_per_row == 0)
+                    if(batch % rows == 0 && len % elem_per_thread == 0)
                     {
-                        results[kernel_id][std::make_tuple(len, batch, elem_per_row, rows, padding)]
-                            = mem_access_test<double2>(
-                                kernel_id, len, batch, elem_per_row, rows, padding, trial, false);
+                        results[kernel_id]
+                               [std::make_tuple(len, batch, elem_per_thread, rows, padding)]
+                            = mem_access_test<T>(kernel_id,
+                                                 len,
+                                                 batch,
+                                                 elem_per_thread,
+                                                 rows,
+                                                 padding,
+                                                 trial,
+                                                 false);
                     }
                 }
 
+    // Pop up the top 3 runs for each kernel and rerun with showing details
     for(int kernel_id = 0; kernel_id < 3; kernel_id++)
     {
         std::multimap<float, key_t> sorted_results = flip_map(results[kernel_id]);
@@ -439,18 +464,27 @@ int main()
         for(int i = 0; i < 3; i++)
         {
             auto  it  = std::next(start, i);
-            float ret = mem_access_test<double2>(kernel_id,
-                                                 std::get<0>(it->second),
-                                                 std::get<1>(it->second),
-                                                 std::get<2>(it->second),
-                                                 std::get<3>(it->second),
-                                                 std::get<4>(it->second),
-                                                 trial,
-                                                 true);
+            float ret = mem_access_test<T>(kernel_id,
+                                           std::get<0>(it->second),
+                                           std::get<1>(it->second),
+                                           std::get<2>(it->second),
+                                           std::get<3>(it->second),
+                                           std::get<4>(it->second),
+                                           trial,
+                                           true);
             std::cout << "Median orignal"
                       << ": " << it->first << ", rerun: " << ret << std::endl;
         }
     }
+}
+
+int main()
+{
+    std::cout << "Run case 336 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(336, 18816, 9, 6, 10);
+
+    std::cout << "Run case 256 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(256, 24696, 9, 6, 10);
 
     return 0;
 }
