@@ -472,7 +472,7 @@ void tuning_mem_access_test(const int len,
                                            std::get<4>(it->second),
                                            trial,
                                            true);
-            std::cout << "Median orignal"
+            std::cout << "Median original"
                       << ": " << it->first << ", rerun: " << ret << std::endl;
         }
     }

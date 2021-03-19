@@ -65,4 +65,4 @@ Open discussion
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Do we need DAG?
-- How dose SPIRAL optimize for NV platform?
+- How does SPIRAL optimize for NV platform?
