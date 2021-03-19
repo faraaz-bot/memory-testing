@@ -1,12 +1,15 @@
-/*
- * build with hipcc:
- *      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access -I /opt/rocm/hip/include/hip
- * build with nvcc:
- *      nvcc -x cu -std=c++11 -D CUDA len336_memory_access.cpp  -o len336_memory_access
- */
+///////////////////////////////////////////////////////////////////////////////
+//  build with hipcc:
+//      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access -I /opt/rocm/hip/include/hip
+//  build with nvcc:
+//      nvcc -x cu -std=c++11 -D CUDA len336_memory_access.cpp  -o len336_memory_access
+//
+///////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
 #include <assert.h>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -14,8 +17,6 @@
 #include <stdio.h>
 #include <tuple>
 #include <vector>
-#include <algorithm>
-#include <functional>
 
 #ifdef CUDA
 #include <cuda_runtime.h>
@@ -25,6 +26,9 @@
 #include <hip/hip_runtime_api.h>
 #include <hip/hip_vector_types.h>
 #endif
+
+//-----------------------------------------------------------------------------
+// Helper functions
 
 static float max_memory_bandwidth_GB_per_s()
 {
@@ -44,85 +48,6 @@ static float max_memory_bandwidth_GB_per_s()
     float result = (max_memory_clock_MHz * 2.0 * memory_bus_width / 8.0) / 1000.0;
     return result;
 #endif
-}
-
-// TODO: template and unroll
-template <typename T>
-__global__ void
-    copy_direct(const T* idata, T* odata, const int n, const int read_per_row, const int bwd, const int padding)
-{
-    int base = blockIdx.x * (n + padding) * bwd;
-
-    for(int j = 0; j < bwd; j++)
-        for(int i = 0; i < read_per_row; i++)
-        {
-            int idx    = base + j * (n + padding) + i * blockDim.x + threadIdx.x;
-            odata[idx] = idata[idx];
-        }
-}
-
-template <typename T>
-__global__ void
-    copy_lds(const T* idata, T* odata, const int n, const int read_per_row, const int bwd, const int padding)
-{
-#ifdef CUDA
-    extern __shared__ T lds[];
-#else
-    HIP_DYNAMIC_SHARED(T, lds);
-#endif
-
-    int base = blockIdx.x * (n + padding) * bwd;
-
-    for(int j = 0; j < bwd; j++)
-        for(int i = 0; i < read_per_row; i++)
-        {
-            int idx    = j * n + i * blockDim.x + threadIdx.x;
-            lds[idx] = idata[base + j * padding + idx];
-        }
-
-    __syncthreads();
-
-    for(int j = 0; j < bwd; j++)
-        for(int i = 0; i < read_per_row; i++)
-        {
-            int idx    = j * n + i * blockDim.x + threadIdx.x;
-            odata[base + j * padding + idx] = lds[idx];
-        }
-}
-
-template <typename T>
-__global__ void
-    transpose_lds(const T* idata, T* odata, const int n, const int read_per_row, const int bwd, const int padding)
-{
-#ifdef CUDA
-    extern __shared__ T lds[];
-#else
-    HIP_DYNAMIC_SHARED(T, lds);
-#endif
-
-    int base = blockIdx.x * (n + padding) * bwd;
-
-    for(int j = 0; j < bwd; j++)
-        for(int i = 0; i < read_per_row; i++)
-        {
-            int idx  = j * n + i * blockDim.x + threadIdx.x;
-            lds[idx] = idata[base + idx];
-            //printf("thread %d, global read  idx %2d, lds idx %2d, value %2d\n",
-            //    (int)threadIdx.x, (base + idx),  idx, (int)(lds[idx].x));
-        }
-
-    __syncthreads();
-
-    for(int i = 0; i < read_per_row; i++)
-        for(int j = 0; j < bwd; j++)
-        {
-            int lds_idx = i * blockDim.x + (blockDim.x * j + threadIdx.x) % bwd * n
-                          + (blockDim.x * j + threadIdx.x) / bwd;
-            int gw_idx    = base + i * blockDim.x * bwd + j * blockDim.x + threadIdx.x;
-            odata[gw_idx] = lds[lds_idx];
-            //printf("thread %d, global write idx %2d, lds idx %2d, value %2d\n",
-            //    (int)threadIdx.x, gw_idx,  lds_idx, (int)(lds[lds_idx].x));
-        }
 }
 
 // Return min, mean, median, max of numbers in a vector
@@ -152,36 +77,148 @@ std::tuple<T, T, T, T> m_4(std::vector<T> const& a)
     return std::make_tuple(min, mean, median, max);
 }
 
+// Flip key and value of a map
+template <typename A, typename B>
+std::pair<B, A> flip_pair(const std::pair<A, B>& p)
+{
+    return std::pair<B, A>(p.second, p.first);
+}
+
+template <typename A, typename B>
+std::multimap<B, A> flip_map(const std::map<A, B>& src)
+{
+    std::multimap<B, A> dst;
+    std::transform(src.begin(), src.end(), std::inserter(dst, dst.begin()), flip_pair<A, B>);
+    return dst;
+}
+
+//-----------------------------------------------------------------------------
+
+// Copy from global memory to global memory directly
+template <typename T>
+__global__ void copy_direct(const T* __restrict__ idata,
+                            T* __restrict__ odata,
+                            const int n,
+                            const int elem_per_row,
+                            const int rows,
+                            const int padding)
+{
+    // Todo: template and unroll some of the params
+    int base = blockIdx.x * (n + padding) * rows;
+
+    for(int j = 0; j < rows; j++)
+        for(int i = 0; i < elem_per_row; i++)
+        {
+            int idx    = base + j * (n + padding) + i * blockDim.x + threadIdx.x;
+            odata[idx] = idata[idx];
+        }
+}
+
+// Copy from global memory to global memory through LDS
+template <typename T>
+__global__ void copy_lds(const T* __restrict__ idata,
+                         T* __restrict__ odata,
+                         const int n,
+                         const int elem_per_row,
+                         const int rows,
+                         const int padding)
+{
+#ifdef CUDA
+    extern __shared__ T lds[];
+#else
+    HIP_DYNAMIC_SHARED(T, lds);
+#endif
+
+    int base = blockIdx.x * (n + padding) * rows;
+
+    for(int j = 0; j < rows; j++)
+        for(int i = 0; i < elem_per_row; i++)
+        {
+            int idx  = j * n + i * blockDim.x + threadIdx.x;
+            lds[idx] = idata[base + j * padding + idx];
+        }
+
+    __syncthreads();
+
+    for(int j = 0; j < rows; j++)
+        for(int i = 0; i < elem_per_row; i++)
+        {
+            int idx                         = j * n + i * blockDim.x + threadIdx.x;
+            odata[base + j * padding + idx] = lds[idx];
+        }
+}
+
+// Tiled transpose through LDS
+template <typename T>
+__global__ void transpose_lds(const T* __restrict__ idata,
+                              T* __restrict__ odata,
+                              const int n,
+                              const int elem_per_row,
+                              const int rows,
+                              const int padding)
+{
+#ifdef CUDA
+    extern __shared__ T lds[];
+#else
+    HIP_DYNAMIC_SHARED(T, lds);
+#endif
+
+    int o_base = blockIdx.x * n * rows;
+    int i_base = o_base + blockIdx.x * padding * rows;
+
+    for(int j = 0; j < rows; j++)
+        for(int i = 0; i < elem_per_row; i++)
+        {
+            int idx  = j * n + i * blockDim.x + threadIdx.x;
+            lds[idx] = idata[i_base + j * padding + idx];
+            //printf("thread %d, global read  idx %2d, lds idx %2d, value %2d\n",
+            //    (int)threadIdx.x, (base + j * padding + idx),  idx, (int)(lds[idx].x));
+        }
+
+    __syncthreads();
+
+    for(int i = 0; i < elem_per_row; i++)
+        for(int j = 0; j < rows; j++)
+        {
+            int lds_idx = i * blockDim.x + (blockDim.x * j + threadIdx.x) % rows * n
+                          + (blockDim.x * j + threadIdx.x) / rows;
+            int gw_idx    = o_base + i * blockDim.x * rows + j * blockDim.x + threadIdx.x;
+            odata[gw_idx] = lds[lds_idx];
+            //printf("thread %d, global write idx %2d, lds idx %2d, value %2d\n",
+            //    (int)threadIdx.x, gw_idx,  lds_idx, (int)(lds[lds_idx].x));
+        }
+}
+
 template <typename T>
 float mem_access_test(const int  kernel_id,
                       const int  len,
                       const int  batch,
-                      const int  read_per_row,
-                      const int  bwd,
+                      const int  elem_per_row,
+                      const int  rows,
                       const int  padding,
                       const int  trial   = 10,
                       const bool verbose = false,
                       const int  grid_x  = -1,
                       const int  block_x = -1)
 {
-    size_t total_size_in  = len * batch;
-    size_t total_size_out = len * batch;
-    size_t total_byte_in  = total_size_in * sizeof(T);
-    size_t total_byte_out = total_size_out * sizeof(T);
-    size_t lds_bytes      = len * bwd * sizeof(T);
+    size_t i_total_size  = len * batch;
+    size_t o_total_size  = len * batch;
+    size_t i_total_bytes = i_total_size * sizeof(T);
+    size_t o_total_bytes = i_total_bytes;
+    size_t lds_bytes     = len * rows * sizeof(T);
 
-    size_t total_byte_in_with_padding  = (len + padding) * batch * sizeof(T);
-    size_t total_byte_out_with_padding  = total_byte_in_with_padding;
+    size_t i_padded_bytes = (len + padding) * batch * sizeof(T);
+    size_t o_padded_bytes = i_padded_bytes;
 
     float              max_memory_bw  = max_memory_bandwidth_GB_per_s();
     float              efficiency_pct = 0;
     std::vector<float> efficiency_pct_samples;
 
-    assert(batch % bwd == 0);
-    assert(len % read_per_row == 0);
+    assert(batch % rows == 0);
+    assert(len % elem_per_row == 0);
 
-    dim3 grid((grid_x == -1) ? (batch / bwd) : grid_x);
-    dim3 block((block_x == -1) ? (len / read_per_row) : block_x);
+    dim3 grid((grid_x == -1) ? (batch / rows) : grid_x);
+    dim3 block((block_x == -1) ? (len / elem_per_row) : block_x);
 
     std::ofstream   null_file("/dev/null");
     std::streambuf* stream_buffer = std::cout.rdbuf();
@@ -189,18 +226,16 @@ float mem_access_test(const int  kernel_id,
         std::cout.rdbuf(null_file.rdbuf());
 
     std::cout << "--------------------------------------------------------------------------------"
-              << "\nkernel_id " << kernel_id << ",  len " << len << ", batch " << batch << ", bwd "
-              << bwd << ", read_per_row "  << read_per_row << ", padding " << padding << "\ngrid: " << grid.x << ", " << grid.y
-              << ", " << grid.z << ", block: " << block.x << ", " << block.y << ", " << block.z
-              << std::endl;
+              << "\nkernel_id " << kernel_id << ",  len " << len << ", batch " << batch << ", rows "
+              << rows << ", elem_per_row " << elem_per_row << ", padding " << padding
+              << "\ngrid: " << grid.x << ", " << grid.y << ", " << grid.z << ", block: " << block.x
+              << ", " << block.y << ", " << block.z << std::endl;
     if(kernel_id == 1)
         std::cout << "lds bytes: " << lds_bytes << std::endl;
 
-    T *in, *out;
-    T *d_in, *d_out;
-
-    in  = new T[total_byte_in_with_padding];
-    out = new T[total_byte_out_with_padding];
+    std::vector<T> in(i_padded_bytes);
+    std::vector<T> out(o_padded_bytes);
+    T *            d_in, *d_out;
 
     std::cout << "Generate input...\n";
     for(int i = 0; i < batch; i++)
@@ -209,7 +244,7 @@ float mem_access_test(const int  kernel_id,
             in[i * (len + padding) + j].x = in[i * (len + padding) + j].y = i * len + j;
         }
 
-    for(size_t i = 0; i < total_byte_out_with_padding; i++)
+    for(size_t i = 0; i < o_padded_bytes; i++)
     {
         out[i].x = out[i].y = -1;
     }
@@ -218,15 +253,15 @@ float mem_access_test(const int  kernel_id,
               << std::endl;
 
 #ifdef CUDA
-    cudaMalloc(&d_in, total_byte_in_with_padding);
-    cudaMalloc(&d_out, total_byte_out_with_padding);
-    cudaMemcpy(d_in, in, total_byte_in_with_padding, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_out, out, total_byte_out_with_padding, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_in, i_padded_bytes);
+    cudaMalloc(&d_out, o_padded_bytes);
+    cudaMemcpy(d_in, in.data(), i_padded_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_out, out.data(), o_padded_bytes, cudaMemcpyHostToDevice);
 #else
-    hipMalloc(&d_in, total_byte_in_with_padding);
-    hipMalloc(&d_out, total_byte_out_with_padding);
-    hipMemcpy(d_in, in, total_byte_in_with_padding, hipMemcpyHostToDevice);
-    hipMemcpy(d_out, out, total_byte_out_with_padding, hipMemcpyHostToDevice);
+    hipMalloc(&d_in, i_padded_bytes);
+    hipMalloc(&d_out, o_padded_bytes);
+    hipMemcpy(d_in, in.data(), i_padded_bytes, hipMemcpyHostToDevice);
+    hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice);
 #endif
 
     for(int i = 0; i < trial; i++)
@@ -246,13 +281,14 @@ float mem_access_test(const int  kernel_id,
         switch(kernel_id)
         {
         case 0:
-            copy_direct<T><<<grid, block>>>(d_in, d_out, len, read_per_row, bwd, padding);
+            copy_direct<T><<<grid, block>>>(d_in, d_out, len, elem_per_row, rows, padding);
             break;
         case 1:
-            copy_lds<T><<<grid, block, lds_bytes>>>(d_in, d_out, len, read_per_row, bwd, padding);
+            copy_lds<T><<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_row, rows, padding);
             break;
         case 2:
-            transpose_lds<T><<<grid, block, lds_bytes>>>(d_in, d_out, len, read_per_row, bwd, padding);
+            transpose_lds<T>
+                <<<grid, block, lds_bytes>>>(d_in, d_out, len, elem_per_row, rows, padding);
             break;
         default:
             break;
@@ -268,7 +304,7 @@ float mem_access_test(const int  kernel_id,
         hipEventSynchronize(stop);
         hipEventElapsedTime(&gpu_time, start, stop);
 #endif
-        double exec_bw = (double)(total_byte_in + total_byte_out) / (gpu_time * 1e6);
+        double exec_bw = (double)(i_total_bytes + o_total_bytes) / (gpu_time * 1e6);
         if(max_memory_bw != 0.0)
         {
             efficiency_pct = 100.0 * exec_bw / max_memory_bw;
@@ -305,29 +341,29 @@ float mem_access_test(const int  kernel_id,
     }
 
 #ifdef CUDA
-    cudaMemcpy(out, d_out, total_byte_out_with_padding, cudaMemcpyDeviceToHost);
+    cudaMemcpy(out.data(), d_out, o_padded_bytes, cudaMemcpyDeviceToHost);
 #else
-    hipMemcpy(out, d_out, total_byte_out_with_padding, hipMemcpyDeviceToHost);
+    hipMemcpy(out.data(), d_out, o_padded_bytes, hipMemcpyDeviceToHost);
 #endif
 
     std::cout << "Verify output...";
 
     if(kernel_id == 2)
     {
-        for(int i = 0; i < batch / bwd; i++)
+        for(int i = 0; i < batch / rows; i++)
         {
-            int base = i * len * bwd;
-            for(int j = 0; j < len * bwd; j++) // check bwd x len transpose
+            int base = i * len * rows;
+            for(int j = 0; j < len * rows; j++) // check rows x len transpose
             {
-                //std::cout << "(" << std::setw(2) << out[i*len*bwd + j].x << ", "
-                //    << std::setw(2) <<  out[i*len*bwd + j].y  << ")\n";
-                int value = base + (j % bwd) * len + j / bwd;
+                //std::cout << "(" << std::setw(2) << out[i*len*rows + j].x << ", "
+                //    << std::setw(2) <<  out[i*len*rows + j].y  << ")\n";
+                int value = base + (j % rows) * len + j / rows;
 
-                if(((int)(out[i * len * bwd + j].x) != value)
-                   || ((int)(out[i * len * bwd + j].y) != value))
+                if(((int)(out[i * len * rows + j].x) != value)
+                   || ((int)(out[i * len * rows + j].y) != value))
                 {
-                    std::cerr << "failed at [" << base + j << "]: " << out[i * len * bwd + j].x
-                              << ", " << out[i * len * bwd + j].y << ", expected " << value
+                    std::cerr << "failed at [" << base + j << "]: " << out[i * len * rows + j].x
+                              << ", " << out[i * len * rows + j].y << ", expected " << value
                               << std::endl;
                     exit(0);
                 }
@@ -343,11 +379,10 @@ float mem_access_test(const int  kernel_id,
                 //std::cout << "(" << std::setw(2) << out[i*len + j].x << ", "
                 //    << std::setw(2) <<  out[i*len + j].y  << "), ";
                 int idx = i * (len + padding) + j;
-                if(((int)(out[idx].x) != i * len + j)
-                   || ((int)(out[idx].y) != i * len + j))
+                if(((int)(out[idx].x) != i * len + j) || ((int)(out[idx].y) != i * len + j))
                 {
-                    std::cerr << "failed at [" << idx << "]: " << out[idx].x << ", "
-                              << out[idx].y << ", expected " << i * len + j << std::endl;
+                    std::cerr << "failed at [" << idx << "]: " << out[idx].x << ", " << out[idx].y
+                              << ", expected " << i * len + j << std::endl;
                     exit(0);
                 }
             }
@@ -365,29 +400,12 @@ float mem_access_test(const int  kernel_id,
     hipFree(d_out);
 #endif
 
-    delete[] in;
-    delete[] out;
-
     if(!verbose)
         std::cout.rdbuf(stream_buffer);
 
     std::tuple<float, float, float, float> stats = m_4<float>(efficiency_pct_samples);
 
     return std::get<2>(stats);
-}
-
-template <typename A, typename B>
-std::pair<B, A> flip_pair(const std::pair<A, B>& p)
-{
-    return std::pair<B, A>(p.second, p.first);
-}
-
-template <typename A, typename B>
-std::multimap<B, A> flip_map(const std::map<A, B>& src)
-{
-    std::multimap<B, A> dst;
-    std::transform(src.begin(), src.end(), std::inserter(dst, dst.begin()), flip_pair<A, B>);
-    return dst;
 }
 
 int main()
@@ -402,19 +420,19 @@ int main()
     std::map<key_t, float> results[3];
 
     for(int padding = 0; padding < 10; padding++)
-        for(int bwd = 1; bwd < 6; bwd++)
-            for(int read_per_row = 1; read_per_row < 9; read_per_row++)
-                for(int kernel_id = 0; kernel_id < 2; kernel_id++)
+        for(int rows = 1; rows < 6; rows++)
+            for(int elem_per_row = 1; elem_per_row < 9; elem_per_row++)
+                for(int kernel_id = 0; kernel_id < 3; kernel_id++)
                 {
-                    if(batch % bwd == 0 && len % read_per_row == 0)
+                    if(batch % rows == 0 && len % elem_per_row == 0)
                     {
-                        float ret = mem_access_test<double2>(
-                            kernel_id, len, batch, read_per_row, bwd, padding, trial, false);
-                        results[kernel_id][std::make_tuple(len, batch, read_per_row, bwd, padding)] = ret;
+                        results[kernel_id][std::make_tuple(len, batch, elem_per_row, rows, padding)]
+                            = mem_access_test<double2>(
+                                kernel_id, len, batch, elem_per_row, rows, padding, trial, false);
                     }
                 }
 
-    for(int kernel_id = 0; kernel_id < 2; kernel_id++)
+    for(int kernel_id = 0; kernel_id < 3; kernel_id++)
     {
         std::multimap<float, key_t> sorted_results = flip_map(results[kernel_id]);
         auto                        start          = sorted_results.crbegin();
