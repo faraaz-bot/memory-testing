@@ -106,7 +106,7 @@ A device function may be called so that a thread block is actually
 transforming multiple batches.  As such, indexes (the spatial index in
 the FFT) should be computed as:
 
-.. code-block::
+.. code-block:: c
 
    int fft_index = threadIdx.x % width;
 
@@ -173,7 +173,7 @@ Device
 Device functions should support arbitrary offsets and strides.  Array
 indexes in device functions should be computed as, eg:
 
-.. code-block::
+.. code-block:: c
 
    int fft_index = threadIdx.x % width;
    int array_index = offset + fft_index * stride;
@@ -195,6 +195,26 @@ Generated kernels should support these "large twiddle tables".
 Launching
 ^^^^^^^^^
 
+For a specific transform length, the generator is free to choose
+amoungst several algorithms and related tuning parameters.  These
+choices may influence how the kernel is launched.
+
+The generator will populate a function pool with structs of the form
+
+.. code-block:: c++
+
+    struct ROCFFTKernel
+    {
+        void *device_function = nullptr;
+        std::vector<int> factors;
+        int              transforms_per_block = 0;
+        int              threads_per_block = 0;
+        // ...
+    };
+
+This moves the responsbility of figuring how a kernel should be
+launched to the generator.
+
 Currently kernels are launched with:
 
 * dimension
@@ -206,8 +226,6 @@ Currently kernels are launched with:
 * strides
 * batch count
 * in/out buffers
-
-We have a lot of flexibility here.
 
 
 Implementation
