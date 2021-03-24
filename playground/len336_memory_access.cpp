@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //  build with hipcc:
-//      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access -I /opt/rocm/hip/include/hip
+//      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access
 //  build with nvcc:
 //      nvcc -x cu -std=c++11 -D CUDA len336_memory_access.cpp  -o len336_memory_access
 //
@@ -30,10 +30,41 @@
 //-----------------------------------------------------------------------------
 // Helper functions
 
+#define GPU_ERR_CHECK(expr)                     \
+    {                                           \
+        gpu_assert((expr), __FILE__, __LINE__); \
+    }
+
+#ifdef CUDA
+inline void gpu_assert(cudaError_t e, const char* file, int line, bool abort = true)
+{
+    if(e != cudaSuccess)
+    {
+        const char* errName = cudaGetErrorName(e);
+        const char* errMsg  = cudaGetErrorString(e);
+        std::cerr << "Error " << e << "(" << errName << ") " << errMsg << std::endl;
+        exit(e);
+    }
+}
+#else
+inline void gpu_assert(hipError_t e, const char* file, int line, bool abort = true)
+{
+    if(e)
+    {
+        const char* errName = hipGetErrorName(e);
+        const char* errMsg  = hipGetErrorString(e);
+        std::cerr << "Error " << e << "(" << errName << ") " << __FILE__ << ":" << __LINE__ << ": "
+                  << std::endl
+                  << errMsg << std::endl;
+        exit(e);
+    }
+}
+#endif
+
 static float max_memory_bandwidth_GB_per_s()
 {
 #ifdef CUDA
-    return 900; // assume Tesla V100-SXM2 32GB
+    return 336.1;
 #else
     int deviceid = 0;
     hipGetDevice(&deviceid);
@@ -124,7 +155,8 @@ __global__ void copy_lds(const T* __restrict__ idata,
                          const int padding)
 {
 #ifdef CUDA
-    extern __shared__ T lds[];
+    extern __shared__ __align__(sizeof(T)) unsigned char shmem_ptr[];
+    T*                                                   lds = reinterpret_cast<T*>(shmem_ptr);
 #else
     HIP_DYNAMIC_SHARED(T, lds);
 #endif
@@ -158,7 +190,8 @@ __global__ void transpose_lds(const T* __restrict__ idata,
                               const int padding)
 {
 #ifdef CUDA
-    extern __shared__ T lds[];
+    extern __shared__ __align__(sizeof(T)) unsigned char shmem_ptr[];
+    T*                                                   lds = reinterpret_cast<T*>(shmem_ptr);
 #else
     HIP_DYNAMIC_SHARED(T, lds);
 #endif
@@ -267,29 +300,29 @@ float mem_access_test(const int  kernel_id,
               << std::endl;
 
 #ifdef CUDA
-    cudaMalloc(&d_in, i_padded_bytes);
-    cudaMalloc(&d_out, o_padded_bytes);
-    cudaMemcpy(d_in, in.data(), i_padded_bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_out, out.data(), o_padded_bytes, cudaMemcpyHostToDevice);
+    GPU_ERR_CHECK(cudaMalloc(&d_in, i_padded_bytes));
+    GPU_ERR_CHECK(cudaMalloc(&d_out, o_padded_bytes));
+    GPU_ERR_CHECK(cudaMemcpy(d_in, in.data(), i_padded_bytes, cudaMemcpyHostToDevice));
+    GPU_ERR_CHECK(cudaMemcpy(d_out, out.data(), o_padded_bytes, cudaMemcpyHostToDevice));
 #else
-    hipMalloc(&d_in, i_padded_bytes);
-    hipMalloc(&d_out, o_padded_bytes);
-    hipMemcpy(d_in, in.data(), i_padded_bytes, hipMemcpyHostToDevice);
-    hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice);
+    GPU_ERR_CHECK(hipMalloc(&d_in, i_padded_bytes));
+    GPU_ERR_CHECK(hipMalloc(&d_out, o_padded_bytes));
+    GPU_ERR_CHECK(hipMemcpy(d_in, in.data(), i_padded_bytes, hipMemcpyHostToDevice));
+    GPU_ERR_CHECK(hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice));
 #endif
 
     for(auto i = 0; i < trial; i++)
     {
 #ifdef CUDA
         cudaEvent_t start, stop;
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
-        cudaEventRecord(start);
+        GPU_ERR_CHECK(cudaEventCreate(&start));
+        GPU_ERR_CHECK(cudaEventCreate(&stop));
+        GPU_ERR_CHECK(cudaEventRecord(start));
 #else
         hipEvent_t start, stop;
-        hipEventCreate(&start);
-        hipEventCreate(&stop);
-        hipEventRecord(start);
+        GPU_ERR_CHECK(hipEventCreate(&start));
+        GPU_ERR_CHECK(hipEventCreate(&stop));
+        GPU_ERR_CHECK(hipEventRecord(start));
 #endif
 
         switch(kernel_id)
@@ -311,13 +344,13 @@ float mem_access_test(const int  kernel_id,
 
         float gpu_time;
 #ifdef CUDA
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&gpu_time, start, stop);
+        GPU_ERR_CHECK(cudaEventRecord(stop));
+        GPU_ERR_CHECK(cudaEventSynchronize(stop));
+        GPU_ERR_CHECK(cudaEventElapsedTime(&gpu_time, start, stop));
 #else
-        hipEventRecord(stop);
-        hipEventSynchronize(stop);
-        hipEventElapsedTime(&gpu_time, start, stop);
+        GPU_ERR_CHECK(hipEventRecord(stop));
+        GPU_ERR_CHECK(hipEventSynchronize(stop));
+        GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, start, stop));
 #endif
         double exec_bw = (double)(i_total_bytes + o_total_bytes) / (gpu_time * 1e6);
         if(max_memory_bw != 0.0)
@@ -331,34 +364,18 @@ float mem_access_test(const int  kernel_id,
                   << std::setw(22) << efficiency_pct << "|" << std::endl;
 
 #ifdef CUDA
-        cudaError_t err = cudaPeekAtLastError();
-        if(err != cudaSuccess)
-        {
-            std::cout << "Error: " << cudaGetErrorName(err) << ", " << cudaGetErrorString(err)
-                      << std::endl;
-            exit(-1);
-        }
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
+        GPU_ERR_CHECK(cudaEventDestroy(start));
+        GPU_ERR_CHECK(cudaEventDestroy(stop));
 #else
-        hipError_t err = hipPeekAtLastError();
-        if(err != hipSuccess)
-        {
-            std::cout << "Error: " << hipGetErrorName(err) << ", " << hipGetErrorString(err)
-                      << std::endl;
-            exit(-1);
-        }
-
-        hipEventDestroy(start);
-        hipEventDestroy(stop);
+        GPU_ERR_CHECK(hipEventDestroy(start));
+        GPU_ERR_CHECK(hipEventDestroy(stop));
 #endif
     }
 
 #ifdef CUDA
-    cudaMemcpy(out.data(), d_out, o_padded_bytes, cudaMemcpyDeviceToHost);
+    GPU_ERR_CHECK(cudaMemcpy(out.data(), d_out, o_padded_bytes, cudaMemcpyDeviceToHost));
 #else
-    hipMemcpy(out.data(), d_out, o_padded_bytes, hipMemcpyDeviceToHost);
+    GPU_ERR_CHECK(hipMemcpy(out.data(), d_out, o_padded_bytes, hipMemcpyDeviceToHost));
 #endif
 
     std::cout << "Verify output...";
@@ -408,11 +425,11 @@ float mem_access_test(const int  kernel_id,
     std::cout << "done.\n";
 
 #ifdef CUDA
-    cudaFree(d_in);
-    cudaFree(d_out);
+    GPU_ERR_CHECK(cudaFree(d_in));
+    GPU_ERR_CHECK(cudaFree(d_out));
 #else
-    hipFree(d_in);
-    hipFree(d_out);
+    GPU_ERR_CHECK(hipFree(d_in));
+    GPU_ERR_CHECK(hipFree(d_out));
 #endif
 
     if(!verbose)
@@ -480,11 +497,14 @@ void tuning_mem_access_test(const int len,
 
 int main()
 {
-    std::cout << "Run case 336 ---------------------------------------\n";
-    tuning_mem_access_test<double2>(336, 18816, 9, 6, 10);
+    std::cout << "Run case 200 ---------------------------------------\n";
+    tuning_mem_access_test<float2>(200, 20200, 5, 10, 10);
 
     std::cout << "Run case 256 ---------------------------------------\n";
     tuning_mem_access_test<double2>(256, 24696, 9, 6, 10);
+
+    std::cout << "Run case 336 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(336, 18816, 9, 6, 10);
 
     return 0;
 }
