@@ -8,8 +8,8 @@ import types
 
 import perflib.transforms
 
+import functools
 import itertools
-
 
 NS = types.SimpleNamespace
 
@@ -26,11 +26,20 @@ transforms = [
     ]
 
 
+def product(xs):
+    """Return the product of the factors."""
+    if xs:
+        return functools.reduce(lambda a, b: a * b, xs)
+    return 1
+
+
 def make_suite(suite):
     def fft_test_generator(ntrials, verify):
         for transform in transforms:
             for dtype in dtypes:
                 label = '_'.join([suite.label, transform.label, dtype.label])
+                if getattr(suite, 'size', None) is not None:
+                    suite.nbatch = suite.size // product(suite.lengths)
                 yield perflib.transforms.FFTTestRunner(label, transform.transform, suite.lengths, ntrials, suite.nbatch, dtype, verify)
     return fft_test_generator
 
@@ -61,11 +70,17 @@ mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958,
                                       3000, 3001, 3003, 3004, 3008, 3034, 3035, 3039, 3040, 3042,
                                       3048, 3052, 3055, 3060, 3065, 4000, 12000, 24000], nbatch=1000))
 
+explicit = [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343,
+            11, 22, 44, 88, 121, 176,
+            13, 26, 52, 104, 169, 208]
+
+adhoc = make_suite(NS(label='adhoc', lengths=explicit + [ 5 * x for x in explicit ], nbatch=1024**3//max(explicit)))
 
 cholla = make_suite(NS(label='cholla', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
 cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
 
-vasp = make_suite(NS(label='vasp', lengths=[(336,336,56)], nbatch=10))
+vasp1 = make_suite(NS(label='vasp', lengths=[56, 336], nbatch=1e8))
+vasp3 = make_suite(NS(label='vasp', lengths=[(336,336,56)], nbatch=10))
 
 def all(ntrials, verify):
     generators = [ pow2, pow5, pow7, prime, mixed, cholla ]
