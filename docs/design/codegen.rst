@@ -55,8 +55,8 @@ Related projects:
 
 Ideas gleaned from looking at related projects:
 
-* FFTW: GURU interface
-* FFTX: codelets?
+* FFTW 
+* FFTX
 
 Required kernels (scope)
 ------------------------
@@ -197,9 +197,12 @@ Launching
 
 For a specific transform length, the generator is free to choose
 amoungst several algorithms and related tuning parameters.  These
-choices may influence how the kernel is launched.
+choices may influence how the kernel is launched.  The generator will
+create both the kernel and the accompanying struct, which gives
+indications of how the kernel may be used in both rocFFT and other
+applications.
 
-The generator will populate a function pool with structs of the form
+the generator will populate a function pool with structs of the form
 
 .. code-block:: c++
 
