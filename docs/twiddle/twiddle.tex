@@ -1,0 +1,156 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\usepackage{cancel}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Twiddle Table Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+The twiddle table for a FFT of length $N$ are just the $N$ roots of unity:
+\begin{dmath}
+  \omega_N^k = e^{\frac{k 2 \pi i}{N}} = \cos\frac{k 2 \pi}{N}
+  +i\sin\frac{k 2 \pi}{N} \text{, for } k\nobreak{=}0,\dots,N-1.
+\end{dmath}
+Figure~\ref{rooteg} shows these in the complex plane.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics{rootn}
+  \caption{Roots of unity for $N=5$.}
+  \label{rooteg}
+\end{figure}
+
+
+\subsection{Symmetries in Twiddle Tables}
+
+\subsubsection{General $N$}
+It's easy to see in Figure~\ref{rooteg} that there are a number of
+symmtries that we can take advantage of.  For general, $N$, we know
+that, for $k=N-1$,
+\begin{dmath}
+  e^{\frac{(N-1)2 \pi i}{N}}
+  =  \cancelto{1}{e^{\frac{N2 \pi i}{N}}}\, e^{\frac{-2 \pi i}{N}}
+  = \(e^{\frac{2 \pi i}{N}}\)^*.
+\end{dmath}
+That is, the $k=(N-1)$th root of unity is the complex conjugate of the
+$k=1$ root of unity.  This can be generalised:
+\begin{dmath}
+  \omega_N^{N - k}
+  = \omega_N^{-k}
+  =  {\omega_N^{k}}^*
+\end{dmath}
+so, for $k=\floor{\frac{N}{2}} + 1,\dots,N-1$,
+\begin{dmath}
+  \omega_N^{k}
+  = {\omega_N^{N-k}}^*
+\end{dmath}
+so we can compute the $k$th twiddle as the complex conjugate of the
+$N-k$th twiddle.  This reduces the size of the twiddle table by a
+factor of 2.
+
+\subsubsection{Even $N$}
+If $N$ is even, then we have another symmetry, as shown in
+Figure~\ref{rooteven}: Keeping only half of the complex plane, we also
+have that $\omega_{N}^{N/2-1} = -\(\omega_{N}^{1}\)^*$.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics{rooteven}
+  \caption{Roots of unity for $N=14$.}
+  \label{rooteven}
+\end{figure}
+In general, for even $N$, we have
+\begin{dmath}
+  \omega_N^{\frac{N}{2} - k}
+  = \omega_N^{N/2}\omega_N^{-k}
+  = -\(\omega_N^{k}\)^*
+  = -\Re{\omega_N^{k}\}} + i \Im{\omega_N^{k}\}}.
+ \end{dmath}
+This allows us to reduce the twiddle table size by a further factor of
+2, keeping only $1/4$ of the original values.  The computation is just
+changing the sing of the real part.
+
+
+\subsubsection{$N|4$}
+
+If $N|4$, then there is another useful symmetry, which requires no
+additional FLOPS:
+\begin{figure}[htbp]
+  \centering
+  \includegraphics{rootdiv4}
+  \caption{Roots of unity for $N=20$.}
+  \label{rootdiv4}
+\end{figure}
+and we have
+\begin{dmath}
+  \omega_N^{\frac{N}{4} - k}
+  = \omega_N^{\frac{N}{4}}\omega_N^{-k}
+  = \omega_4\(\omega_N^{k}\)^*
+  = i\(\omega_N^{k}\)^*
+  = \Im{\omega_N^{k}} + i\Re{\omega_N^{k}}
+\end{dmath}
+In other words, we can reduce the twiddle table by a factor of 8 if
+$N|4$.
+
+\subsubsection{$N|8$}
+
+If $N|8$, then there is a final symmetry to take advantage of which
+involves the online computation of $\sqrt{2}$.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics{rootdiv8}
+  \caption{Roots of unity for $N=32$.}
+  \label{rootdiv8}
+\end{figure}
+Here, we have
+\begin{dmath}
+  \omega_N^{\frac{N}{8} - k}
+  = \omega_N^{\frac{N}{8}}\omega_N^{-k}
+  = \omega_8\(\omega_N^{k}\)^*
+  = \frac{1+i}{\sqrt{2}} \(\omega_N^{k}\)^*.
+\end{dmath}
+This allows us to store only $1/16$ of the original twiddle table.
+
+\end{document}

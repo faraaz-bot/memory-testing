@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //  build with hipcc:
-//      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access -I /opt/rocm/hip/include/hip
+//      /opt/rocm/bin/hipcc len336_memory_access.cpp  -o len336_memory_access
 //  build with nvcc:
 //      nvcc -x cu -std=c++11 -D CUDA len336_memory_access.cpp  -o len336_memory_access
 //
@@ -30,24 +30,59 @@
 //-----------------------------------------------------------------------------
 // Helper functions
 
-static float max_memory_bandwidth_GB_per_s()
-{
+#define GPU_ERR_CHECK(expr)                     \
+    {                                           \
+        gpu_assert((expr), __FILE__, __LINE__); \
+    }
+
 #ifdef CUDA
-    return 900; // assume Tesla V100-SXM2 32GB
+inline void gpu_assert(cudaError_t e, const char* file, int line, bool abort = true)
+{
+    if(e != cudaSuccess)
+    {
+        const char* errName = cudaGetErrorName(e);
+        const char* errMsg  = cudaGetErrorString(e);
+        std::cerr << "Error " << e << "(" << errName << ") " << errMsg << std::endl;
+        exit(e);
+    }
+}
 #else
-    int deviceid = 0;
-    hipGetDevice(&deviceid);
+inline void gpu_assert(hipError_t e, const char* file, int line, bool abort = true)
+{
+    if(e)
+    {
+        const char* errName = hipGetErrorName(e);
+        const char* errMsg  = hipGetErrorString(e);
+        std::cerr << "Error " << e << "(" << errName << ") " << __FILE__ << ":" << __LINE__ << ": "
+                  << std::endl
+                  << errMsg << std::endl;
+        exit(e);
+    }
+}
+#endif
+
+static float max_memory_bandwidth_GB_per_s(const int device_id)
+{
     int max_memory_clock_kHz = 0;
     int memory_bus_width     = 0;
-    hipDeviceGetAttribute(&max_memory_clock_kHz, hipDeviceAttributeMemoryClockRate, deviceid);
-    hipDeviceGetAttribute(&memory_bus_width, hipDeviceAttributeMemoryBusWidth, deviceid);
+#ifdef CUDA
+    GPU_ERR_CHECK(
+        cudaDeviceGetAttribute(&max_memory_clock_kHz, cudaDevAttrMemoryClockRate, device_id));
+    GPU_ERR_CHECK(
+        cudaDeviceGetAttribute(&memory_bus_width, cudaDevAttrGlobalMemoryBusWidth, device_id));
+#else
+    GPU_ERR_CHECK(
+        hipDeviceGetAttribute(&max_memory_clock_kHz, hipDeviceAttributeMemoryClockRate, device_id));
+    GPU_ERR_CHECK(
+        hipDeviceGetAttribute(&memory_bus_width, hipDeviceAttributeMemoryBusWidth, device_id));
+#endif
+
     auto max_memory_clock_MHz = static_cast<float>(max_memory_clock_kHz) / 1000.0;
     // multiply by 2.0 because transfer is bidirectional
     // divide by 8.0 because bus width is in bits and we want bytes
     // divide by 1000 to convert MB to GB
     float result = (max_memory_clock_MHz * 2.0 * memory_bus_width / 8.0) / 1000.0;
     return result;
-#endif
 }
 
 // Return min, mean, median, max of numbers in a vector
@@ -124,7 +159,8 @@ __global__ void copy_lds(const T* __restrict__ idata,
                          const int padding)
 {
 #ifdef CUDA
-    extern __shared__ T lds[];
+    extern __shared__ __align__(sizeof(T)) unsigned char shmem_ptr[];
+    T*                                                   lds = reinterpret_cast<T*>(shmem_ptr);
 #else
     HIP_DYNAMIC_SHARED(T, lds);
 #endif
@@ -158,7 +194,8 @@ __global__ void transpose_lds(const T* __restrict__ idata,
                               const int padding)
 {
 #ifdef CUDA
-    extern __shared__ T lds[];
+    extern __shared__ __align__(sizeof(T)) unsigned char shmem_ptr[];
+    T*                                                   lds = reinterpret_cast<T*>(shmem_ptr);
 #else
     HIP_DYNAMIC_SHARED(T, lds);
 #endif
@@ -194,7 +231,7 @@ __global__ void transpose_lds(const T* __restrict__ idata,
 //   kernel_id       : 0 for copy_direct, 1 for copy_lds, 2 for transpose_lds
 //   len             : the size of one row(the fast dimension)
 //   batch           : the total size of how many rows(the second fast dimension)
-//   elem_per_thread : element number handled by each thread
+//   elem_per_thread : element number handled by each thread per row
 //   rows            : tile width
 //   padding         : padding element number at the end of each row
 //   trial           : repeat times
@@ -203,16 +240,17 @@ __global__ void transpose_lds(const T* __restrict__ idata,
 //   block_x         : -1 for auto-calc
 //
 template <typename T>
-float mem_access_test(const int  kernel_id,
-                      const int  len,
-                      const int  batch,
-                      const int  elem_per_thread,
-                      const int  rows,
-                      const int  padding,
-                      const int  trial   = 10,
-                      const bool verbose = false,
-                      const int  grid_x  = -1,
-                      const int  block_x = -1)
+float mem_access_test(const int   kernel_id,
+                      const int   len,
+                      const int   batch,
+                      const int   elem_per_thread,
+                      const int   rows,
+                      const int   padding,
+                      const float max_memory_bw,
+                      const int   trial   = 10,
+                      const bool  verbose = false,
+                      const int   grid_x  = -1,
+                      const int   block_x = -1)
 {
     size_t i_total_size  = len * batch;
     size_t o_total_size  = len * batch;
@@ -223,7 +261,6 @@ float mem_access_test(const int  kernel_id,
     size_t i_padded_bytes = (len + padding) * batch * sizeof(T);
     size_t o_padded_bytes = i_padded_bytes;
 
-    float              max_memory_bw  = max_memory_bandwidth_GB_per_s();
     float              efficiency_pct = 0;
     std::vector<float> efficiency_pct_samples;
 
@@ -243,7 +280,8 @@ float mem_access_test(const int  kernel_id,
               << ", tile len " << len / elem_per_thread << ", tile width " << rows
               << "\nelem_per_thread " << elem_per_thread << ", padding for each row " << padding
               << "\ngrid: " << grid.x << ", " << grid.y << ", " << grid.z << ", block: " << block.x
-              << ", " << block.y << ", " << block.z << std::endl;
+              << ", " << block.y << ", " << block.z
+              << "\ntotal MB: " << (i_total_bytes + o_total_bytes) / 1e6 << std::endl;
     if(kernel_id != 0)
         std::cout << "lds bytes: " << lds_bytes << std::endl;
 
@@ -267,29 +305,29 @@ float mem_access_test(const int  kernel_id,
               << std::endl;
 
 #ifdef CUDA
-    cudaMalloc(&d_in, i_padded_bytes);
-    cudaMalloc(&d_out, o_padded_bytes);
-    cudaMemcpy(d_in, in.data(), i_padded_bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_out, out.data(), o_padded_bytes, cudaMemcpyHostToDevice);
+    GPU_ERR_CHECK(cudaMalloc(&d_in, i_padded_bytes));
+    GPU_ERR_CHECK(cudaMalloc(&d_out, o_padded_bytes));
+    GPU_ERR_CHECK(cudaMemcpy(d_in, in.data(), i_padded_bytes, cudaMemcpyHostToDevice));
+    GPU_ERR_CHECK(cudaMemcpy(d_out, out.data(), o_padded_bytes, cudaMemcpyHostToDevice));
 #else
-    hipMalloc(&d_in, i_padded_bytes);
-    hipMalloc(&d_out, o_padded_bytes);
-    hipMemcpy(d_in, in.data(), i_padded_bytes, hipMemcpyHostToDevice);
-    hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice);
+    GPU_ERR_CHECK(hipMalloc(&d_in, i_padded_bytes));
+    GPU_ERR_CHECK(hipMalloc(&d_out, o_padded_bytes));
+    GPU_ERR_CHECK(hipMemcpy(d_in, in.data(), i_padded_bytes, hipMemcpyHostToDevice));
+    GPU_ERR_CHECK(hipMemcpy(d_out, out.data(), o_padded_bytes, hipMemcpyHostToDevice));
 #endif
 
     for(auto i = 0; i < trial; i++)
     {
 #ifdef CUDA
         cudaEvent_t start, stop;
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
-        cudaEventRecord(start);
+        GPU_ERR_CHECK(cudaEventCreate(&start));
+        GPU_ERR_CHECK(cudaEventCreate(&stop));
+        GPU_ERR_CHECK(cudaEventRecord(start));
 #else
         hipEvent_t start, stop;
-        hipEventCreate(&start);
-        hipEventCreate(&stop);
-        hipEventRecord(start);
+        GPU_ERR_CHECK(hipEventCreate(&start));
+        GPU_ERR_CHECK(hipEventCreate(&stop));
+        GPU_ERR_CHECK(hipEventRecord(start));
 #endif
 
         switch(kernel_id)
@@ -311,13 +349,13 @@ float mem_access_test(const int  kernel_id,
 
         float gpu_time;
 #ifdef CUDA
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&gpu_time, start, stop);
+        GPU_ERR_CHECK(cudaEventRecord(stop));
+        GPU_ERR_CHECK(cudaEventSynchronize(stop));
+        GPU_ERR_CHECK(cudaEventElapsedTime(&gpu_time, start, stop));
 #else
-        hipEventRecord(stop);
-        hipEventSynchronize(stop);
-        hipEventElapsedTime(&gpu_time, start, stop);
+        GPU_ERR_CHECK(hipEventRecord(stop));
+        GPU_ERR_CHECK(hipEventSynchronize(stop));
+        GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, start, stop));
 #endif
         double exec_bw = (double)(i_total_bytes + o_total_bytes) / (gpu_time * 1e6);
         if(max_memory_bw != 0.0)
@@ -331,34 +369,18 @@ float mem_access_test(const int  kernel_id,
                   << std::setw(22) << efficiency_pct << "|" << std::endl;
 
 #ifdef CUDA
-        cudaError_t err = cudaPeekAtLastError();
-        if(err != cudaSuccess)
-        {
-            std::cout << "Error: " << cudaGetErrorName(err) << ", " << cudaGetErrorString(err)
-                      << std::endl;
-            exit(-1);
-        }
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
+        GPU_ERR_CHECK(cudaEventDestroy(start));
+        GPU_ERR_CHECK(cudaEventDestroy(stop));
 #else
-        hipError_t err = hipPeekAtLastError();
-        if(err != hipSuccess)
-        {
-            std::cout << "Error: " << hipGetErrorName(err) << ", " << hipGetErrorString(err)
-                      << std::endl;
-            exit(-1);
-        }
-
-        hipEventDestroy(start);
-        hipEventDestroy(stop);
+        GPU_ERR_CHECK(hipEventDestroy(start));
+        GPU_ERR_CHECK(hipEventDestroy(stop));
 #endif
     }
 
 #ifdef CUDA
-    cudaMemcpy(out.data(), d_out, o_padded_bytes, cudaMemcpyDeviceToHost);
+    GPU_ERR_CHECK(cudaMemcpy(out.data(), d_out, o_padded_bytes, cudaMemcpyDeviceToHost));
 #else
-    hipMemcpy(out.data(), d_out, o_padded_bytes, hipMemcpyDeviceToHost);
+    GPU_ERR_CHECK(hipMemcpy(out.data(), d_out, o_padded_bytes, hipMemcpyDeviceToHost));
 #endif
 
     std::cout << "Verify output...";
@@ -368,7 +390,7 @@ float mem_access_test(const int  kernel_id,
         for(auto i = 0; i < batch / rows; i++)
         {
             auto base = i * len * rows;
-            for(auto j = 0; j < len * rows; j++) // check rows x len transpose
+            for(auto j = 0; j < len * rows; j++) // check rows * len transpose
             {
                 //std::cout << "(" << std::setw(2) << out[i*len*rows + j].x << ", "
                 //    << std::setw(2) <<  out[i*len*rows + j].y  << ")\n";
@@ -408,11 +430,11 @@ float mem_access_test(const int  kernel_id,
     std::cout << "done.\n";
 
 #ifdef CUDA
-    cudaFree(d_in);
-    cudaFree(d_out);
+    GPU_ERR_CHECK(cudaFree(d_in));
+    GPU_ERR_CHECK(cudaFree(d_out));
 #else
-    hipFree(d_in);
-    hipFree(d_out);
+    GPU_ERR_CHECK(hipFree(d_in));
+    GPU_ERR_CHECK(hipFree(d_out));
 #endif
 
     if(!verbose)
@@ -429,18 +451,60 @@ void tuning_mem_access_test(const int len,
                             const int batch,
                             const int elem_per_thread_max,
                             const int rows_max,
-                            const int padding_max,
-                            const int trial = 10)
+                            const int padding_max = 10,
+                            const int device_id   = 0,
+                            const int trial       = 20)
 {
     typedef std::tuple<int, int, int, int, int> key_t;
 
     std::map<key_t, float> results[3];
 
-    for(auto padding = 0; padding < padding_max; padding++)
-        for(auto rows = 1; rows < rows_max; rows++)
-            for(auto elem_per_thread = 1; elem_per_thread < elem_per_thread_max; elem_per_thread++)
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaSetDevice(device_id));
+#else
+    GPU_ERR_CHECK(hipSetDevice(device_id));
+#endif
+
+    float max_memory_bw = max_memory_bandwidth_GB_per_s(device_id);
+
+    int max_thread_per_block = 0;
+    int max_lds_size         = 0;
+#ifdef CUDA
+    GPU_ERR_CHECK(
+        cudaDeviceGetAttribute(&max_thread_per_block, cudaDevAttrMaxThreadsPerBlock, device_id));
+    GPU_ERR_CHECK(
+        cudaDeviceGetAttribute(&max_lds_size, cudaDevAttrMaxSharedMemoryPerBlock, device_id));
+#else
+    GPU_ERR_CHECK(hipDeviceGetAttribute(
+        &max_thread_per_block, hipDeviceAttributeMaxThreadsPerBlock, device_id));
+    GPU_ERR_CHECK(
+        hipDeviceGetAttribute(&max_lds_size, hipDeviceAttributeMaxSharedMemoryPerBlock, device_id));
+#endif
+    // Todo: might check grid size if necessary
+
+    int elem_per_thread_min = std::max(1, (len + max_thread_per_block - 1) / max_thread_per_block);
+    int rows_min            = 1;
+    int adjusted_rows_max   = rows_max;
+    while(adjusted_rows_max * len * sizeof(T) > max_lds_size)
+    {
+        adjusted_rows_max--;
+    }
+
+    if(adjusted_rows_max < rows_min)
+        std::cout << "Warning: adjusted_rows_max " << adjusted_rows_max
+                  << " is too small, ignore the test.\n";
+
+    if(elem_per_thread_max < elem_per_thread_min)
+        std::cout << "Warning: elem_per_thread_max " << elem_per_thread_max
+                  << " is too small, ignore the test.\n";
+
+    for(auto padding = 0; padding <= padding_max; padding++)
+        for(auto rows = rows_min; rows <= adjusted_rows_max; rows++)
+            for(auto elem_per_thread = elem_per_thread_min; elem_per_thread <= elem_per_thread_max;
+                elem_per_thread++)
                 for(auto kernel_id = 0; kernel_id < 3; kernel_id++)
                 {
+                    // Handle divisible cases only
                     if(batch % rows == 0 && len % elem_per_thread == 0)
                     {
                         results[kernel_id]
@@ -451,8 +515,9 @@ void tuning_mem_access_test(const int len,
                                                  elem_per_thread,
                                                  rows,
                                                  padding,
+                                                 max_memory_bw,
                                                  trial,
-                                                 false);
+                                                 true);
                     }
                 }
 
@@ -461,7 +526,7 @@ void tuning_mem_access_test(const int len,
     {
         std::multimap<float, key_t> sorted_results = flip_map(results[kernel_id]);
         auto                        start          = sorted_results.crbegin();
-        for(int i = 0; i < 3; i++)
+        for(auto i = 0; i < std::min<int>(1, sorted_results.size()); i++)
         {
             auto  it  = std::next(start, i);
             float ret = mem_access_test<T>(kernel_id,
@@ -470,6 +535,7 @@ void tuning_mem_access_test(const int len,
                                            std::get<2>(it->second),
                                            std::get<3>(it->second),
                                            std::get<4>(it->second),
+                                           max_memory_bw,
                                            trial,
                                            true);
             std::cout << "Median original"
@@ -480,11 +546,24 @@ void tuning_mem_access_test(const int len,
 
 int main()
 {
-    std::cout << "Run case 336 ---------------------------------------\n";
-    tuning_mem_access_test<double2>(336, 18816, 9, 6, 10);
+
+    std::cout << "Run case 108 ---------------------------------------\n";
+    tuning_mem_access_test<float2>(108, 46656, 9, 12);
+
+    std::cout << "Run case 200 ---------------------------------------\n";
+    tuning_mem_access_test<float2>(200, 20200, 5, 10);
 
     std::cout << "Run case 256 ---------------------------------------\n";
-    tuning_mem_access_test<double2>(256, 24696, 9, 6, 10);
+    tuning_mem_access_test<double2>(256, 24696, 8, 8);
+
+    std::cout << "Run case 336 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(336, 18816, 9, 6);
+
+    std::cout << "Run case 4096 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(4096, 16384, 32, 8, 2);
+
+    std::cout << "Run case 100 ---------------------------------------\n";
+    tuning_mem_access_test<double2>(100, 1000000, 5, 10, 3);
 
     return 0;
 }
