@@ -88,7 +88,7 @@ Representative transforms for tickets 240404 and 268238:
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
 * 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
 
-These cases are represented in the ``cholla`` performance suite.
+These cases are represented in the ``cholla1d`` performance suite.
 
 Results:
 
@@ -113,7 +113,7 @@ Representative transforms:
 
 * 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
 
-This case is represented in the ``vasp`` performance suite.
+This case is represented in the ``vasp1d`` and ``vasp3d`` performance suites.
 
 Results:
 
@@ -159,6 +159,7 @@ Representative transforms:
 * 3D R2C: ``rocfft-rider -t 2 --length 224 108 104``
 * 3D C2R: ``rocfft-rider -t 3 --length 224 108 104``
 
+These cases are represented in the ``gromacs3d`` performance suite.
 
 Shoreline MI200
 ^^^^^^^^^^^^^^^
@@ -168,6 +169,8 @@ JIRA tickets
 * `SWDEV-249890 <http://ontrack-internal.amd.com/browse/SWDEV-249890>`_
 
 Small 1D with large batch.
+
+This work is being done in the `tflops` directory of rocFFT-misc.
 
 
 ECP APPS

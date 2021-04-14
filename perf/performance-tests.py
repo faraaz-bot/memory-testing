@@ -76,12 +76,21 @@ explicit = [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343,
 
 adhoc = make_suite(NS(label='adhoc', lengths=explicit + [ 5 * x for x in explicit ], nbatch=1024**3//max(explicit)))
 
-cholla = make_suite(NS(label='cholla', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
+cholla1d = make_suite(NS(label='cholla1d', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
 cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
 
-vasp1 = make_suite(NS(label='vasp', lengths=[56, 336], nbatch=1e8))
-vasp3 = make_suite(NS(label='vasp', lengths=[(336,336,56)], nbatch=10))
+vasp1d = make_suite(NS(label='vasp1d', lengths=[56, 336], nbatch=1e8))
+vasp3d = make_suite(NS(label='vasp3d', lengths=[(336,336,56)], nbatch=10))
+
+gromacs3d = make_suite(NS(label='gromacs3d', lengths=[(100,100,100),
+                                                      (64,64,52),
+                                                      (72,72,52),
+                                                      (208,100,100),
+                                                      (216,104,104),
+                                                      (216,104,100),
+                                                      (224,104,104),
+                                                      (224,108,104)], nbatch=10))
 
 def all(ntrials, verify):
-    generators = [ pow2, pow5, pow7, prime, mixed, cholla ]
+    generators = [pow2, pow5, pow7, prime, mixed, cholla1d, cholla2d, vasp1d, vasp3d, gromacs3d]
     return itertools.chain(*[ f(ntrials, verify) for f in generators ])
