@@ -42,13 +42,13 @@ def local(cmd, echo=True, **kwargs):
 
 
 
-def build_rocfft(commit, dest=None):
+def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git'):
     '''Build public rocFFT (at specified git `commit`) and install into `dest`.'''
 
     top = path('.').resolve() / ('rocFFT-' + commit)
 
     if not top.exists():
-        git.clone('git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git', top)
+        git.clone(repo, top)
     git.checkout(top, commit)
 
     if git.is_dirty(top):
@@ -58,8 +58,7 @@ def build_rocfft(commit, dest=None):
     build = top / 'build'
     build.mkdir(exist_ok=True)
     defs = [ '-DCMAKE_CXX_COMPILER=hipcc',
-             '-DSINGLELIB=ON',
-             '-BUILD_CLIENTS_RIDER=ON',
+             '-DBUILD_CLIENTS_RIDER=ON',
              '-DAMDGPU_TARGETS=' ]
     if dest:
         defs += [ f'-DCMAKE_INSTALL_PREFIX={dest}' ]
@@ -71,13 +70,13 @@ def build_rocfft(commit, dest=None):
         local('make install', cwd=build, check=True)
 
 
-def build_hipfft(commit, dest, cuda):
+def build_hipfft(commit, dest, cuda, repo='git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git'):
     '''Build public hipFFT (at specified git `commit`) and install into `dest`.'''
 
     top = path('.').resolve() / ('hipFFT-' + commit)
 
     if not top.exists():
-        git.clone('git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git', top)
+        git.clone(repo, top)
     git.checkout(top, commit)
 
     if git.is_dirty(top):
@@ -133,7 +132,8 @@ def cli():
 @click.option('--cuda', type=bool, default=False, is_flag=True, help='Use CUDA backend for hipFFT.')
 @click.option('--destination', type=str, default=None, help='Destination directory for builds.')
 @click.option('--copy-hipfft-from', type=str, default=None, help='Copy hipFFT and wrapper from...')
-def build(destination, hipfft, rocfft, copy_hipfft_from, cuda):
+@click.option('--user', type=str, default='ROCmSoftwarePlatform', help='Git user')
+def build(destination, hipfft, rocfft, copy_hipfft_from, cuda, user):
     '''Clone and build rocFFT and/or hipFFT.
 
     Builds are installed into the 'build' directory.  All shared
@@ -150,10 +150,10 @@ def build(destination, hipfft, rocfft, copy_hipfft_from, cuda):
     build.mkdir(exist_ok=True)
 
     if rocfft:
-        build_rocfft(rocfft, build)
+        build_rocfft(rocfft, build, repo=f'git@github.com:{user}/rocFFT-internal.git')
 
     if hipfft:
-        build_hipfft(hipfft, build, cuda)
+        build_hipfft(hipfft, build, cuda, repo=f'git@github.com:{user}/hipFFT-internal.git')
         build_wrapper(build, cuda)
 
     if copy_hipfft_from:
@@ -221,7 +221,7 @@ def run(ntrials, verify, suite, build, output):
         print(f'# running {test.label}')
         fname = output / (test.label + '.dat')
         results = test.run()
-        test.write(fname, results)
+        test.write(fname, results, title=test.label)
 
 
 @cli.command()

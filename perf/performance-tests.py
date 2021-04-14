@@ -44,6 +44,10 @@ def make_suite(suite):
     return fft_test_generator
 
 
+#
+# Basic suites
+#
+
 pow2  = make_suite(NS(label='pow2', lengths=[ 2**k for k in range(9,17) ], nbatch=2048))
 pow5  = make_suite(NS(label='pow5', lengths=[ 5**k for k in range(4,8) ], nbatch=2000))
 pow7  = make_suite(NS(label='pow7', lengths=[ 7**k for k in range(3,7) ], nbatch=1000))
@@ -70,11 +74,28 @@ mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958,
                                       3000, 3001, 3003, 3004, 3008, 3034, 3035, 3039, 3040, 3042,
                                       3048, 3052, 3055, 3060, 3065, 4000, 12000, 24000], nbatch=1000))
 
-explicit = [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343,
-            11, 22, 44, 88, 121, 176,
-            13, 26, 52, 104, 169, 208]
+#
+# Generated lengths, see kernel_generator.py
+#
 
-adhoc = make_suite(NS(label='adhoc', lengths=explicit + [ 5 * x for x in explicit ], nbatch=1024**3//max(explicit)))
+powers = {
+    5: [5**k for k in range(6)],
+    3: [3**k for k in range(8)],
+    2: [2**k for k in range(13)],
+}
+
+lengths = [ p2 * p3 * p5 for p2, p3, p5 in product(powers[2], powers[3], powers[5])]
+lengths += [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343]
+lengths += [11, 22, 44, 88, 121, 176]
+lengths += [13, 26, 52, 104, 169, 208]
+lengths = sorted(filter(lambda x: x <= 1024, lengths))
+
+generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=100000))
+
+
+#
+# Special lengths
+#
 
 cholla1d = make_suite(NS(label='cholla1d', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
 cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
@@ -91,6 +112,10 @@ gromacs3d = make_suite(NS(label='gromacs3d', lengths=[(100,100,100),
                                                       (224,104,104),
                                                       (224,108,104)], nbatch=10))
 
+#
+# Everything!
+#
+
 def all(ntrials, verify):
-    generators = [pow2, pow5, pow7, prime, mixed, cholla1d, cholla2d, vasp1d, vasp3d, gromacs3d]
+    generators = [pow2, pow5, pow7, prime, mixed, generated1d, cholla1d, cholla2d, vasp1d, vasp3d, gromacs3d]
     return itertools.chain(*[ f(ntrials, verify) for f in generators ])
