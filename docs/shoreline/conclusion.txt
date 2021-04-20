@@ -1,0 +1,15 @@
+Conclusion
+
+rocFFT is a full-featured library to perform fast Fourier transforms
+(FFTs) on AMD GPUs.  In this report, we provide an overview of rocFFT
+and several performance plots showing execution time and efficiency on
+the MI100.  Efficiency is based on a simplified model of
+bandwidth-limited FFTs where the data needs to be read and stored
+exactly once from the device's global memory.  In reality, due to
+limited cache size, most transforms must make use of global memory to
+store intermediary results.
+
+Development continues on rocFFT.  We are focusing on improving
+performance and expanding the feature set while maintaining accuracy.
+rocFFT is an open-source projec - we do our best to respond quickly to
+issues on GitHub, and pull requests are always welcome!
