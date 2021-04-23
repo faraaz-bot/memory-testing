@@ -88,9 +88,9 @@ lengths = [ p2 * p3 * p5 for p2, p3, p5 in itertools.product(powers[2], powers[3
 lengths += [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343]
 lengths += [11, 22, 44, 88, 121, 176]
 lengths += [13, 26, 52, 104, 169, 208]
-lengths = sorted(filter(lambda x: x <= 1024, lengths))
+lengths = sorted(filter(lambda x: x <= 1024 and x > 1, lengths))
 
-generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=100000))
+generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
 
 
 #
