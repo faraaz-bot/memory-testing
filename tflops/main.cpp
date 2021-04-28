@@ -222,9 +222,6 @@ std::tuple<float, std::vector<T>> fft_gpu(std::vector<T> const& input, size_t nx
     GPUBuffer      gpu_inout, gpu_work;
     std::vector<T> output(input.size());
 
-    // Transfer input to GPU
-    gpu_inout.copy_from_host(input);
-
     // Create FFT plan
     rocfft_plan           plan      = nullptr;
     rocfft_precision      precision = rocfft_precision_double;
@@ -253,15 +250,19 @@ std::tuple<float, std::vector<T>> fft_gpu(std::vector<T> const& input, size_t nx
         rocfft_execution_info_set_work_buffer(info, gpu_work.data(), work_buf_size);
     }
 
-    // Do the FFTs
+    // Warm-up FFT (copy out for verification)
+    gpu_inout.copy_from_host(input);
     void* x_d = gpu_inout.data();
+    rocfft_execute(plan, &x_d, nullptr, info);
+    gpu_inout.copy_to_host(output);
+
+    // Timed FFT
+    gpu_inout.copy_from_host(input);
 
     GPUTimer timer;
     timer.tic();
     rocfft_execute(plan, &x_d, nullptr, info);
     timer.toc();
-
-    gpu_inout.copy_to_host(output);
 
     // Clean up
     if(info)
@@ -363,12 +364,12 @@ int main(int argc, char* argv[])
     MPI_Init(&argc, &argv);
 #endif
 
-    // std::cout << "Usage: rocfft-tflops [LENGTH=4096] [NBATCH=10000] [SINGLE=1]" << std::endl
+    // std::cout << "Usage: rocfft-tflops [LENGTH=512] [NBATCH=] [SINGLE=0]" << std::endl
     //           << std::endl;
 
-    int length = 4096;
-    int nbatch = 10000;
-    int single = 1;
+    int length = 512;
+    int nbatch = 500000;
+    int single = 0;
     if(argc > 1)
         length = std::stoi(argv[1]);
     if(argc > 2)
