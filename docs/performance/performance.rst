@@ -158,8 +158,56 @@ Representative transforms:
 * 3D C2R: ``rocfft-rider -t 3 --length 224 104 104``
 * 3D R2C: ``rocfft-rider -t 2 --length 224 108 104``
 * 3D C2R: ``rocfft-rider -t 3 --length 224 108 104``
+* 3D R2C: ``rocfft-rider -t 2 --length 84 84 72``
+* 3D C2R: ``rocfft-rider -t 3 --length 84 84 72``
 
 These cases are represented in the ``gromacs3d`` performance suite.
+
+
+AMBER
+^^^^
+
+JIRA tickets
+
+* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
+
+Representative transforms:
+
+* 3D R2C: ``rocfft-rider -t 2 -o --length 64 64 64``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 64 64 64``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 240 224 224``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 240 224 224``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 128 128 256``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 128 128 256``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 80 84 144``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 80 84 14``
+
+NAMD
+^^^^
+
+JIRA tickets
+
+* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
+
+Representative transforms:
+
+* 3D R2C: ``rocfft-rider -t 2 -o --length 216 216 216``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 216 216 216``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 108 108 80``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 108 108 80``
+
+CP2K
+^^^^
+
+JIRA tickets
+
+* `SWDEV-204930 <http://ontrack-internal.amd.com/browse/SWDEV-204930>`_
+
+Representative transforms:
+
+* 3D Z2Z: ``rocfft-rider --length 42 32 32 --double``
+* 3D Z2Z: ``rocfft-rider --length 25 20 20 --double``
+* 3D Z2Z: ``rocfft-rider --length 75 55 55 --double``
 
 Shoreline MI200
 ^^^^^^^^^^^^^^^
