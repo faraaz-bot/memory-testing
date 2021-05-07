@@ -219,7 +219,7 @@ basicstyle=\ttfamily\small,
 %% \end{frame}
 
 \begin{frame}
-    \frametitle{ROCm: Radeon Open Compute}
+    \frametitle{ROCm\textsuperscript{\texttrademark}: Radeon Open Compute}
 
     \begin{center}
       \url{https://rocm.github.io/}
@@ -267,7 +267,8 @@ basicstyle=\ttfamily\small,
       \medskip
     \item \texttt{rocfft} interface provides flexibility
       \medskip
-    \item Alternative \texttt{hipfft} interface: usage similar to \texttt{cufft}
+    \item \texttt{hipfft} interface: usage similar to \texttt{cuFFT},
+      calls either \texttt{rocFFT} or \texttt{cuFFT}
     \end{itemize}
     
 \end{frame}
@@ -353,8 +354,9 @@ basicstyle=\ttfamily\small,
     \frametitle{rocFFT: rocfft interface example}
 
 \begin{lstlisting}
-// Create the plan:      
-rocfft_plan_create(&plan,    
+// Create the plan:
+rocfft_plan gpu_plan = NULL;
+rocfft_plan_create(&gpu_plan,    
                    rocfft_placement_inplace,
                    rocfft_transform_type_complex_forward,
                    rocfft_precision_double,
@@ -363,14 +365,15 @@ rocfft_plan_create(&plan,
                    1,       // batch size
                    NULL);   // optional description
 
-// Allocate the work memory and associate it to the execution info:                 
-rocfft_execution_info_create(&planinfo);
-rocfft_plan_get_work_buffer_size(gpu_plan, &wsize);
-hipMalloc(&wbuffer, wsize);
-rocfft_execution_info_set_work_buffer(planinfo, wbuffer, wsize);
-
+std::complex<double>* gpu_in = NULL;
+hipMalloc(&gpu_in, length[0] * sizeof(std::complex<double>));
+                   
 // Execute the plan:
-rocfft_execute(gpu_plan, gpu_in, planinfo);
+rocfft_execute(gpu_plan, gpu_in, NULL, NULL);
+
+// Destroy the plan:
+hipFree(gpu_in);
+rocfft_plan_destroy(gpu_plan);
 \end{lstlisting}
 \end{frame}
     
@@ -413,9 +416,11 @@ hipfftExecZ2Z(plan, x, x, direction);
   \frametitle{Sample code}
 
   Samples are available at
+    \medskip
   \begin{itemize}
-  \item \url{https://github.com/ROCmSoftwarePlatform/rocFFT/tree/develop/clients/samples}
-  \item \url{https://github.com/ROCmSoftwarePlatform/hipFFT/tree/master/clients/samples}
+  \item \url{github.com/ROCmSoftwarePlatform/rocFFT/tree/develop/clients/samples}
+    \medskip
+  \item \url{github.com/ROCmSoftwarePlatform/hipFFT/tree/master/clients/samples}
   \end{itemize}
     
   
@@ -445,5 +450,58 @@ hipfftExecZ2Z(plan, x, x, direction);
   \end{center}
   
 \end{frame}
+
+\begin{frame}
+  \textbf{Disclaimer}
+  \medskip
+
+  \fontsize{8pt}{8pt}\selectfont
+  The information presented in this document is for informational
+  purposes only and may contain technical inaccuracies, omissions, and
+  typographical errors. The information contained herein is subject to
+  change and may be rendered inaccurate for many reasons, including
+  but not limited to product and roadmap changes, component and
+  motherboard version changes, new model and/or product releases,
+  product differences between differing manufacturers, software
+  changes, BIOS flashes, firmware upgrades, or the like. Any computer
+  system has risks of security vulnerabilities that cannot be
+  completely prevented or mitigated.  AMD assumes no obligation to
+  update or otherwise correct or revise this information. However, AMD
+  reserves the right to revise this information and to make changes
+  from time to time to the content hereof without obligation of AMD to
+  notify any person of such revisions or changes.
+  \medskip
+ 
+  THIS INFORMATION IS PROVIDED ``AS IS''. AMD MAKES NO REPRESENTATIONS
+  OR WARRANTIES WITH RESPECT TO THE CONTENTS HEREOF AND ASSUMES NO
+  RESPONSIBILITY FOR ANY INACCURACIES, ERRORS, OR OMISSIONS THAT MAY
+  APPEAR IN THIS INFORMATION. AMD SPECIFICALLY DISCLAIMS ANY IMPLIED
+  WARRANTIES OF NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR ANY
+  PARTICULAR PURPOSE. IN NO EVENT WILL AMD BE LIABLE TO ANY PERSON FOR
+  ANY RELIANCE, DIRECT, INDIRECT, SPECIAL, OR OTHER CONSEQUENTIAL
+  DAMAGES ARISING FROM THE USE OF ANY INFORMATION CONTAINED HEREIN,
+  EVEN IF AMD IS EXPRESSLY ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+  \medskip
+    
+  Third-party content is licensed to you directly by the third party
+  that owns the content and is not licensed to you by AMD.  ALL LINKED
+  THIRD-PARTY CONTENT IS PROVIDED “AS IS” WITHOUT A WARRANTY OF ANY
+  KIND.  USE OF SUCH THIRD-PARTY CONTENT IS DONE AT YOUR SOLE
+  DISCRETION AND UNDER NO CIRCUMSTANCES WILL AMD BE LIABLE TO YOU FOR
+  ANY THIRD-PARTY CONTENT.  YOU ASSUME ALL RISK AND ARE SOLELY
+  RESPONSIBLE FOR ANY DAMAGES THAT MAY ARISE FROM YOUR USE OF
+  THIRD-PARTY CONTENT.
+  \medskip
+
+  ATTRIBUTION\\
+  © 2021 Advanced Micro Devices, Inc. All rights
+  reserved. AMD, the AMD Arrow logo, ROCm, Radeon, Radeon Instinct and
+  combinations thereof are trademarks of Advanced Micro Devices,
+  Inc. in the United States and/or other jurisdictions. Other names
+  are for informational purposes only and may be trademarks of their
+  respective owners.
+  
+\end{frame}
+  
 
 \end{document}
