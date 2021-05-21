@@ -205,25 +205,25 @@ basicstyle=\ttfamily\small,
   \frametitle{Outline}
 
   \texttt{rocFFT} performance relies on kernels which are
-  specific to certain problem size factorizations.
+  specific to certain problem size factorization.
 
   \medskip
   
-  In this talk, I will present some optimisation plans which would
+  In this talk, I will present some optimization plans which would
   greatly benefit from the inclusion of runtime compilation in the
   \texttt{rocFFT} library.
 
   \bigskip
 
-  These optimsations are as follows:
+  These optimizations are as follows:
   
   \bigskip
   \begin{itemize}
   \item Increase Problem Size Coverage for Stockham Kernels
     \medskip
-  \item Eliminate Uesless Work for Bluestein Kernels
+  \item Eliminate Useless Work for Bluestein Kernels
     \medskip
-  \item Fuse Kernels for Multdimensional Transforms
+  \item Fuse Kernels for Multidimensional Transforms
   \end{itemize}
   
 \end{frame}
@@ -231,7 +231,7 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Problem Size Coverage}
 
-    FFTs are computed by dividing a problem of lenght $N$ into smaller
+    FFTs are computed by dividing a problem of length $N$ into smaller
     factors.  These factors are referred to as radices, and
     \texttt{rocFFT} supports radix-2, 3, 5, and 7.  Other combinations
     can also be useful - eg 4 and 8 have nice properties.
@@ -281,7 +281,7 @@ basicstyle=\ttfamily\small,
   \medskip
 
   A convolution can be computed via an FFT, but needs to be padded with
-  zeros from legnth $N$ to at least length $2N$.
+  zeros from length $N$ to at least length $2N$.
 
   \medskip
 
@@ -295,7 +295,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
   
 \begin{frame}
-  \frametitle{Bluesten algorithm}
+  \frametitle{Bluestein algorithm}
 
   \begin{center}
     \includegraphics[width=\textwidth]{stockham-dit.pdf}
@@ -395,7 +395,7 @@ Total: 3 global read/writes.
 
   \medskip
 
-  Most of these optimsations are largely infeasible, or must be reduced
+  Most of these optimizations are largely infeasible, or must be reduced
   in scope, if we were to require ahead-of-time compilation.
   
   \medskip
@@ -463,3 +463,7 @@ Total: 3 global read/writes.
   
 
 \end{document}
+
+% LocalWords:  rocFFT runtime Stockham Bluestein FFTs radices radix
+% LocalWords:  eg FFT Radler MnP combinatorically roadmap ROCm Radeon
+% LocalWords:  MERCHANTABILITY
