@@ -223,7 +223,7 @@ basicstyle=\ttfamily\small,
     \medskip
   \item Eliminate Useless Work for Bluestein Kernels
     \medskip
-  \item Fuse Kernels for Multidimensional Transforms
+  \item Fuse Kernels for Multi-dimensional Transforms
   \end{itemize}
   
 \end{frame}
@@ -337,9 +337,10 @@ basicstyle=\ttfamily\small,
   \begin{enumerate}
   \item Read from global
   \item Perform $MN$ length-$P$ transforms
-  \item Read from global
   \item Write to global
+  \item Read from global
   \item Perform $MP$ length-$N$ transforms
+  \item Write to global
   \item Read from global
   \item Perform $NP$ length-$M$ transforms
   \item Write to global
@@ -354,16 +355,16 @@ Total: 3 global read/writes.
 \begin{frame}
   \frametitle{Doing More Work with Cached Data}
 
-  Suppose $n = \sqrt{N}$, and we can fit $MnP$ values into cache.
+  Suppose we can fit $M\sqrt{N}P$ values into cache.
 
   Then, we could
   \begin{enumerate}
   \item Read from global
   \item Perform $MN$ length-$P$ transforms
-  \item Perform the $MP$ initial radix-$n$ sub-transforms
+  \item Perform the $MP$ initial radix-$\sqrt{N}$ sub-transforms
   \item Write to global
   \item Read from global
-  \item Perform the $MP$ final radix-$n$ sub-transforms
+  \item Perform the $MP$ final radix-$\sqrt{N}$ sub-transforms
   \item Perform $NP$ length-$M$ transforms
   \item Write to global
   \end{enumerate}
