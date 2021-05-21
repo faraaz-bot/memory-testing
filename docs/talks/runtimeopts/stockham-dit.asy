@@ -7,7 +7,7 @@ usepackage("physics");
 // N must be even.
 int N = 16;
 
-int L = 7;
+int M = 7;
 
 real boxw = 1.0;
 real boxh = 0.5;
@@ -38,16 +38,18 @@ for(int q = 1; q <= log2N; ++q)
 {
     pair pos = (0, yh);
     draw_array(pos, boxw, boxh, N);
-    if(q == 1)
+    
+    if(q < 4)
     {
-        for(int i = L; i < N; ++i)
+        for(int i = N - (N - M) # 2^(q-1); i < N; ++i)
         {
-            pair p = ((i + 0.5) * boxw, -0.5*boxh);
+            pair p = ((i + 0.5) * boxw, yh -0.5*boxh);
             //dot(p,blue);
             label("$0$", p, red);
         }
     }
-
+    
+    
     int L = 2^q;
     int r = N # L;
     int Lstar = L # 2;
