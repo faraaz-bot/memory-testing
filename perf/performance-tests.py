@@ -103,19 +103,94 @@ cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
 vasp1d = make_suite(NS(label='vasp1d', lengths=[56, 336], nbatch=1e8))
 vasp3d = make_suite(NS(label='vasp3d', lengths=[(336,336,56)], nbatch=10))
 
-gromacs3d = make_suite(NS(label='gromacs3d', lengths=[(100,100,100),
-                                                      (64,64,52),
-                                                      (72,72,52),
-                                                      (208,100,100),
-                                                      (216,104,104),
-                                                      (216,104,100),
-                                                      (224,104,104),
-                                                      (224,108,104)], nbatch=10))
+gromacs3d = make_suite(NS(label='gromacs3d',
+                          lengths=[
+                              (100,100,100),
+                              (160,160,168),
+                              (160,168,168),
+                              (160,168,192),
+                              (160,72,72),
+                              (160,80,72),
+                              (160,80,80),
+                              (168,168,192),
+                              (168,192,192),
+                              (168,80,80),
+                              (192,192,192),
+                              (192,192,200),
+                              (192,200,200),
+                              (192,84,84),
+                              (192,96,84),
+                              (192,96,96),
+                              (200,100,96),
+                              (200,200,200),
+                              (200,96,96),
+                              (208,100,100),
+                              (216,104,100),
+                              (216,104,104),
+                              (224,104,104),
+                              (224,108,104),
+                              (224,108,108),
+                              (240,108,108),
+                              (240,112,108),
+                              (240,112,112),
+                              (60,60,60),
+                              (64,64,52),
+                              (64,64,64),
+                              (72,72,52),
+                              (72,72,72),
+                              (80,80,80),
+                              (84,84,72),
+                              (96,96,96),
+                          ],
+                          nbatch=10))
+
+namd3d = make_suite(NS(label='namd3d',
+                       lengths=[
+                           (108,108,80),
+                           (216,216,216),
+                       ],
+                       nbatch=10)
+
+amber3d = make_suite(NS(label='amber3d',
+                        lengths=[
+                            (128,128,256),
+                            (240,224,224),
+                            (64,64,64),
+                            (80,84,14),
+                            (80,84,144),
+                        ],
+                        nbatch=10)
+
+cp2k = make_suite(NS(label='cp2k',
+                     lengths=[
+                         (25,20,20),
+                         (42,32,32),
+                         (75,55,55)
+                     ],
+                     nbatch=10)
+
+warpx3d = make_suite(NS(label='warpx3d',
+                        lengths=[3*(2**k + 16,) for k in range(5, 10)],
+                        nbatch=10)
 
 #
 # Everything!
 #
 
 def all(ntrials, verify):
-    generators = [pow2, pow5, pow7, prime, mixed, generated1d, cholla1d, cholla2d, vasp1d, vasp3d, gromacs3d]
+    generators = [pow2,
+                  pow5,
+                  pow7,
+                  prime,
+                  mixed,
+                  generated1d,
+                  cholla1d,
+                  cholla2d,
+                  vasp1d,
+                  vasp3d,
+                  gromacs3d,
+                  namd3d,
+                  amber3d,
+                  cp2k,
+                  warpx3d]
     return itertools.chain(*[ f(ntrials, verify) for f in generators ])
