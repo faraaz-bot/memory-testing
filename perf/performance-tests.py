@@ -14,15 +14,15 @@ import itertools
 NS = types.SimpleNamespace
 
 dtypes = [
-    NS(label='double', dtype=np.float64),
-    NS(label='single', dtype=np.float32),
+    NS(label='double', dtype=np.float64, rider=['--double']),
+    NS(label='single', dtype=np.float32, rider=[]),
     ]
 
 transforms = [
-    NS(label='complex_forward', transform=perflib.transforms.complex_forward),
-    NS(label='complex_backward', transform=perflib.transforms.complex_backward),
-    NS(label='real_forward', transform=perflib.transforms.real_forward),
-    NS(label='real_backward', transform=perflib.transforms.real_backward),
+    NS(label='complex_forward', transform=perflib.transforms.complex_forward, rider=['-t', '0']),
+    NS(label='complex_backward', transform=perflib.transforms.complex_backward, rider=['-t', '1']),
+    NS(label='real_forward', transform=perflib.transforms.real_forward, rider=['-t', '2']),
+    NS(label='real_backward', transform=perflib.transforms.real_backward, rider=['-t', '3']),
     ]
 
 
@@ -34,13 +34,17 @@ def product(xs):
 
 
 def make_suite(suite):
-    def fft_test_generator(ntrials, verify):
+    def fft_test_generator():
         for transform in transforms:
             for dtype in dtypes:
                 label = '_'.join([suite.label, transform.label, dtype.label])
                 if getattr(suite, 'size', None) is not None:
                     suite.nbatch = suite.size // product(suite.lengths)
-                yield perflib.transforms.FFTTestRunner(label, transform.transform, suite.lengths, ntrials, suite.nbatch, dtype, verify)
+                yield dict(label=label,
+                           transform=transform,
+                           lengths=suite.lengths,
+                           nbatch=suite.nbatch,
+                           dtype=dtype)
     return fft_test_generator
 
 
@@ -152,7 +156,7 @@ namd3d = make_suite(NS(label='namd3d',
                            (108,108,80),
                            (216,216,216),
                        ],
-                       nbatch=10)
+                       nbatch=10))
 
 amber3d = make_suite(NS(label='amber3d',
                         lengths=[
@@ -162,7 +166,7 @@ amber3d = make_suite(NS(label='amber3d',
                             (80,84,14),
                             (80,84,144),
                         ],
-                        nbatch=10)
+                        nbatch=10))
 
 cp2k = make_suite(NS(label='cp2k',
                      lengths=[
@@ -170,17 +174,17 @@ cp2k = make_suite(NS(label='cp2k',
                          (42,32,32),
                          (75,55,55)
                      ],
-                     nbatch=10)
+                     nbatch=10))
 
 warpx3d = make_suite(NS(label='warpx3d',
                         lengths=[3*(2**k + 16,) for k in range(5, 10)],
-                        nbatch=10)
+                        nbatch=10))
 
 #
 # Everything!
 #
 
-def all(ntrials, verify):
+def all():
     generators = [pow2,
                   pow5,
                   pow7,
@@ -196,4 +200,4 @@ def all(ntrials, verify):
                   amber3d,
                   cp2k,
                   warpx3d]
-    return itertools.chain(*[ f(ntrials, verify) for f in generators ])
+    return itertools.chain(*[ f() for f in generators ])
