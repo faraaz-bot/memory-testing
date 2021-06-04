@@ -117,19 +117,21 @@ def real_backward(n, ntrials, nbatch, dtype, verify):
 
 
 @dataclass
-class FFTTestRunner:
-    label: str
-    transform: Any
-    lengths: List[Any]
-    ntrials: int
-    nbatch: int
-    dtype: Any
-    verify: bool
+class HIPFFTTestRunner:
+    label: str = 'UNKNOWN'
+    transform: Any = None
+    lengths: List[Any] = list
+    ntrials: int = 1
+    nbatch: int = 1
+    dtype: Any = None
+    verify: bool = False
 
     def run(self):
         timings = []
         for length in self.lengths:
-            timings.extend(self.transform(length, self.ntrials, self.nbatch, self.dtype, self.verify))
+            timings.extend(
+                self.transform.transform(
+                    length, self.ntrials, self.nbatch, self.dtype, self.verify))
         return timings
 
     def write(self, fname, results, title=None):

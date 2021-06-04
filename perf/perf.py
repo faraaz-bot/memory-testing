@@ -22,28 +22,24 @@ import perflib.git as git
 # build
 #
 
-env = NS()
-env.docker = False
-
 def sjoin(s):
-    '''Join `s` with spaces.'''
+    """Join `s` with spaces."""
     return ' '.join(list(s))
 
 
 def local(cmd, echo=True, **kwargs):
-    '''Run `cmd` using the shell.
+    """Run `cmd` using the shell.
 
     Keyword arguments are passed down to `subprocess.run`.
-    '''
+    """
 
     if echo:
         print('local: ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
 
 
-
 def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git'):
-    '''Build public rocFFT (at specified git `commit`) and install into `dest`.'''
+    """Build public rocFFT (at specified git `commit`) and install into `dest`."""
 
     top = path('.').resolve() / ('rocFFT-' + commit)
 
@@ -59,6 +55,8 @@ def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/ro
     build.mkdir(exist_ok=True)
     defs = [ '-DCMAKE_CXX_COMPILER=hipcc',
              '-DBUILD_CLIENTS_RIDER=ON',
+             '-DROCFFT_CALLBACKS_ENABLED=OFF',
+             '-DSINGLELIB=ON',
              '-DAMDGPU_TARGETS=' ]
     if dest:
         defs += [ f'-DCMAKE_INSTALL_PREFIX={dest}' ]
@@ -71,7 +69,7 @@ def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/ro
 
 
 def build_hipfft(commit, dest, cuda, repo='git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git'):
-    '''Build public hipFFT (at specified git `commit`) and install into `dest`.'''
+    """Build public hipFFT (at specified git `commit`) and install into `dest`."""
 
     top = path('.').resolve() / ('hipFFT-' + commit)
 
@@ -98,7 +96,7 @@ def build_hipfft(commit, dest, cuda, repo='git@github.com:ROCmSoftwarePlatform/h
 
 
 def build_wrapper(dest, cuda):
-    '''Build Python hipFFT wrapper from hipFFT version installed in `dest`.'''
+    """Build Python hipFFT wrapper from hipFFT version installed in `dest`."""
     from sysconfig import get_paths
 
     includes = [ get_paths()['include'], np.get_include(), dest / 'hipfft' / 'include' ]
@@ -134,12 +132,12 @@ def cli():
 @click.option('--copy-hipfft-from', type=str, default=None, help='Copy hipFFT and wrapper from...')
 @click.option('--user', type=str, default='ROCmSoftwarePlatform', help='Git user')
 def build(destination, hipfft, rocfft, copy_hipfft_from, cuda, user):
-    '''Clone and build rocFFT and/or hipFFT.
+    """Clone and build rocFFT and/or hipFFT.
 
     Builds are installed into the 'build' directory.  All shared
     library RPATHs are set using 'patchelf'.
 
-    '''
+    """
 
     build = path('.').resolve()
     if destination is None:
@@ -192,22 +190,27 @@ def load_suite(suite):
 @cli.command()
 @click.option('--ntrials', type=int, default=10, help='Number of trials (default 10).')
 @click.option('--verify', type=bool, default=False, is_flag=True, help='Verify results (default False).')
+@click.option('--use-hipfft', type=bool, default=False, is_flag=True, help='Use hipFFT wrapper.')
 @click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
 @click.option('--build', type=str, default='build', help='Build directory to use libraries from.')
 @click.option('--output', type=str, default='.', help='Output directory to save results in.')
-def run(ntrials, verify, suite, build, output):
-    '''Run performance tests using a single build.
+def run(ntrials, verify, use_hipfft, suite, build, output):
+    """Run performance tests using a single build.
 
     Tests are loaded from 'performance-tests.py'.
 
     Tests are performed using the libraries installed in the 'build'
     directory.
 
-    '''
+    """
 
-    sys.path.insert(0, build)
-    import hipfft
-    print(f'Using hipfft wrapper: {hipfft.__file__}')
+    if use_hipfft:
+        sys.path.insert(0, build)
+        import hipfft
+        from perflib.transforms import HIPFFTTestRunner as TestRunner
+        print(f'Using hipfft wrapper: {hipfft.__file__}')
+    else:
+        from perflib.rocfft import RIDERFFTTestRunner as TestRunner
 
     generator = load_suite(suite)
 
@@ -217,15 +220,17 @@ def run(ntrials, verify, suite, build, output):
     specs = output / 'specs.txt'
     specs.write_text(str(perflib.get_machine_specs(0)))
 
-    for test in generator(ntrials, verify):
-        print(f'# running {test.label}')
-        fname = output / (test.label + '.dat')
-        results = test.run()
-        test.write(fname, results, title=test.label)
+    for test in generator():
+        runner = TestRunner(**test, ntrials=ntrials, verify=verify)
+        print(f'# running {runner.label}')
+        results = runner.run()
+        fname = output / (runner.label + '.dat')
+        runner.write(fname, results, title=runner.label)
 
 
 @cli.command()
 def specs():
+    """Print machine specs."""
     print(perflib.specs.get_machine_specs(0))
 
 
