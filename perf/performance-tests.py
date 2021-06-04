@@ -97,10 +97,13 @@ generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
 # Special lengths
 #
 
-cholla1d = make_suite(NS(label='cholla1d', lengths=[ 10752, 18816, 21504, 32256, 43008, 16807 ], nbatch=1000))
+cholla1d = make_suite(NS(label='cholla1d', lengths=[
+    8192, 10752, 18816, 21504, 32256, 43008, 16384, 16807, 10000 ], nbatch=1000))
+
 cholla2d = make_suite(NS(label='cholla2d', lengths=[(256,256)], nbatch=100))
 
-vasp1d = make_suite(NS(label='vasp1d', lengths=[56, 336], nbatch=1e8))
+vasp1d = make_suite(NS(label='vasp1d', lengths=[56, 336], nbatch=10000))
+
 vasp3d = make_suite(NS(label='vasp3d', lengths=[(336,336,56)], nbatch=10))
 
 gromacs3d = make_suite(NS(label='gromacs3d',
