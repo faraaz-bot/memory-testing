@@ -134,7 +134,7 @@ class HIPFFTTestRunner:
                     length, self.ntrials, self.nbatch, self.dtype, self.verify))
         return timings
 
-    def write(self, fname, results, title=None):
+    def write(self, dname, fname, results, title=None):
         for length in self.lengths:
             seconds = [ t['time'] for t in results if t['n'] == length ]
-            perflib.utils.write_dat(fname, length, self.nbatch, seconds, title=title)
+            perflib.utils.write_dat(dname / fname, length, self.nbatch, seconds, title=title)
