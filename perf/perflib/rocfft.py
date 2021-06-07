@@ -50,6 +50,8 @@ class RIDERFFTTestRunner:
             timings.extend(self.dyna_rider(length))
             if progress:
                 print('.', end='', flush=True)
+        if progress:
+            print('')
         return timings
 
     def write(self, dname, fname, results, title=None):
