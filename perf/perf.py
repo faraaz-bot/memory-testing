@@ -69,7 +69,7 @@ def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/ro
 
     if dest:
         local('make install', cwd=build, check=True)
-        local(f'cp {build}/build/clients/staging/* {dest}')
+        local(f'cp {build}/clients/staging/* {dest}')
 
 
 def build_hipfft(commit, dest, cuda, repo='git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git'):
