@@ -1,5 +1,5 @@
 
-
+import logging
 import re
 import subprocess
 
@@ -34,6 +34,7 @@ class RIDERFFTTestRunner:
         cmd += self.dtype.rider
         cmd = [str(x) for x in cmd]
 
+        logging.info('DYNA: ' + perflib.utils.sjoin(cmd))
         stdout = subprocess.check_output(cmd, universal_newlines=True)
 
         results = []
@@ -43,10 +44,12 @@ class RIDERFFTTestRunner:
                 results.append({'n': length, 'method': 'dyna-rider', 'time': t, 'build': self.builds[i]})
         return results
 
-    def run(self):
+    def run(self, progress=True):
         timings = []
         for length in self.lengths:
             timings.extend(self.dyna_rider(length))
+            if progress:
+                print('.', end='', flush=True)
         return timings
 
     def write(self, dname, fname, results, title=None):

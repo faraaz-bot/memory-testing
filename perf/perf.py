@@ -7,6 +7,7 @@ import numpy as np
 import os
 import sys
 import subprocess
+import logging
 
 from pathlib import Path as path
 from types import SimpleNamespace as NS
@@ -262,4 +263,5 @@ def specs():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename='perf.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
     cli()
