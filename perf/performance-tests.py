@@ -96,11 +96,15 @@ lengths = [ p2 * p3 * p5 * p7 * p11 * p13 * p17 for p2, p3, p5, p7, p11, p13, p1
 lengths += [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343]
 lengths += [11, 22, 44, 88, 121, 176]
 lengths += [13, 26, 52, 104, 169, 208]
-lengths = sorted(set(filter(lambda x: x <= 1024 and x > 1, lengths)))
+lengths = sorted(set(filter(lambda x: x <= 4096 and x > 1, lengths)))
 
 generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
-generated2d = make_suite(NS(label='generated2d', lengths=zip(lengths, lengths), nbatch=100))
-generated3d = make_suite(NS(label='generated3d', lengths=zip(lengths, lengths, lengths), nbatch=1))
+
+lengths2d = list(filter(lambda x: x <= 32, lengths))
+generated2d = make_suite(NS(label='generated2d', lengths=list(zip(lengths2d, lengths2d)), nbatch=100))
+
+lengths3d = list(filter(lambda x: x <= 512, lengths))
+generated3d = make_suite(NS(label='generated3d', lengths=list(zip(lengths3d, lengths3d, lengths3d)), nbatch=1))
 
 #
 # Special lengths

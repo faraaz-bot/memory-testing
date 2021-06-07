@@ -189,8 +189,6 @@ def load_suite(suite):
     exec(code, ns)
     return ns[suite]
 
-# XXX add a (mandatory) argument to run to specify an output directory
-# XXX save machine specs into the output directory as well
 
 @cli.command()
 @click.option('--ntrials', type=int, default=10, help='Number of trials (default 10).')
@@ -242,8 +240,10 @@ def dyna(build1, build2, ntrials, suite, output):
     output = path(output)
     output.mkdir(exist_ok=True)
 
-    specs = output / 'specs.txt'
-    specs.write_text(str(perflib.get_machine_specs(0)))
+    for build in [build1, build2]:
+        specs = output / build / 'specs.txt'
+        specs.parent.mkdir(exist_ok=True)
+        specs.write_text(str(perflib.get_machine_specs(0)))
 
     dino = path(build1) / 'dyna-rocfft-rider'
 
