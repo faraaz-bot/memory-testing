@@ -83,19 +83,24 @@ mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958,
 #
 
 powers = {
-    5: [5**k for k in range(6)],
-    3: [3**k for k in range(8)],
+    17: [17**k for k in range(4)],
+    13: [13**k for k in range(5)],
+    11: [11**k for k in range(5)],
+    7: [7**k for k in range(6)],
+    5: [5**k for k in range(7)],
+    3: [3**k for k in range(9)],
     2: [2**k for k in range(13)],
 }
 
-lengths = [ p2 * p3 * p5 for p2, p3, p5 in itertools.product(powers[2], powers[3], powers[5])]
+lengths = [ p2 * p3 * p5 * p7 * p11 * p13 * p17 for p2, p3, p5, p7, p11, p13, p17 in itertools.product(powers[2], powers[3], powers[5], powers[7], powers[11], powers[13], powers[17])]
 lengths += [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343]
 lengths += [11, 22, 44, 88, 121, 176]
 lengths += [13, 26, 52, 104, 169, 208]
-lengths = sorted(filter(lambda x: x <= 1024 and x > 1, lengths))
+lengths = sorted(set(filter(lambda x: x <= 1024 and x > 1, lengths)))
 
 generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
-
+generated2d = make_suite(NS(label='generated2d', lengths=zip(lengths, lengths), nbatch=100))
+generated3d = make_suite(NS(label='generated3d', lengths=zip(lengths, lengths, lengths), nbatch=1))
 
 #
 # Special lengths
@@ -191,6 +196,8 @@ def all():
                   prime,
                   mixed,
                   generated1d,
+                  generated2d,
+                  generated3d,
                   cholla1d,
                   cholla2d,
                   vasp1d,
