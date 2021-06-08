@@ -18,6 +18,9 @@ sys.path.append(str(top))
 import perflib.utils
 import perflib.git as git
 
+import statistics
+import scipy.stats
+
 
 #
 # build
@@ -261,6 +264,52 @@ def specs():
     """Print machine specs."""
     print(perflib.specs.get_machine_specs(0))
 
+@cli.command()
+@click.argument('runs', type=str, nargs=-1)
+@click.option('--moods', type=float, default=0.05, help="Threshold for Mood's p-value reporting.")
+@click.option('--percent', type=float, default=0.0, help="Threshold for median-time percent difference reporting.")
+def moods(runs, percent, moods):
+    """ """
+    base = path(runs[0])
+
+    regressions = []
+
+    for dname in sorted(base.glob('**/*.dat')):
+        reference_samples = perflib.utils.read_dat(dname)
+        for run in runs[1:]:
+            oname = path(run) / dname.name
+            run_samples = perflib.utils.read_dat(oname)
+            for length in reference_samples.keys():
+
+                if length not in run_samples:
+                    print(f"WARNING: length {length} missing from {oname}.")
+                    continue
+                if reference_samples[length].nbatch != run_samples[length].nbatch:
+                    print(f"WARNING: length {length} batch counts differ from {oname}.")
+                    continue
+
+                s1 = reference_samples[length].times
+                s2 = run_samples[length].times
+
+                if not s1:
+                    print(f"WARNING: missing samples for length {length} from {dname}.")
+                    continue
+                if not s2:
+                    print(f"WARNING: missing samples for length {length} from {oname}.")
+                    continue
+
+                m1 = statistics.median(s1)
+                m2 = statistics.median(s2)
+                if m1 < m2 and abs(m1 - m2) / m1 > percent / 100.0:
+                    _, p, _, _ = scipy.stats.median_test(s1, s2)
+                    if p < moods:
+                        diff = 100 * abs(m1 - m2) / m1
+                        print(f"REGRESSION: length {str(length)}; median times {m1:.4f} vs {m2:.4f} ({diff:4.1f}%); Mood's p-value {p:.6f}; from {oname}.")
+                        regressions.append(length)
+
+    print("Regressions found in lengths:")
+    for length in sorted(set(regressions), key=perflib.utils.product):
+        print("--length " + perflib.utils.sjoin(length))
 
 if __name__ == '__main__':
     logging.basicConfig(filename='perf.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)

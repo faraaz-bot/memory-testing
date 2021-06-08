@@ -1,6 +1,17 @@
 """A few small utilities."""
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import List
+
+from functools import reduce
+
+@dataclass
+class Sample:
+    lengths: List[int]
+    nbatch: int
+    times: List[float]
+
 
 
 def join(sep, s):
@@ -22,9 +33,14 @@ def cjoin(s):
     """Return 's' joined with commas."""
     return join(',', s)
 
+
 def tjoin(s):
     """Return 's' joined with tabs."""
     return join('\t', s)
+
+
+def product(xs):
+    return reduce(lambda x, y: x * y, xs, 1)
 
 
 def write_dat(fname, length, nbatch, seconds, title=None):
@@ -42,3 +58,23 @@ def write_dat(fname, length, nbatch, seconds, title=None):
     dat.append(tjoin(record))
 
     path.write_text(njoin(dat) + '\n')
+
+
+def read_dat(fname):
+    """Read dyna-rider/rider .dat file."""
+
+    dat = Path(fname).read_text()
+
+    records = {}
+    for line in dat.splitlines():
+        if line.startswith('#'):
+            continue
+        words   = line.split("\t")
+        dim     = int(words[0])
+        lengths = tuple(map(int, words[1:dim+1]))
+        nbatch  = int(words[dim+1])
+        times   = list(map(float, words[dim+3:]))
+
+        records[lengths] = Sample(list(lengths), nbatch, times)
+
+    return records
