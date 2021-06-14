@@ -30,8 +30,16 @@ class RIDERFFTTestRunner:
             cmd += length
         cmd += ['-N', self.ntrials]
         cmd += ['-b', self.nbatch]
-        cmd += self.transform.rider
-        cmd += self.dtype.rider
+        cmd += {
+            'complex_forward': ['-t', '0'],
+            'complex_backward': ['-t', '1'],
+            'real_forward': ['-t', '2'],
+            'real_backward': ['-t', '3'],
+        }[self.transform.label]
+        cmd += {
+            'double': ['--double'],
+            'single': [],
+        }[self.dtype.label]
         cmd = [str(x) for x in cmd]
 
         logging.info('DYNA: ' + perflib.utils.sjoin(cmd))

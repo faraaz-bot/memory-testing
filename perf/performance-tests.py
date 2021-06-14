@@ -2,27 +2,24 @@
 # performance tests
 #
 
+import functools
+import itertools
 import numpy as np
 import sympy
 import types
 
-import perflib.hipfft
-
-import functools
-import itertools
-
 NS = types.SimpleNamespace
 
 dtypes = [
-    NS(label='double', dtype=np.float64, rider=['--double']),
-    NS(label='single', dtype=np.float32, rider=[]),
+    NS(label='double', dtype=np.float64),
+    NS(label='single', dtype=np.float32),
     ]
 
 transforms = [
-    NS(label='complex_forward', transform=perflib.hipfft.complex_forward, rider=['-t', '0']),
-    NS(label='complex_backward', transform=perflib.hipfft.complex_backward, rider=['-t', '1']),
-    NS(label='real_forward', transform=perflib.hipfft.real_forward, rider=['-t', '2']),
-    NS(label='real_backward', transform=perflib.hipfft.real_backward, rider=['-t', '3']),
+    NS(label='complex_forward'),
+    NS(label='complex_backward'),
+    NS(label='real_forward'),
+    NS(label='real_backward'),
     ]
 
 
