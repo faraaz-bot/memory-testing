@@ -3,14 +3,15 @@
 
 import click
 
+import logging
 import numpy as np
 import os
-import sys
+import scipy.stats
+import statistics
 import subprocess
-import logging
+import sys
 
 from pathlib import Path as path
-from types import SimpleNamespace as NS
 
 top = path(__file__).resolve().parent
 sys.path.append(str(top))
@@ -18,25 +19,18 @@ sys.path.append(str(top))
 import perflib.utils
 import perflib.git as git
 
-import statistics
-import scipy.stats
+from perflib.utils import sjoin
 
 
 #
 # build
 #
 
-def sjoin(s):
-    """Join `s` with spaces."""
-    return ' '.join(list(s))
-
-
 def local(cmd, echo=True, **kwargs):
     """Run `cmd` using the shell.
 
     Keyword arguments are passed down to `subprocess.run`.
     """
-
     if echo:
         print('local: ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
@@ -199,20 +193,25 @@ def load_suite(suite):
 @click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
 @click.option('--build', type=str, default='build', help='Build directory to use libraries from.')
 @click.option('--output', type=str, default='.', help='Output directory to save results in.')
-def run(ntrials, verify, use_hipfft, suite, build, output):
+@click.option('--use-vkfft', type=str, default=False, is_flag=True, help='Use vkFFT.')
+def run(ntrials, verify, suite, build, output, use_vkfft):
     """Run performance tests using a single build.
 
     Tests are loaded from 'performance-tests.py'.
 
-    Tests are performed using the libraries installed in the 'build'
-    directory.
+    Tests are performed using the hipFFT libraries installed in the
+    'build' directory unless '--use-vkfft' is set.
 
     """
 
-    sys.path.insert(0, build)
-    import hipfft
-    from perflib.transforms import HIPFFTTestRunner as TestRunner
-    print(f'Using hipfft wrapper: {hipfft.__file__}')
+    if not use_vkfft:
+        sys.path.insert(0, build)
+        import hipfft
+        from perflib.hipfft import HIPFFTTestRunner as TestRunner
+        print(f'Using hipFFT wrapper: {hipfft.__file__}')
+    else:
+        from perflib.vkfft import VKFFTTestRunner as TestRunner
+        print('Using vkFFT')
 
     generator = load_suite(suite)
 
@@ -226,8 +225,15 @@ def run(ntrials, verify, use_hipfft, suite, build, output):
         runner = TestRunner(**test, ntrials=ntrials, verify=verify)
         print(f'# running {runner.label}')
         results = runner.run()
-        fname = output / (runner.label + '.dat')
-        runner.write(fname, results, title=runner.label)
+        runner.write(output, runner.label + '.dat', results, title=runner.label)
+
+@cli.command()
+@click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
+def list(suite):
+    generator = load_suite(suite)
+    for test in generator():
+        print(test)
+
 
 @cli.command()
 @click.argument('build1', type=str)
@@ -311,6 +317,9 @@ def moods(runs, percent, moods):
     for length in sorted(set(regressions), key=perflib.utils.product):
         print("--length " + perflib.utils.sjoin(length))
 
+
 if __name__ == '__main__':
-    logging.basicConfig(filename='perf.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+    logging.basicConfig(filename='perf.log',
+                        format='%(asctime)s %(levelname)s: %(message)s',
+                        level=logging.INFO)
     cli()

@@ -6,7 +6,7 @@ import numpy as np
 import sympy
 import types
 
-import perflib.transforms
+import perflib.hipfft
 
 import functools
 import itertools
@@ -19,10 +19,10 @@ dtypes = [
     ]
 
 transforms = [
-    NS(label='complex_forward', transform=perflib.transforms.complex_forward, rider=['-t', '0']),
-    NS(label='complex_backward', transform=perflib.transforms.complex_backward, rider=['-t', '1']),
-    NS(label='real_forward', transform=perflib.transforms.real_forward, rider=['-t', '2']),
-    NS(label='real_backward', transform=perflib.transforms.real_backward, rider=['-t', '3']),
+    NS(label='complex_forward', transform=perflib.hipfft.complex_forward, rider=['-t', '0']),
+    NS(label='complex_backward', transform=perflib.hipfft.complex_backward, rider=['-t', '1']),
+    NS(label='real_forward', transform=perflib.hipfft.real_forward, rider=['-t', '2']),
+    NS(label='real_backward', transform=perflib.hipfft.real_backward, rider=['-t', '3']),
     ]
 
 
