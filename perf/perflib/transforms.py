@@ -16,21 +16,8 @@ from numpy.fft import *
 import perflib.utils
 
 
-def shape(n, nbatch):
-    if isinstance(n, list) or isinstance(n, tuple):
-        return [nbatch] + list(n)
-    return [nbatch, n]
-
-
-def product(x):
-    p = 1
-    for f in x:
-        p *= f
-    return p
-
-
 def real_input(n, nbatch, dtype):
-    s = shape(n, nbatch)
+    s = perflib.utils.shape(n, nbatch)
     y = np.zeros(s, dtype)
     for i in range(nbatch):
         y[i] = nr.rand(*s[1:])
@@ -78,7 +65,7 @@ def complex_backward(n, ntrials, nbatch, dtype, verify):
         z, t = hipfft.backward(y, time=True, batched=True)
         if verify:
             r = ifftn(y, s=y.shape[1:])
-            s = np.asarray(1.0/product(z.shape[1:]), dtype)
+            s = np.asarray(1.0/perflib.utils.product(z.shape[1:]), dtype)
             compare(s*z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes })
     return results
@@ -98,7 +85,7 @@ def real_forward(n, ntrials, nbatch, dtype, verify):
 
 def real_backward(n, ntrials, nbatch, dtype, verify):
     results = []
-    rshape = shape(n, nbatch)
+    rshape = perflib.utils.shape(n, nbatch)
     if rshape[-1] % 2:
         return []
     for trial in range(ntrials):
@@ -106,7 +93,7 @@ def real_backward(n, ntrials, nbatch, dtype, verify):
         z, t = hipfft.backward(y, real=True, time=True, batched=True)
         if verify:
             r = irfftn(y, s=rshape[1:])
-            s = np.asarray(1.0/product(rshape[1:]), dtype)
+            s = np.asarray(1.0/perflib.utils.product(rshape[1:]), dtype)
             compare(s*z, r)
         results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes })
     return results

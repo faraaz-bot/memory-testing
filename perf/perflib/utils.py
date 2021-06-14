@@ -39,7 +39,15 @@ def tjoin(s):
     return join('\t', s)
 
 
+def shape(n, nbatch):
+    """Return NumPy shape."""
+    if isinstance(n, (list, tuple)):
+        return [nbatch] + list(n)
+    return [nbatch, n]
+
+
 def product(xs):
+    """Return product of factors."""
     return reduce(lambda x, y: x * y, xs, 1)
 
 
