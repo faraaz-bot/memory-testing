@@ -55,6 +55,10 @@ def product(xs):
     """Return product of factors."""
     return reduce(lambda x, y: x * y, xs, 1)
 
+def flatten(xs):
+    """Flatten list of lists to a list."""
+    return sum(xs, [])
+
 
 #
 # DAT files
