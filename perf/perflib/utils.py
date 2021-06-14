@@ -1,5 +1,9 @@
 """A few small utilities."""
 
+import numpy as np
+import numpy.linalg as la
+import numpy.random as nr
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -93,3 +97,36 @@ def read_dat(fname):
         times   = list(map(float, words[dim + 3:]))
         records[lengths] = Sample(list(lengths), nbatch, times)
     return records
+
+
+#
+# FFT input and comparison
+#
+
+def real_input(n, nbatch, dtype):
+    """Return random real inputs."""
+    s = shape(n, nbatch)
+    y = np.zeros(s, dtype)
+    for i in range(nbatch):
+        y[i] = nr.rand(*s[1:])
+    return y
+
+
+def complex_input(n, nbatch, dtype):
+    """Return random complex inputs."""
+    return real_input(n, nbatch, dtype) + 1j * real_input(n, nbatch, dtype)
+
+
+def compare(k1, k2):
+    """Compare arrays."""
+    reldiff = la.norm(k1 - k2) / la.norm(k2)
+    tolerance = {
+        np.dtype(np.float32):    7.5e-7,
+        np.dtype(np.complex64):  7.5e-7,
+        np.dtype(np.float64):    1.0e-11,
+        np.dtype(np.complex128): 1.0e-11
+    }[k1.dtype]
+    stolerance = tolerance * np.sqrt(np.log2(k2.size))
+    if reldiff > stolerance:
+        raise ValueError(f"Relative difference {reldiff} is too large ({stolerance}).")
+    return reldiff
