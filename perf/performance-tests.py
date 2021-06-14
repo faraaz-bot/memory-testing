@@ -100,7 +100,7 @@ lengths = sorted(set(filter(lambda x: x <= 4096 and x > 1, lengths)))
 
 generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
 
-lengths2d = list(filter(lambda x: x <= 32, lengths))
+lengths2d = list(filter(lambda x: x <= 1024, lengths))
 generated2d = make_suite(NS(label='generated2d', lengths=list(zip(lengths2d, lengths2d)), nbatch=100))
 
 lengths3d = list(filter(lambda x: x <= 512, lengths))
