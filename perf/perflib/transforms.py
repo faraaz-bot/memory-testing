@@ -16,10 +16,6 @@ from numpy.fft import *
 import perflib.utils
 
 
-def GiB(y):
-    return y.nbytes/1024**3
-
-
 def shape(n, nbatch):
     if isinstance(n, list) or isinstance(n, tuple):
         return [nbatch] + list(n)
@@ -71,7 +67,7 @@ def complex_forward(n, ntrials, nbatch, dtype, verify):
         if verify:
             r = fftn(y, s=y.shape[1:])
             compare(z, r)
-        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y)})
+        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes})
     return results
 
 
@@ -84,7 +80,7 @@ def complex_backward(n, ntrials, nbatch, dtype, verify):
             r = ifftn(y, s=y.shape[1:])
             s = np.asarray(1.0/product(z.shape[1:]), dtype)
             compare(s*z, r)
-        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
+        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes })
     return results
 
 
@@ -96,7 +92,7 @@ def real_forward(n, ntrials, nbatch, dtype, verify):
         if verify:
             r = rfftn(y, s=y.shape[1:])
             compare(z, r)
-        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
+        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes })
     return results
 
 
@@ -112,7 +108,7 @@ def real_backward(n, ntrials, nbatch, dtype, verify):
             r = irfftn(y, s=rshape[1:])
             s = np.asarray(1.0/product(rshape[1:]), dtype)
             compare(s*z, r)
-        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': GiB(y) })
+        results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes })
     return results
 
 

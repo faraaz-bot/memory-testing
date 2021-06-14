@@ -38,7 +38,7 @@ def throughput_vs_size(df):
     times = px.scatter(df, x="n", y="throughput", color="method",
                        labels={
                            'n': '1D length',
-                           'throughput': 'Throughput (one-way, GiB/s)'
+                           'throughput': 'Throughput (one-way, bytes/s)'
                        })
 
     times.update_layout(yaxis=dict(tickformat=".2f"))
