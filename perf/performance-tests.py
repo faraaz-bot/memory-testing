@@ -52,9 +52,9 @@ def make_suite(suite):
 # Basic suites
 #
 
-pow2  = make_suite(NS(label='pow2', lengths=[ 2**k for k in range(9,17) ], nbatch=2048))
-pow5  = make_suite(NS(label='pow5', lengths=[ 5**k for k in range(4,8) ], nbatch=2000))
-pow7  = make_suite(NS(label='pow7', lengths=[ 7**k for k in range(3,7) ], nbatch=1000))
+pow2  = make_suite(NS(label='pow2', lengths=[ 2**k for k in range(9,17) ], nbatch=10000))
+pow5  = make_suite(NS(label='pow5', lengths=[ 5**k for k in range(4,8) ], nbatch=5000))
+pow7  = make_suite(NS(label='pow7', lengths=[ 7**k for k in range(3,7) ], nbatch=5000))
 prime = make_suite(NS(label='prime', lengths=list(sympy.sieve.primerange(11, 1000)), nbatch=10000))
 mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958, 1014, 1139,
                                       1250, 1427, 1463, 1480, 1500, 1568, 1608, 1616, 1638, 1656,
@@ -82,25 +82,25 @@ mixed = make_suite(NS(label='mixed', lengths=[225, 240, 300, 486, 600, 900, 958,
 # Generated lengths, see kernel_generator.py
 #
 
-powers = {
-    17: [17**k for k in range(4)],
-    13: [13**k for k in range(5)],
-    11: [11**k for k in range(5)],
-    7: [7**k for k in range(6)],
-    5: [5**k for k in range(7)],
-    3: [3**k for k in range(9)],
-    2: [2**k for k in range(13)],
-}
+lengths = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20,
+           21, 22, 24, 25, 26, 27, 28, 30, 32, 36, 40, 42, 44, 45,
+           48, 49, 50, 52, 54, 56, 60, 64, 72, 75, 80, 81, 84, 88,
+           90, 96, 100, 104, 108, 112, 120, 121, 125, 128, 135, 144,
+           150, 160, 162, 168, 169, 176, 180, 192, 200, 208, 216,
+           224, 225, 240, 243, 250, 256, 270, 288, 300, 320, 324,
+           336, 343, 360, 375, 384, 400, 405, 432, 450, 480, 486,
+           500, 512, 540, 576, 600, 625, 640, 648, 675, 720, 729,
+           750, 768, 800, 810, 864, 900, 960, 972, 1000, 1024, 1080,
+           1125, 1152, 1200, 1215, 1250, 1280, 1296, 1350, 1440,
+           1458, 1500, 1536, 1600, 1620, 1728, 1800, 1875, 1920,
+           1944, 2000, 2025, 2048, 2160, 2187, 2250, 2304, 2400,
+           2430, 2500, 2560, 2592, 2700, 2880, 2916, 3000, 3072,
+           3125, 3200, 3240, 3375, 3456, 3600, 3645, 3750, 3840,
+           3888, 4000, 4050, 4096]
 
-lengths = [ p2 * p3 * p5 * p7 * p11 * p13 * p17 for p2, p3, p5, p7, p11, p13, p17 in itertools.product(powers[2], powers[3], powers[5], powers[7], powers[11], powers[13], powers[17])]
-lengths += [7, 14, 21, 28, 42, 49, 56, 84, 112, 168, 224, 336, 343]
-lengths += [11, 22, 44, 88, 121, 176]
-lengths += [13, 26, 52, 104, 169, 208]
-lengths = sorted(set(filter(lambda x: x <= 4096 and x > 1, lengths)))
+generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=1000))
 
-generated1d = make_suite(NS(label='generated1d', lengths=lengths, nbatch=10000))
-
-lengths2d = list(filter(lambda x: x <= 32, lengths))
+lengths2d = list(filter(lambda x: x <= 1024, lengths))
 generated2d = make_suite(NS(label='generated2d', lengths=list(zip(lengths2d, lengths2d)), nbatch=100))
 
 lengths3d = list(filter(lambda x: x <= 512, lengths))
@@ -186,7 +186,7 @@ cp2k = make_suite(NS(label='cp2k',
                      nbatch=10))
 
 warpx3d = make_suite(NS(label='warpx3d',
-                        lengths=[3*(2**k + 16,) for k in range(5, 10)],
+                        lengths=[3*(2**k + 16,) for k in range(5, 9)],
                         nbatch=10))
 
 #
