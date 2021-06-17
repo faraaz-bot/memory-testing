@@ -65,7 +65,10 @@ class VKFFTTestRunner:
     def complex_forward(self, n):
         results = []
         y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-        app = vk.VkFFTApp(y.shape, y.dtype, self.queue, inplace=True, ndim=len(y.shape)-1)
+        try:
+            app = vk.VkFFTApp(y.shape, y.dtype, self.queue, inplace=True, ndim=len(y.shape)-1)
+        except:
+            return []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
             z, t = self._vk_trans(app.fft, y)
@@ -79,7 +82,10 @@ class VKFFTTestRunner:
     def complex_backward(self, n):
         results = []
         y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-        app = vk.VkFFTApp(y.shape, y.dtype, self.queue, inplace=True, ndim=len(y.shape)-1)
+        try:
+            app = vk.VkFFTApp(y.shape, y.dtype, self.queue, inplace=True, ndim=len(y.shape)-1)
+        except:
+            return []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
             z, t = self._vk_trans(app.ifft, y)
