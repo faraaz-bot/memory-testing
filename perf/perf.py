@@ -3,14 +3,15 @@
 
 import click
 
+import logging
 import numpy as np
 import os
-import sys
+import scipy.stats
+import statistics
 import subprocess
-import logging
+import sys
 
 from pathlib import Path as path
-from types import SimpleNamespace as NS
 
 top = path(__file__).resolve().parent
 sys.path.append(str(top))
@@ -18,22 +19,18 @@ sys.path.append(str(top))
 import perflib.utils
 import perflib.git as git
 
+from perflib.utils import sjoin
+
 
 #
 # build
 #
-
-def sjoin(s):
-    """Join `s` with spaces."""
-    return ' '.join(list(s))
-
 
 def local(cmd, echo=True, **kwargs):
     """Run `cmd` using the shell.
 
     Keyword arguments are passed down to `subprocess.run`.
     """
-
     if echo:
         print('local: ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
@@ -196,20 +193,25 @@ def load_suite(suite):
 @click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
 @click.option('--build', type=str, default='build', help='Build directory to use libraries from.')
 @click.option('--output', type=str, default='.', help='Output directory to save results in.')
-def run(ntrials, verify, use_hipfft, suite, build, output):
+@click.option('--use-vkfft', type=str, default=False, is_flag=True, help='Use vkFFT.')
+def run(ntrials, verify, suite, build, output, use_vkfft):
     """Run performance tests using a single build.
 
     Tests are loaded from 'performance-tests.py'.
 
-    Tests are performed using the libraries installed in the 'build'
-    directory.
+    Tests are performed using the hipFFT libraries installed in the
+    'build' directory unless '--use-vkfft' is set.
 
     """
 
-    sys.path.insert(0, build)
-    import hipfft
-    from perflib.transforms import HIPFFTTestRunner as TestRunner
-    print(f'Using hipfft wrapper: {hipfft.__file__}')
+    if not use_vkfft:
+        sys.path.insert(0, build)
+        import hipfft
+        from perflib.hipfft import HIPFFTTestRunner as TestRunner
+        print(f'Using hipFFT wrapper: {hipfft.__file__}')
+    else:
+        from perflib.vkfft import VKFFTTestRunner as TestRunner
+        print('Using vkFFT')
 
     generator = load_suite(suite)
 
@@ -223,8 +225,15 @@ def run(ntrials, verify, use_hipfft, suite, build, output):
         runner = TestRunner(**test, ntrials=ntrials, verify=verify)
         print(f'# running {runner.label}')
         results = runner.run()
-        fname = output / (runner.label + '.dat')
-        runner.write(fname, results, title=runner.label)
+        runner.write(output, runner.label + '.dat', results, title=runner.label)
+
+@cli.command()
+@click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
+def list(suite):
+    generator = load_suite(suite)
+    for test in generator():
+        print(test)
+
 
 @cli.command()
 @click.argument('build1', type=str)
@@ -261,7 +270,56 @@ def specs():
     """Print machine specs."""
     print(perflib.specs.get_machine_specs(0))
 
+@cli.command()
+@click.argument('runs', type=str, nargs=-1)
+@click.option('--moods', type=float, default=0.05, help="Threshold for Mood's p-value reporting.")
+@click.option('--percent', type=float, default=0.0, help="Threshold for median-time percent difference reporting.")
+def moods(runs, percent, moods):
+    """ """
+    base = path(runs[0])
+
+    regressions = []
+
+    for dname in sorted(base.glob('**/*.dat')):
+        reference_samples = perflib.utils.read_dat(dname)
+        for run in runs[1:]:
+            oname = path(run) / dname.name
+            run_samples = perflib.utils.read_dat(oname)
+            for length in reference_samples.keys():
+
+                if length not in run_samples:
+                    print(f"WARNING: length {length} missing from {oname}.")
+                    continue
+                if reference_samples[length].nbatch != run_samples[length].nbatch:
+                    print(f"WARNING: length {length} batch counts differ from {oname}.")
+                    continue
+
+                s1 = reference_samples[length].times
+                s2 = run_samples[length].times
+
+                if not s1:
+                    print(f"WARNING: missing samples for length {length} from {dname}.")
+                    continue
+                if not s2:
+                    print(f"WARNING: missing samples for length {length} from {oname}.")
+                    continue
+
+                m1 = statistics.median(s1)
+                m2 = statistics.median(s2)
+                if m1 < m2 and abs(m1 - m2) / m1 > percent / 100.0:
+                    _, p, _, _ = scipy.stats.median_test(s1, s2)
+                    if p < moods:
+                        diff = 100 * abs(m1 - m2) / m1
+                        print(f"REGRESSION: length {str(length)}; median times {m1:.4f} vs {m2:.4f} ({diff:4.1f}%); Mood's p-value {p:.6f}; from {oname}.")
+                        regressions.append(length)
+
+    print("Regressions found in lengths:")
+    for length in sorted(set(regressions), key=perflib.utils.product):
+        print("--length " + perflib.utils.sjoin(length))
+
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='perf.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+    logging.basicConfig(filename='perf.log',
+                        format='%(asctime)s %(levelname)s: %(message)s',
+                        level=logging.INFO)
     cli()
