@@ -133,7 +133,11 @@ JIRA tickets
 
 Representative transforms:
 
-* XXX
+* 2D 4k: ``rocfft-rider --length 4096 4096 -t   3 -N 10 --double -o``
+* 3D VASP: ``rocfft-rider --length 336 336 56 -o --double -N 10``
+* 2D MD?: ``rocfft-rider --length 336 18816 -N 10 --double -o``
+
+These are the in the ``mi2002d`` and ``mi2003d`` suites.
 
 
 HACC

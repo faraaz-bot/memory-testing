@@ -186,6 +186,19 @@ warpx3d = make_suite(NS(label='warpx3d',
                         lengths=[3*(2**k + 16,) for k in range(5, 9)],
                         nbatch=10))
 
+mi2002d = make_suite(NS(label='mi2002d',
+                        lengths=[
+                            (4096, 4096),
+                            (336, 18816),
+                        ],
+                        nbatch=1))
+
+mi2003d = make_suite(NS(label='mi2003d',
+                        lengths=[
+                            (336, 336, 56),
+                        ],
+                        nbatch=1))
+
 #
 # Everything!
 #
@@ -207,5 +220,7 @@ def all():
                   namd3d,
                   amber3d,
                   cp2k,
-                  warpx3d]
+                  warpx3d,
+                  mi2002d,
+                  mi2003d]
     return itertools.chain(*[ f() for f in generators ])
