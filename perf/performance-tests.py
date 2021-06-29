@@ -204,6 +204,7 @@ mi2003d = make_suite(NS(label='mi2003d',
 #
 
 def all():
+    """All of the above!."""
     generators = [pow2,
                   pow5,
                   pow7,
@@ -224,3 +225,21 @@ def all():
                   mi2002d,
                   mi2003d]
     return itertools.chain(*[ f() for f in generators ])
+
+def clients1():
+    """Only 'client' tests, and only 1 batch."""
+    generators = [cholla1d,
+                  cholla2d,
+                  vasp1d,
+                  vasp3d,
+                  gromacs3d,
+                  namd3d,
+                  amber3d,
+                  cp2k,
+                  warpx3d,
+                  mi2002d,
+                  mi2003d]
+    for d in itertools.chain(*[ f() for f in generators ]):
+        n = d.copy()
+        n['nbatch'] = 1
+        yield n
