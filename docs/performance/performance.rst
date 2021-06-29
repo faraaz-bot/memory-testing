@@ -58,6 +58,8 @@ According to Alessandro, Frontier acceptance is driven by: Need to hit
 bottleneck is the Poisson solver, using 2D FFTs.  They are moving to
 1D FFTs.  Therefore the length 16807 is very important.
 
+See also the `tflops` directory in `rocFFT-misc`_.
+
 
 Generic tickets
 ^^^^^^^^^^^^^^^
@@ -78,8 +80,9 @@ JIRA tickets:
 * `SWDEV-240404 <http://ontrack-internal.amd.com/browse/SWDEV-240404>`_: 1D Multiples of 21 and radix-7
 * `SWDEV-268238 <http://ontrack-internal.amd.com/browse/SWDEV-268238>`_: 1D Multiples of 21
 * `SWDEV-257111 <http://ontrack-internal.amd.com/browse/SWDEV-257111>`_: 2D batched 256x256 (lower priority)
+* `SWDEV-292122 <http://ontrack-internal.amd.com/browse/SWDEV-292122>`_: 10k
 
-Representative transforms for tickets 240404 and 268238:
+Representative transforms:
 
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 10752``
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 18816``
@@ -87,6 +90,7 @@ Representative transforms for tickets 240404 and 268238:
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 32256``
 * 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
 * 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
+* 1D Z2Z inverse 10k: ``rocfft-rider --length 10000 -b 10000 -N 20 -t 1 --double -o``
 
 These cases are represented in the ``cholla1d`` performance suite.
 
@@ -120,6 +124,18 @@ Results:
 * `2021-03-10 (rocFFT 173a6b1) vasp <_static/vasp-17ea6b1-vs-release.html>`_
 
 
+MI200
+^^^^^
+
+JIRA tickets
+
+* `SWDEV-279412 <http://ontrack-internal.amd.com/browse/SWDEV-279412>`_: MI200 perf drops
+
+Representative transforms:
+
+* XXX
+
+
 HACC
 ^^^^
 
@@ -139,6 +155,8 @@ JIRA tickets
 
 * `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
 * `SWDEV-245239 <http://ontrack-internal.amd.com/browse/SWDEV-245239>`_
+* `SWDEV-245239 <http://ontrack-internal.amd.com/browse/SWDEV-245239>`_
+* `SWDEV-283579 <http://ontrack-internal.amd.com/browse/SWDEV-283579>`_
 
 Representative transforms:
 
@@ -165,7 +183,7 @@ These cases are represented in the ``gromacs3d`` performance suite.
 
 
 AMBER
-^^^^
+^^^^^
 
 JIRA tickets
 
