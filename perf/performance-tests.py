@@ -195,6 +195,7 @@ mi2002d = make_suite(NS(label='mi2002d',
 
 mi2003d = make_suite(NS(label='mi2003d',
                         lengths=[
+                            (256, 256, 256),
                             (336, 336, 56),
                         ],
                         nbatch=1))

@@ -127,7 +127,7 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
         hipfftPlanMany(&plan, int(nd), n, nullptr, 1, 0, nullptr, 1, 0, type.fft_type, int(nb)));
 
     PyObject* Z;
-    if(nb > 1)
+    if(batched || nb > 1)
     {
         npy_intp dims[4] = {nb, nx, ny, nz};
         if(type.fft_type == HIPFFT_R2C || type.fft_type == HIPFFT_D2Z)
