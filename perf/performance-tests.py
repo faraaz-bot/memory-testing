@@ -243,3 +243,19 @@ def clients1():
         n = d.copy()
         n['nbatch'] = 1
         yield n
+
+
+def clients():
+    """Only 'client' tests."""
+    generators = [cholla1d,
+                  cholla2d,
+                  vasp1d,
+                  vasp3d,
+                  gromacs3d,
+                  namd3d,
+                  amber3d,
+                  cp2k,
+                  warpx3d,
+                  mi2002d,
+                  mi2003d]
+    return itertools.chain(*[ f() for f in generators ])
