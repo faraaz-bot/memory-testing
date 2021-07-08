@@ -1,0 +1,231 @@
+\documentclass[10pt,aspectratio=169]{beamer}
+\usepackage{graphicx}
+
+%\ifxetex
+\usepackage{fontspec}
+\newfontfamily{\klavikumfont}{Klavika-Regular.otf}
+\selectfont\klavikumfont
+%\fi
+
+\usepackage[yyyymmdd]{datetime}
+\renewcommand{\dateseparator}{-}
+
+\setbeamercolor{normal text}{fg=white,bg=black}
+\setbeamerfont{author}{size=\small,series=\bfseries,parent=structure}
+\setbeamerfont{frametitle}{family=\fontfamily{cyklop}\selectfont}
+\setbeamercolor{background canvas}{bg=white}
+
+\pgfdeclareimage[width=\paperwidth]{mybackground}{gpu_background_black.png}
+\setbeamertemplate{title page}{
+  \begin{picture}(0,0)
+    \put(-30,-163){%
+      \pgfuseimage{mybackground}
+    }
+    \put(0,-150){%
+      \begin{minipage}[b][45mm][t]{226mm}
+        \usebeamerfont{title}{\inserttitle\par}
+        \ifx\insertsubtitle\@empty%
+        \else%
+        {\vskip0.25em%
+        \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}%
+        \fi%
+        \vskip1cm%              
+        \usebeamerfont{author}{\insertauthor}\par
+        \usebeamerfont{date}\insertdate
+      \end{minipage}
+    }
+  \end{picture}
+}
+
+\setbeamerfont{frametitle}{family=\fontspec{Klavika-Regular.otf}}
+
+\def\thetitle{rocFFT}
+\def\thesubtitle{Performance updates}
+\def\theauthor{rocFFT developers}
+\def\theauthorinstitute{AMD}
+
+%\def\presdate{2020-02-14}
+
+\hypersetup{
+  pdftitle=\thetitle{} \thesubtitle{},
+  pdfauthor=\theauthor{}
+}
+
+\title{\thetitle{}}
+\subtitle{\thesubtitle{}}
+\author{\theauthor{}}
+\institute{\theauthorinstitute}
+%\date{\presdate}
+
+\setbeamertemplate{frametitle}[default][center]
+\setbeamertemplate{navigation symbols}{}
+
+\begin{document}
+
+\klavikumfont
+\setbeamertemplate{headline}{}
+%\setbeamertemplate{footline}{}
+
+{
+  \setbeamercolor{background canvas}{bg=black}
+  \setbeamercolor{normal text}{fg=white,bg=black}
+  \setbeamercolor{frametitle}{fg=white}
+  \setbeamercolor{title}{fg=white}
+  \setbeamercolor{alerted text}{fg=white}
+  \setbeamercolor{structure}{fg=white}
+  \usebeamercolor[fg]{normal text}
+  \begin{frame}
+    \titlepage
+  \end{frame}
+}
+
+\setbeamercolor{normal text}{fg=black,bg=white}
+\usebeamercolor[fg]{normal text}
+
+\section{Overview}
+
+\begin{frame}
+  \frametitle{rocFFT performance update}
+
+  Overview
+  \begin{itemize}
+  \item Brief intro to FFTs
+  \item Performance numbers 2021-06-29 \hyperlink{perf01}{\beamergotobutton{skip to}}
+  \item Performance planning
+  \end{itemize}
+\end{frame}
+
+\section{Intro to FFTs}
+
+\begin{frame}
+  \frametitle{Intro to FFTs}
+
+  Given length $N$ input data $x_n$, discrete Fourier transform (DFT) is
+  \begin{equation*}
+    X_k = \sum_{n=0}^{N-1} e^{-2 \pi i n k / N} x_n
+  \end{equation*}
+
+  Note
+  \begin{itemize}
+  \item output is also length $N$
+  \item each output element depends on all input elements
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Naive DFT}
+
+  A naive approach to compute the DFT would be
+
+\begin{verbatim}
+X = zeros(N)
+for k in range(N):
+  for n in range(N):
+    X[k] += exp(-2 * pi * I * n * k / N) * x[n]
+\end{verbatim}
+
+  Properties
+  \begin{itemize}
+  \item slow: code above is $O(N^2)$
+  \item not very accurate when done with floating-point
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Fast Fourier Transform}
+
+  Key idea behind Fast Fourier Transform (FFT)
+  \begin{itemize}
+  \item lots of symmetries in the $e^{-2 \pi i n k / N}$ term
+  \item symmetries manifest themselves through factors of $N$
+  \end{itemize}
+
+  \medskip
+  For example, length 56 transform is decomposed into
+  \begin{itemize}
+  \item smaller transforms of length 7 and length 8
+  \end{itemize}
+
+  \medskip
+  Resulting code is
+  \begin{itemize}
+  \item much faster: FFTs are $O(N \log N)$
+  \item more accurate
+  \end{itemize}
+
+  \medskip
+  Different FFT algorithms exist
+  \begin{itemize}
+  \item Cooley-Tukey
+  \item Stockham
+  \item Bluestein
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{rocFFT}
+
+  rocFFT highlights
+  \begin{itemize}
+  \item XXX
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{rocFFT features vs the competition}
+
+  XXX
+\end{frame}
+
+\section{Performance numbers}
+
+\begin{frame}[label=perf01]
+  \frametitle{Performance numbers}
+
+  Important use cases (based on frequency of tickets)
+  \begin{itemize}
+  \item Molecular dynamics
+  \item XXX Cholla
+  \end{itemize}
+
+  \medskip
+  Performance tracking strategy
+  \begin{itemize}
+  \item Identify sizes of interest (from JIRA)
+  \item Run performance suites; see \href{https://github.com/ROCmSoftwarePlatform/rocFFT-misc/tree/master/perf}{rocFFT-misc/perf}
+  \item Identify and study performance gaps
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Performance numbers}
+
+  2021-06-29 performance numbers
+
+  \medskip
+  \begin{tabular}{lc}
+    one batch per transform: & \href{one-2021-06-29.html}{\beamerbutton{one}} \\
+    multiple batches per transform: & \href{batched-2021-06-29.html}{\beamerbutton{batched}} \\
+  \end{tabular}
+\end{frame}
+
+\section{Performance planning}
+
+\begin{frame}
+  \frametitle{Performance planning}
+
+  To close performance gaps
+  \begin{description}
+  \item[FUSE] For multidimenional transforms, we are fusing transpose
+    kernels with transform kernels.\par
+
+    This is already mostly implemented.  Needs tuning for client
+    transforms. Usually see 1.2x to 1.3x speedup.
+
+  \item[NEWGEN] This is implemented.  Needs tuning for client
+    transforms.  Often see 1.2x speedup; but can be higher.
+  \end{description}
+
+\end{frame}
+
+\end{document}
