@@ -65,7 +65,7 @@ static transform_types_t transform_types(PyArrayObject* x, bool real, int direct
     throw std::runtime_error("FFT type cannot be deduced.");
 }
 
-static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool batched, bool time)
+static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool batched, bool time, bool inplace)
 {
     hipEvent_t start, stop;
     float      elapsed = 1.0;
@@ -146,8 +146,16 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
     size_t total_bytes_in  = (size_t)PyArray_NBYTES(x);
     size_t total_bytes_out = (size_t)PyArray_NBYTES(z);
     void  *d_in, *d_out;
-    HIP_CHECK(hipMalloc(&d_in, total_bytes_in));
-    HIP_CHECK(hipMalloc(&d_out, total_bytes_out));
+    if(!inplace)
+    {
+        HIP_CHECK(hipMalloc(&d_in, total_bytes_in));
+        HIP_CHECK(hipMalloc(&d_out, total_bytes_out));
+    }
+    else
+    {
+        HIP_CHECK(hipMalloc(&d_in, std::max(total_bytes_in, total_bytes_out)));
+        d_out = d_in;
+    }
     HIP_CHECK(hipMemcpy(d_in, PyArray_DATA(x), total_bytes_in, hipMemcpyHostToDevice));
 
     if(time)
@@ -195,7 +203,10 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
 
     HIP_CHECK(hipMemcpy(PyArray_DATA(z), d_out, total_bytes_out, hipMemcpyDeviceToHost));
     HIP_CHECK(hipFree(d_in));
-    HIP_CHECK(hipFree(d_out));
+    if(!inplace)
+    {
+        HIP_CHECK(hipFree(d_out));
+    }
     HIPFFT_CHECK(hipfftDestroy(plan));
 
     if(time)
@@ -211,33 +222,33 @@ static PyObject* hipfft_transform(PyObject* X, bool real, int direction, bool ba
 static PyObject* hipfft_forward(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* X;
-    int       real = 0, batched = 0, time = 0;
+    int       real = 0, batched = 0, time = 0, inplace = 0;
 
-    static const char* kwlist[] = {"x", "real", "batched", "time", NULL};
+    static const char* kwlist[] = {"x", "real", "batched", "time", "inplace", NULL};
     if(!PyArg_ParseTupleAndKeywords(
-           args, kwargs, "O|ppp", (char**)kwlist, &X, &real, &batched, &time))
+           args, kwargs, "O|pppp", (char**)kwlist, &X, &real, &batched, &time, &inplace))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_FORWARD, bool(batched), bool(time));
+    return hipfft_transform(X, bool(real), HIPFFT_FORWARD, bool(batched), bool(time), bool(inplace));
 }
 
 static PyObject* hipfft_backward(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* X;
-    int       real = 0, batched = 0, time = 0;
+    int       real = 0, batched = 0, time = 0, inplace = 0;
 
-    static const char* kwlist[] = {"x", "real", "batched", "time", NULL};
+    static const char* kwlist[] = {"x", "real", "batched", "time", "inplace", NULL};
     if(!PyArg_ParseTupleAndKeywords(
-           args, kwargs, "O|ppp", (char**)kwlist, &X, &real, &batched, &time))
+           args, kwargs, "O|pppp", (char**)kwlist, &X, &real, &batched, &time, &inplace))
         return NULL;
 
     if(!PyArray_CheckExact(X))
         return NULL; // better messaging...
 
-    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD, bool(batched), bool(time));
+    return hipfft_transform(X, bool(real), HIPFFT_BACKWARD, bool(batched), bool(time), bool(inplace));
 }
 
 // clang-format off

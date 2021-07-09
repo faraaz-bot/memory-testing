@@ -19,12 +19,19 @@ class HIPFFTTestRunner:
     nbatch: int = 1
     dtype: Any = None
     verify: bool = False
+    placement: Any = None
+
+    def is_inplace(self):
+        if self.placement is None:
+            return False
+        return self.placement.label == 'inplace'
+
 
     def complex_forward(self, n):
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.forward(y, time=True, batched=True)
+            z, t = hipfft.forward(y, time=True, batched=True, inplace=self.is_inplace())
             if self.verify:
                 r = fftn(y, s=y.shape[1:])
                 perflib.utils.compare(z, r)
@@ -36,7 +43,7 @@ class HIPFFTTestRunner:
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.backward(y, time=True, batched=True)
+            z, t = hipfft.backward(y, time=True, batched=True, inplace=self.is_inplace())
             if self.verify:
                 r = ifftn(y, s=y.shape[1:])
                 s = np.asarray(1.0 / perflib.utils.product(z.shape[1:]), self.dtype)
@@ -49,7 +56,7 @@ class HIPFFTTestRunner:
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.real_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.forward(y, real=True, time=True, batched=True)
+            z, t = hipfft.forward(y, real=True, time=True, batched=True, inplace=self.is_inplace())
             if self.verify:
                 r = rfftn(y, s=y.shape[1:])
                 perflib.utils.compare(z, r)
@@ -64,7 +71,7 @@ class HIPFFTTestRunner:
             return []
         for trial in range(self.ntrials):
             y = hipfft.forward(perflib.utils.real_input(n, self.nbatch, self.dtype), real=True, batched=True)
-            z, t = hipfft.backward(y, real=True, time=True, batched=True)
+            z, t = hipfft.backward(y, real=True, time=True, batched=True, inplace=self.is_inplace())
             if self.verify:
                 r = irfftn(y, s=rshape[1:])
                 s = np.asarray(1.0 / perflib.utils.product(rshape[1:]), self.dtype)

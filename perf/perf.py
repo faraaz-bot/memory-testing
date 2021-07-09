@@ -10,6 +10,7 @@ import scipy.stats
 import statistics
 import subprocess
 import sys
+import types
 
 from pathlib import Path as path
 
@@ -179,12 +180,16 @@ def build(destination, hipfft, rocfft, copy_hipfft_from, cuda, ccache, user):
 
 
 def load_suite(suite):
+    """Load performance suite from performance-tests.py."""
 
     tdef = top / 'performance-tests.py'
     code = compile(tdef.read_text(), str(tdef), 'exec')
     ns = {}
     exec(code, ns)
-    return ns[suite]
+    s = ns[suite]
+    if isinstance(s, types.FunctionType):
+        return s
+    return ns['make_suite'](s)
 
 
 @cli.command()
@@ -242,6 +247,8 @@ def list(suite):
 @click.option('--suite', type=str, default='all', help='Test suite name (generator in performance-tests.py, default "all").')
 @click.option('--output', type=str, default='.', help='Output directory to save results in.')
 def dyna(build1, build2, ntrials, suite, output):
+    """Compare performance of two builds using dynamic library loading."""
+
     from perflib.rocfft import RIDERFFTTestRunner as TestRunner
 
     generator = load_suite(suite)
@@ -263,6 +270,33 @@ def dyna(build1, build2, ntrials, suite, output):
         print(f'# running {runner.label}')
         results = runner.run()
         runner.write(output, runner.label + '.dat', results, title=runner.label)
+
+
+@cli.command()
+def autodyna():
+    """Compare performance of two builds automagically."""
+
+    branch1 = click.prompt("Reference branch", default="develop", type=str)
+    repo1   = click.prompt("Reference repo  ", default="git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git", type=str)
+    build1  = path(f'build-{branch1}')
+
+    branch2 = click.prompt("PR branch", type=str)
+    repo2   = click.prompt("PR repo  ", default=repo1, type=str)
+    build2  = path(f'build-{branch2}')
+    output  = path(f'dyna-{branch2}')
+
+    lib1 = build1 / 'lib' / 'librocfft.so'
+    if not lib1.exists():
+        build_rocfft(branch1, dest=build1, repo=repo1, ccache=True)
+
+    lib2 = build2 / 'lib' / 'librocfft.so'
+    if not lib2.exists():
+        build_rocfft(branch2, dest=build2, repo=repo2, ccache=True)
+
+
+
+
+
 
 
 @cli.command()
