@@ -31,11 +31,11 @@ class HIPFFTTestRunner:
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.forward(y, time=True, batched=True, inplace=self.is_inplace())
+            z, t, m = hipfft.forward(y, time=True, batched=True, inplace=self.is_inplace(), meta=True)
             if self.verify:
                 r = fftn(y, s=y.shape[1:])
                 perflib.utils.compare(z, r)
-            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes})
+            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes, 'meta': m})
         return results
 
 
@@ -43,12 +43,12 @@ class HIPFFTTestRunner:
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.complex_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.backward(y, time=True, batched=True, inplace=self.is_inplace())
+            z, t, m = hipfft.backward(y, time=True, batched=True, inplace=self.is_inplace(), meta=True)
             if self.verify:
                 r = ifftn(y, s=y.shape[1:])
                 s = np.asarray(1.0 / perflib.utils.product(z.shape[1:]), self.dtype)
                 perflib.utils.compare(s * z, r)
-            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes})
+            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes, 'meta': m})
         return results
 
 
@@ -56,11 +56,11 @@ class HIPFFTTestRunner:
         results = []
         for trial in range(self.ntrials):
             y = perflib.utils.real_input(n, self.nbatch, self.dtype)
-            z, t = hipfft.forward(y, real=True, time=True, batched=True, inplace=self.is_inplace())
+            z, t, m = hipfft.forward(y, real=True, time=True, batched=True, inplace=self.is_inplace(), meta=True)
             if self.verify:
                 r = rfftn(y, s=y.shape[1:])
                 perflib.utils.compare(z, r)
-            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes})
+            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes, 'meta': m})
         return results
 
 
@@ -71,12 +71,12 @@ class HIPFFTTestRunner:
             return []
         for trial in range(self.ntrials):
             y = hipfft.forward(perflib.utils.real_input(n, self.nbatch, self.dtype), real=True, batched=True)
-            z, t = hipfft.backward(y, real=True, time=True, batched=True, inplace=self.is_inplace())
+            z, t, m = hipfft.backward(y, real=True, time=True, batched=True, inplace=self.is_inplace(), meta=True)
             if self.verify:
                 r = irfftn(y, s=rshape[1:])
                 s = np.asarray(1.0 / perflib.utils.product(rshape[1:]), self.dtype)
                 perflib.utils.compare(s * z, r)
-            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes})
+            results.append({'n': n, 'method': 'hipfft', 'time': t, 'size': y.nbytes, 'meta': m})
         return results
 
 
@@ -88,4 +88,5 @@ class HIPFFTTestRunner:
     def write(self, dname, fname, results, title=None):
         for length in self.lengths:
             seconds = [t['time'] for t in results if t['n'] == length]
-            perflib.utils.write_dat(dname / fname, length, self.nbatch, seconds, title=title)
+            meta = {t['meta'] for t in results if t['n'] == length}.pop()  # enforce single meta?
+            perflib.utils.write_dat(dname / fname, length, self.nbatch, seconds, title=title, meta=meta)

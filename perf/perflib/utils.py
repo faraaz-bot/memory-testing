@@ -73,7 +73,7 @@ class Sample:
     times: List[float]
 
 
-def write_dat(fname, length, nbatch, seconds, title=None):
+def write_dat(fname, length, nbatch, seconds, title=None, meta=None):
     """Append record to dyna-rider/rider .dat file."""
     path = Path(fname)
     if not path.exists():
@@ -83,6 +83,8 @@ def write_dat(fname, length, nbatch, seconds, title=None):
     if isinstance(length, int):
         length = [length]
     record = [len(length)] + list(length) + [nbatch, len(seconds)] + seconds
+    if meta is not None:
+        record += [meta]
     dat.append(tjoin(record))
     path.write_text(njoin(dat) + '\n')
 

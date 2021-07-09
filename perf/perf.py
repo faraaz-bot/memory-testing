@@ -111,10 +111,16 @@ def build_wrapper(dest, cuda):
     so  = dest / 'hipfft.so'
     defs = None
     if cuda:
-        defs = sjoin([ '-Xcompiler', '-fPIC', '-std=c++14', '-shared' ])
+        defs = ['-Xcompiler', '-fPIC', '-std=c++14', '-shared']
     else:
-        defs = sjoin([ '-fPIC', '-std=c++14', '-shared' ])
-    local(f'hipcc {defs} {includes} {src} -o {so} {libs} -lhipfft', check=True)
+        defs = ['-fPIC', '-std=c++14', '-shared']
+
+        hdr = dest / 'hipfft' / 'include' / 'hipfft.h'
+        have_meta = 'hipfftGetMeta' in hdr.read_text()
+        if have_meta:
+            defs += ['-DHAVE_HIPFFT_META']
+
+    local(f'hipcc {sjoin(defs)} {includes} {src} -o {so} {libs} -lhipfft', check=True)
 
 
 #
