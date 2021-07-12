@@ -14,3 +14,7 @@ build cooley_tukey: link cooley_tukey.o
 
 build throughput.o: hipcc throughput.cpp
 build throughput: link throughput.o
+
+build stockham3d.o: hipcc stockham3d.cpp
+build stockham3d: link stockham3d.o
+  libs = -lfftw3 -lfftw3f -L/opt/rocm/lib -lrocrand
