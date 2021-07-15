@@ -18,6 +18,8 @@ class RIDERFFTTestRunner:
     dtype: Any = None
     rider: Any = None
     builds: List[Any] = list
+    device: int = -1
+    placement: Any = None
 
     def dyna_rider(self, length):
         cmd = [self.rider,
@@ -40,6 +42,11 @@ class RIDERFFTTestRunner:
             'double': ['--double'],
             'single': [],
         }[self.dtype.label]
+        if self.placement is not None:
+            if self.placement.label == 'outplace':
+                cmd += ['-o']
+        if self.device >= 0:
+            cmd += ['--device', self.device]
         cmd = [str(x) for x in cmd]
 
         logging.info('DYNA: ' + perflib.utils.sjoin(cmd))
