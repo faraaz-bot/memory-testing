@@ -18,7 +18,7 @@ std::string vrender(const T& x)
     return std::visit([](const auto a) { return a.render(); }, x);
 }
 
-using arithmetic_operand = std::variant<Variable, Literal, Add, Subtract, Multiply, Divide>;
+using Expression = std::variant<Variable, Literal, Add, Subtract, Multiply, Divide>;
 
 class Literal
 {
@@ -53,17 +53,17 @@ public:
     }
 };
 
-#define MAKE_ARITH(NAME, SEP, PRECEDENCE)                        \
-    class NAME                                                   \
-    {                                                            \
-        int const                       precedence = PRECEDENCE; \
-        std::string                     separator{SEP};          \
-        std::vector<arithmetic_operand> args;                    \
-                                                                 \
-    public:                                                      \
-        NAME(std::initializer_list<arithmetic_operand> il)       \
-            : args(il){};                                        \
-        std::string render() const;                              \
+#define MAKE_ARITH(NAME, SEP, PRECEDENCE)                \
+    class NAME                                           \
+    {                                                    \
+        int const               precedence = PRECEDENCE; \
+        std::string             separator{SEP};          \
+        std::vector<Expression> args;                    \
+                                                         \
+    public:                                              \
+        NAME(std::initializer_list<Expression> il)       \
+            : args(il){};                                \
+        std::string render() const;                      \
     };
 
 #define MAKE_RENDER(NAME)                      \
@@ -85,22 +85,58 @@ MAKE_RENDER(Multiply);
 MAKE_RENDER(Subtract);
 MAKE_RENDER(Divide);
 
-Add operator+(const arithmetic_operand& a, const arithmetic_operand& b)
+class Assign
+{
+    Variable   lhs;
+    Expression rhs;
+
+public:
+    Assign(Variable lhs, Expression rhs)
+        : lhs(lhs)
+        , rhs(rhs){};
+    std::string render() const
+    {
+        return lhs.render() + " = " + vrender(rhs) + ";";
+    }
+};
+
+using Statement = std::variant<Assign>;
+
+class StatementList
+{
+    std::vector<Statement> statments;
+
+public:
+    StatementList(){};
+    std::string render() const
+    {
+        std::string r;
+        for(auto s : statments)
+            r += vrender(s);
+        return r;
+    }
+    void operator+=(Statement s)
+    {
+        statments.push_back(s);
+    }
+};
+
+Add operator+(const Expression& a, const Expression& b)
 {
     return Add{a, b};
 }
 
-Subtract operator-(const arithmetic_operand& a, const arithmetic_operand& b)
+Subtract operator-(const Expression& a, const Expression& b)
 {
     return Subtract{a, b};
 }
 
-Multiply operator*(const arithmetic_operand& a, const arithmetic_operand& b)
+Multiply operator*(const Expression& a, const Expression& b)
 {
     return Multiply{a, b};
 }
 
-Divide operator/(const arithmetic_operand& a, const arithmetic_operand& b)
+Divide operator/(const Expression& a, const Expression& b)
 {
     return Divide{a, b};
 }
@@ -108,10 +144,13 @@ Divide operator/(const arithmetic_operand& a, const arithmetic_operand& b)
 void test()
 {
     Variable x("x"), y("y");
-    auto     z = x * y;
+    auto     z = x * y + y;
     auto     w = z + y;
 
-    std::cout << w.render() << std::endl;
+    auto stmts = StatementList();
+    stmts += Assign(x, w);
+
+    std::cout << stmts.render() << std::endl;
 }
 
 int main(int argc, char* argv[])
