@@ -1,4 +1,5 @@
 
+#include <any>
 #include <iostream>
 #include <string>
 #include <variant>
@@ -49,16 +50,15 @@ class Variable
 {
 public:
     std::string name;
+    // Expression index;
+    std::any index;
 
     Variable(std::string name)
-        : name(name)
-    {
-    }
+        : name(name){};
 
-    std::string render() const
-    {
-        return name;
-    }
+    Variable operator[](const Expression& index) const;
+
+    std::string render() const;
 };
 
 #define MAKE_ARITH(NAME, SEP, PRECEDENCE)          \
@@ -95,6 +95,23 @@ MAKE_RENDER(Multiply);
 MAKE_RENDER(Subtract);
 MAKE_RENDER(Divide);
 
+std::string Variable::render() const
+{
+    if(index.has_value())
+    {
+        auto expr = std::any_cast<Expression>(index);
+        return name + "[" + vrender(expr) + "]";
+    }
+    return name;
+}
+
+Variable Variable::operator[](const Expression& index) const
+{
+    auto v  = Variable(name);
+    v.index = index;
+    return v;
+}
+
 Add operator+(const Expression& a, const Expression& b)
 {
     return Add{a, b};
@@ -128,6 +145,7 @@ public:
     Assign(Variable lhs, Expression rhs)
         : lhs(lhs)
         , rhs(rhs){};
+
     std::string render() const
     {
         return lhs.render() + " = " + vrender(rhs) + ";";
@@ -145,17 +163,12 @@ public:
     {
         std::string r;
         for(auto s : statements)
-            r += vrender(s);
+            r += vrender(s) + "\n";
         return r;
     }
     void operator+=(Statement s)
     {
         statements.push_back(s);
-    }
-
-    std::vector<Statement> get_args() const
-    {
-        return statements;
     }
 };
 
@@ -180,17 +193,26 @@ public:
 
 struct MakePlanarVisitor
 {
+    std::string old_name{"x"};
+    std::string new_name{"X"};
 
-    Expression operator()(const Variable& v)
+    Expression operator()(const Variable& x)
     {
-        if(v.name == "x")
-            return Expression{Variable{"X"}};
-        return Expression{v};
+        auto y = Variable{x};
+        if(x.name == old_name)
+        {
+            y.name = new_name;
+        }
+        if(y.index.has_value())
+        {
+            y.index = std::visit(*this, std::any_cast<Expression>(y.index));
+        }
+        return Expression{y};
     }
 
-    Expression operator()(const Literal& v)
+    Expression operator()(const Literal& x)
     {
-        return Expression{v};
+        return Expression{x};
     }
 
     MAKE_ARITH_VISITOR(Add)
@@ -198,10 +220,10 @@ struct MakePlanarVisitor
     MAKE_ARITH_VISITOR(Multiply)
     MAKE_ARITH_VISITOR(Divide)
 
-    Statement operator()(const Assign& a)
+    Statement operator()(const Assign& x)
     {
-        auto lhs = std::get<Variable>((*this)(a.lhs));
-        auto rhs = std::visit(*this, a.rhs);
+        auto lhs = std::get<Variable>((*this)(x.lhs));
+        auto rhs = std::visit(*this, x.rhs);
         return Statement{Assign(lhs, rhs)};
     }
 };
@@ -224,14 +246,28 @@ StatementList make_planar(const StatementList& stmts)
 void test()
 {
     Variable x("x"), y("y");
-    auto     z = x * y + y;
-    auto     w = z + y;
+    auto     z = x * y;
 
     auto stmts = StatementList();
+    for(int w = 0; w < 4; ++w)
+    {
+        stmts += Assign(x, y[z + w]);
+    }
     stmts += Assign(x, y + 1);
+
+    // copying is trivial
+    auto o = StatementList{stmts};
+    o += Assign(x, 22);
 
     auto r = make_planar(stmts);
 
+    // original, with extra assign
+    std::cout << stmts.render() << std::endl;
+
+    // original, with extra assign
+    std::cout << o.render() << std::endl;
+
+    // transformed
     std::cout << r.render() << std::endl;
 }
 
