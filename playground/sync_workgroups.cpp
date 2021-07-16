@@ -216,9 +216,8 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
     {
         //printf("blockIdx.x %3d, counterIdx %x\n", (int)blockIdx.x, counterIdx);
         atomicAdd(&g_partitioned_counters[counterIdx], 1);
-        while(hip_atomic_load<int>(&g_partitioned_counters[counterIdx],
-                                   MemoryOrder::RELAXED,
-                                   MemoryScope::ALL_SVM_DEVICES)
+        while(hip_atomic_load<int>(
+                  &g_partitioned_counters[counterIdx], MemoryOrder::RELAXED, MemoryScope::DEVICE)
               < 3)
         {
         }
@@ -230,10 +229,8 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
     if(threadIdx.x == 0 && blockIdx.x < 3)
     {
-        hip_atomic_store<int>(&g_partitioned_counters[blockIdx.x],
-                              0,
-                              MemoryOrder::RELAXED,
-                              MemoryScope::ALL_SVM_DEVICES);
+        hip_atomic_store<int>(
+            &g_partitioned_counters[blockIdx.x], 0, MemoryOrder::RELAXED, MemoryScope::DEVICE);
     }
 }
 
