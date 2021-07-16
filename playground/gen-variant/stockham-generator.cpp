@@ -47,7 +47,6 @@ Function make_device_fft(std::vector<int> factors)
 
         for(auto width : factors)
         {
-
             // load lds
             for(int h = 0; h < iheight; ++h)
             {
@@ -77,7 +76,10 @@ Function make_device_fft(std::vector<int> factors)
             // butterfly
             for(int h = 0; h < iheight; ++h)
             {
-//                kdevice.body += Call();
+                auto args = ArgumentList();
+                for(int w = 0; w < width; ++w)
+                    args.arguments.push_back(R[w].address());
+                kdevice.body += Call("FwdRad" + std::to_string(width), args);
             }
 
             // store lds

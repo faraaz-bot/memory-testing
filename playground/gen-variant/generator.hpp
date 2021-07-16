@@ -1,8 +1,8 @@
 
-#include <any>
 #include <algorithm>
-#include <numeric>
+#include <any>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <variant>
 #include <vector>
@@ -26,11 +26,14 @@ class Declaration
 public:
     std::string name;
     std::string type;
-    Declaration(std::string name, std::string type) : name(name), type(type) {};
+    Declaration(std::string name, std::string type)
+        : name(name)
+        , type(type){};
     std::string render() const;
 };
 
-std::string Declaration::render() const {
+std::string Declaration::render() const
+{
     return type + " " + name + ";";
 }
 
@@ -48,7 +51,8 @@ class Multiply;
 class Divide;
 class Modulus;
 
-using Expression = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
+using Expression
+    = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
 
 class Literal
 {
@@ -69,28 +73,36 @@ public:
 
 struct ScalarVariable
 {
-    ScalarVariable(std::string name) : name(name) {};
+    ScalarVariable(std::string name)
+        : name(name){};
     std::string name;
-    std::string render() const { return name; };
+    std::string render() const
+    {
+        return name;
+    };
 };
-
 
 class Variable
 {
 public:
     ScalarVariable x, y;
-    std::string name;
+    std::string    name;
     // Expression index;
     std::any index;
 
     Variable(std::string _name)
-        : name(_name), x(_name + ".x"), y(_name + ".y") {};
+        : name(_name)
+        , x(_name + ".x")
+        , y(_name + ".y"){};
 
     Variable(ScalarVariable v)
-        : name(v.name), x(""), y("") {};
+        : name(v.name)
+        , x("")
+        , y(""){};
 
-    Variable operator[](const Expression& index) const;
+    Variable    operator[](const Expression& index) const;
     Declaration declaration() const;
+    ScalarVariable address() const;
 
     std::string render() const;
 };
@@ -131,8 +143,18 @@ MAKE_RENDER(Subtract);
 MAKE_RENDER(Divide);
 MAKE_RENDER(Modulus);
 
-Declaration Variable::declaration() const {
+Declaration Variable::declaration() const
+{
     return Declaration(name, "int");
+}
+
+ScalarVariable Variable::address() const
+{
+    if (index.has_value()) {
+        auto expr = std::any_cast<Expression>(index);
+        return ScalarVariable("&" + name + "[" + vrender(expr) + "]");
+    }
+    return ScalarVariable("&" + name);
 }
 
 std::string Variable::render() const
@@ -182,10 +204,11 @@ Modulus operator%(const Expression& a, const Expression& b)
 //
 
 class Assign;
+class Call;
 class For;
 class StatementList;
 
-using Statement = std::variant<Declaration, Assign, For>;
+using Statement = std::variant<Declaration, Assign, Call, For>;
 //using Statement = std::variant<Assign>;
 
 class Assign
@@ -203,6 +226,53 @@ public:
         return lhs.render() + " = " + vrender(rhs) + ";";
     }
 };
+
+class ArgumentList
+{
+public:
+    ArgumentList(){};
+    ArgumentList(std::vector<Variable> arguments)
+        : arguments(arguments){};
+    std::vector<Variable> arguments;
+    std::string           render() const;
+};
+
+std::string ArgumentList::render() const
+{
+    std::string f;
+    if(!arguments.empty())
+    {
+        f = arguments[0].render();
+        for(int i = 1; i < arguments.size(); ++i)
+        {
+            f += ",";
+            f += arguments[i].render();
+        }
+    }
+    return f;
+}
+
+class Call
+{
+public:
+    std::string  name;
+    ArgumentList arguments;
+
+    Call(std::string name, ArgumentList arguments)
+        : name(name)
+        , arguments(arguments){};
+
+    std::string render() const;
+};
+
+std::string Call::render() const
+{
+    std::string f;
+    f += name + "(" + arguments.render() + ");";
+    return f;
+}
+
+
 
 class StatementList
 {
@@ -255,40 +325,21 @@ std::string For::render() const
 // Functions
 //
 
-class ArgumentList {
+class Function
+{
 public:
-    ArgumentList() {};
-    ArgumentList(std::vector<Variable> arguments) : arguments(arguments) {};
-    std::vector<Variable> arguments;
-    std::string render() const;
-};
-
-std::string ArgumentList::render() const {
-    std::string f;
-    if (!arguments.empty())
-    {
-        f = arguments[0].render();
-        for (int i = 1; i < arguments.size(); ++i) {
-            f += ",";
-            f += arguments[i].render();
-        }
-    }
-    return f;
-}
-
-
-class Function {
-public:
-    std::string name;
+    std::string   name;
     StatementList body;
-    ArgumentList arguments;
+    ArgumentList  arguments;
 
-    Function(std::string name) : name(name) {};
+    Function(std::string name)
+        : name(name){};
 
     std::string render() const;
 };
 
-std::string Function::render() const {
+std::string Function::render() const
+{
     std::string f;
     f = "void " + name + "(" + arguments.render() + ") {\n";
     f += body.render();
@@ -369,6 +420,11 @@ struct MakePlanarVisitor
     {
         return Statement{x};
     }
+
+    Statement operator()(const Call& x)
+    {
+        return Statement{x};
+    }
 };
 
 StatementList make_planar(const StatementList& stmts)
@@ -381,4 +437,3 @@ StatementList make_planar(const StatementList& stmts)
     }
     return nstmts;
 }
-
