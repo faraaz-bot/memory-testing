@@ -102,11 +102,10 @@ __device__ inline void hip_atomic_store(volatile T* object,
 void __device__ plus_one_device(int* a, const int b_stride, const int c_stride)
 {
     __shared__ int lds[3];
-    int            offset = blockIdx.x / b_stride * 9 + blockIdx.x + threadIdx.x * c_stride;
-    lds[threadIdx.x]      = a[offset];
-    //printf("blockIdx.x %d, threadIdx.x %d, offset %d\n", (int)blockIdx.x, (int)threadIdx.x, offset);
+    int offset       = blockIdx.x / b_stride * 9 + blockIdx.x % b_stride + threadIdx.x * c_stride;
+    lds[threadIdx.x] = a[offset];
     __syncthreads();
-
+    //printf("blockIdx.x %d, threadIdx.x %d, offset %d\n", (int)blockIdx.x, (int)threadIdx.x, offset);
     lds[threadIdx.x] = lds[threadIdx.x] + 1;
     a[offset]        = lds[threadIdx.x];
 }
@@ -126,6 +125,8 @@ void solution_0(int* d_data)
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
     hipLaunchCooperativeKernel(plus_one, dim3(9), dim3(3), kernelArgs, 0, 0);
+
+    //hipDeviceSynchronize();
 
     b_stride = 9;
     c_stride = 9;
