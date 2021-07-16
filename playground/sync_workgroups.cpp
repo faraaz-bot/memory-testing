@@ -186,8 +186,10 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
     cs = 9;
     plus_one_device(a, bs, cs);
 
-    if(threadIdx.x == 0 && blockIdx.x == 0)
-        hip_atomic_store<int>(&g_counter, 0, MemoryOrder::RELAXED, MemoryScope::DEVICE);
+    if(threadIdx.x == 0)
+    {
+        atomicAdd(&g_counter, -1);
+    }
 }
 
 void solution_2(int* d_data)
@@ -228,10 +230,9 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
     cs = 9;
     plus_one_device(a, bs, cs);
 
-    if(threadIdx.x == 0 && blockIdx.x < 3)
+    if(threadIdx.x == 0)
     {
-        hip_atomic_store<int>(
-            &g_partitioned_counters[blockIdx.x], 0, MemoryOrder::RELAXED, MemoryScope::DEVICE);
+        atomicAdd(&g_partitioned_counters[counterIdx], -1);
     }
 }
 
