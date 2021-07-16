@@ -38,6 +38,7 @@ std::string Declaration::render() const {
 // Expressions
 //
 
+struct ScalarVariable;
 class Variable;
 class Literal;
 
@@ -47,7 +48,7 @@ class Multiply;
 class Divide;
 class Modulus;
 
-using Expression = std::variant<Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
+using Expression = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
 
 class Literal
 {
@@ -66,15 +67,27 @@ public:
     }
 };
 
+struct ScalarVariable
+{
+    ScalarVariable(std::string name) : name(name) {};
+    std::string name;
+    std::string render() const { return name; };
+};
+
+
 class Variable
 {
 public:
+    ScalarVariable x, y;
     std::string name;
     // Expression index;
     std::any index;
 
-    Variable(std::string name)
-        : name(name){};
+    Variable(std::string _name)
+        : name(_name), x(_name + ".x"), y(_name + ".y") {};
+
+    Variable(ScalarVariable v)
+        : name(v.name), x(""), y("") {};
 
     Variable operator[](const Expression& index) const;
     Declaration declaration() const;
@@ -307,6 +320,11 @@ struct MakePlanarVisitor
     std::string old_name{"x"};
     std::string new_name{"X"};
 
+    Expression operator()(const ScalarVariable& x)
+    {
+        return Expression{x};
+    }
+
     Expression operator()(const Variable& x)
     {
         auto y = Variable{x};
@@ -364,45 +382,3 @@ StatementList make_planar(const StatementList& stmts)
     return nstmts;
 }
 
-
-
-//
-// Test!
-//
-
-template <typename T>
-T product(std::vector<T> x, int last = -1)
-{
-    if(last == 0)
-        return 1;
-    if(last > 0)
-        return std::accumulate(x.cbegin(), x.cbegin() + last, T(1), std::multiplies<T>());
-    return std::accumulate(x.cbegin(), x.cend(), T(1), std::multiplies<T>());
-}
-
-Function make_device_fft(std::vector<int> factors)
-{
-    int length = product(factors);
-    int threads_per_transform = length / factors[0];
-
-    auto kdevice = Function("forward_length" + std::to_string(length));
-
-    auto R = Variable("R");
-    auto thread = Variable("thread");
-    auto thread_id = Variable("threadIdx.x");
-    auto buf = Variable("buf");
-
-    kdevice.body += R.declaration();
-    kdevice.body += thread.declaration();
-    kdevice.body += Assign(thread, thread_id % threads_per_transform);
-
-    for(auto width: factors) {
-        for(int w=0; w < width; ++w) {
-            kdevice.body += Assign(R[w], buf[w]);
-        }
-
-
-    }
-
-    return kdevice;
-}
