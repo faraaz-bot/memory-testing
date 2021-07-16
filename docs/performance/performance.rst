@@ -191,7 +191,7 @@ AMBER
 
 JIRA tickets
 
-* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
+* `SWDEV-286632 <http://ontrack-internal.amd.com/browse/SWDEV-286632>`_
 
 Representative transforms:
 
