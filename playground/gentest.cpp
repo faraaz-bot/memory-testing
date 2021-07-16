@@ -136,6 +136,13 @@ Divide operator/(const Expression& a, const Expression& b)
 // Statements
 //
 
+class Assign;
+class For;
+class StatementList;
+
+using Statement = std::variant<Assign, For>;
+//using Statement = std::variant<Assign>;
+
 class Assign
 {
 public:
@@ -152,25 +159,52 @@ public:
     }
 };
 
-using Statement = std::variant<Assign>;
-
 class StatementList
 {
 public:
     std::vector<Statement> statements;
     StatementList(){};
-    std::string render() const
-    {
-        std::string r;
-        for(auto s : statements)
-            r += vrender(s) + "\n";
-        return r;
-    }
-    void operator+=(Statement s)
-    {
-        statements.push_back(s);
-    }
+    std::string render() const;
 };
+
+class For
+{
+public:
+    Variable      initial;
+    Expression    condition;
+    Expression    iteration;
+    StatementList body;
+    For(Variable initial, Expression condition, Expression iteration)
+        : initial(initial)
+        , condition(condition)
+        , iteration(iteration){};
+    std::string render() const;
+};
+
+std::string StatementList::render() const
+{
+    std::string r;
+    for(auto s : statements)
+        r += vrender(s) + "\n";
+    return r;
+}
+
+void operator+=(StatementList& stmts, const Statement& s)
+{
+    stmts.statements.push_back(s);
+}
+
+std::string For::render() const
+{
+    std::string s;
+    s += "for(";
+    s += initial.render() + "; ";
+    s += vrender(condition) + "; ";
+    s += vrender(iteration) + ") {\n ";
+    s += body.render();
+    s += "\n}\n";
+    return s;
+}
 
 //
 // Example of AST transform
@@ -226,6 +260,14 @@ struct MakePlanarVisitor
         auto rhs = std::visit(*this, x.rhs);
         return Statement{Assign(lhs, rhs)};
     }
+
+    Statement operator()(const For& x)
+    {
+        auto initial   = std::get<Variable>((*this)(x.initial));
+        auto condition = std::visit(*this, x.condition);
+        auto iteration = std::visit(*this, x.iteration);
+        return Statement{For(initial, condition, iteration)};
+    }
 };
 
 StatementList make_planar(const StatementList& stmts)
@@ -254,6 +296,7 @@ void test()
         stmts += Assign(x, y[z + w]);
     }
     stmts += Assign(x, y + 1);
+    stmts += For(x, y, z);
 
     // copying is trivial
     auto o = StatementList{stmts};
