@@ -1,5 +1,9 @@
 //
-//
+// The code mocks 2 inplace rocFFT SBCC kernels behavior(access pattern) with
+// simple plus_one() operation. In the 1st pass, we expect to handle the data
+// along the second dim with column tiles. In the 2nd pass, we expect to handle
+// the data along the slowest dim with column tiles. Here we are trying various
+// solutions to do the sync between 2 passes.
 //
 //
 // Build:
@@ -9,7 +13,6 @@
 
 // clang-format off
 #include <hip/hip_runtime.h>
-#include <hip/hip_vector_types.h>
 #include <hip/hip_cooperative_groups.h>
 // clang-format on
 
@@ -52,6 +55,49 @@ inline void gpu_assert(hipError_t e, const char* file, int line, bool abort = tr
     }
 }
 #endif
+
+enum class MemoryOrder : int
+{
+    RELAXED = __ATOMIC_RELAXED,
+    ACQUIRE = __ATOMIC_ACQUIRE,
+    RELEASE = __ATOMIC_RELEASE,
+    ACQ_REL = __ATOMIC_ACQ_REL,
+    SEQ_CST = __ATOMIC_SEQ_CST,
+};
+
+enum class MemoryScope : int
+{
+    WORK_ITEM       = __OPENCL_MEMORY_SCOPE_WORK_ITEM,
+    WORK_GROUP      = __OPENCL_MEMORY_SCOPE_WORK_GROUP,
+    DEVICE          = __OPENCL_MEMORY_SCOPE_DEVICE,
+    ALL_SVM_DEVICES = __OPENCL_MEMORY_SCOPE_ALL_SVM_DEVICES,
+#if defined(cl_intel_subgroups) || defined(cl_khr_subgroups)
+    SUB_GROUP = __OPENCL_MEMORY_SCOPE_SUB_GROUP
+#endif
+};
+
+template <typename T>
+__device__ inline T hip_atomic_load(volatile T* object,
+                                    MemoryOrder order = MemoryOrder::SEQ_CST,
+                                    MemoryScope scope = MemoryScope::DEVICE)
+{
+    assert(order != MemoryOrder::RELEASE);
+    assert(order != MemoryOrder::ACQ_REL);
+    return __opencl_atomic_load((_Atomic T*)object, int(order), int(scope));
+}
+
+template <typename T>
+__device__ inline void hip_atomic_store(volatile T* object,
+                                        T           desired,
+                                        MemoryOrder order = MemoryOrder::SEQ_CST,
+                                        MemoryScope scope = MemoryScope::DEVICE)
+{
+    assert(order != MemoryOrder::ACQUIRE);
+    assert(order != MemoryOrder::ACQ_REL);
+    __opencl_atomic_store((_Atomic T*)object, desired, int(order), int(scope));
+}
+
+//-----------------------------------------------------------------------------
 
 void __device__ plus_one_device(int* a, const int b_stride, const int c_stride)
 {
@@ -128,16 +174,19 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
     if(threadIdx.x == 0)
     {
+        //printf("blockIdx.x %3d, g_counter %x\n", (int)blockIdx.x, g_counter);
         atomicAdd(&g_counter, 1);
-        printf("blockIdx.x %3d, g_counter %x\n", (int)blockIdx.x, g_counter);
-        while(g_counter < 9)
+        while(hip_atomic_load<int>(&g_counter, MemoryOrder::RELAXED, MemoryScope::DEVICE) < 9)
         {
-        };
+        }
     }
 
     bs = 9;
     cs = 9;
     plus_one_device(a, bs, cs);
+
+    if(threadIdx.x == 0 && blockIdx.x == 0)
+        hip_atomic_store<int>(&g_counter, 0, MemoryOrder::RELAXED, MemoryScope::DEVICE);
 }
 
 void solution_2(int* d_data)
@@ -147,6 +196,55 @@ void solution_2(int* d_data)
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
     hipLaunchCooperativeKernel(plus_one_twice_sync_all_atomic, dim3(9), dim3(3), kernelArgs, 0, 0);
+}
+
+//-----------------------------------------------------------------------------
+// solution_3: sync partioned workgroups with atomic
+__device__ int g_partitioned_counters[3] = {0, 0, 0};
+
+void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, const int c_stride)
+{
+    int bs = b_stride;
+    int cs = c_stride;
+
+    plus_one_device(a, bs, cs);
+
+    __threadfence();
+
+    int counterIdx = blockIdx.x % 3;
+    if(threadIdx.x == 0)
+    {
+        //printf("blockIdx.x %3d, counterIdx %x\n", (int)blockIdx.x, counterIdx);
+        atomicAdd(&g_partitioned_counters[counterIdx], 1);
+        while(hip_atomic_load<int>(&g_partitioned_counters[counterIdx],
+                                   MemoryOrder::RELAXED,
+                                   MemoryScope::ALL_SVM_DEVICES)
+              < 3)
+        {
+        }
+    }
+
+    bs = 9;
+    cs = 9;
+    plus_one_device(a, bs, cs);
+
+    if(threadIdx.x == 0 && blockIdx.x < 3)
+    {
+        hip_atomic_store<int>(&g_partitioned_counters[blockIdx.x],
+                              0,
+                              MemoryOrder::RELAXED,
+                              MemoryScope::ALL_SVM_DEVICES);
+    }
+}
+
+void solution_3(int* d_data)
+{
+    int   b_stride     = 3;
+    int   c_stride     = 3;
+    void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
+
+    hipLaunchCooperativeKernel(
+        plus_one_twice_sync_partion_atomic, dim3(9), dim3(3), kernelArgs, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -164,7 +262,7 @@ int main()
     GPU_ERR_CHECK(hipMalloc(&d_data, total_bytes));
     GPU_ERR_CHECK(hipMemcpy(d_data, h_data, total_bytes, hipMemcpyHostToDevice));
 
-    solution_2(d_data);
+    solution_3(d_data);
 
     GPU_ERR_CHECK(hipMemcpy(h_data, d_data, total_bytes, hipMemcpyDeviceToHost));
 
