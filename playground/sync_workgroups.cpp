@@ -135,7 +135,8 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
         };
     }
 
-    bs cs = 9;
+    bs = 9;
+    cs = 9;
     plus_one_device(a, bs, cs);
 }
 
