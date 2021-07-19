@@ -54,6 +54,17 @@ class Modulus;
 using Expression
     = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
 
+class OptionalExpression
+{
+    std::any expr;
+
+public:
+    OptionalExpression(){};
+    OptionalExpression(const Expression& expr);
+    Expression operator*() const;
+               operator bool() const;
+};
+
 class Literal
 {
     std::string value;
@@ -73,22 +84,18 @@ public:
 
 struct ScalarVariable
 {
+    std::string name;
     ScalarVariable(std::string name)
         : name(name){};
-    std::string name;
-    std::string render() const
-    {
-        return name;
-    };
+    std::string render() const;
 };
 
 class Variable
 {
 public:
-    ScalarVariable x, y;
-    std::string    name;
-    // Expression index;
-    std::any index;
+    std::string        name;
+    ScalarVariable     x, y;
+    OptionalExpression index;
 
     Variable(std::string _name)
         : name(_name)
@@ -97,11 +104,11 @@ public:
 
     Variable(ScalarVariable v)
         : name(v.name)
-        , x("")
-        , y(""){};
+        , x(v.name + ".x")
+        , y(v.name + ".y"){};
 
-    Variable    operator[](const Expression& index) const;
-    Declaration declaration() const;
+    Variable       operator[](const Expression& index) const;
+    Declaration    declaration() const;
     ScalarVariable address() const;
 
     std::string render() const;
@@ -126,7 +133,7 @@ public:
     std::string NAME::render() const           \
     {                                          \
         std::string s = vrender(args[0]);      \
-        for(int i = 1; i < args.size(); ++i)   \
+        for(uint i = 1; i < args.size(); ++i)  \
             s += separator + vrender(args[i]); \
         return s;                              \
     }
@@ -143,6 +150,11 @@ MAKE_RENDER(Subtract);
 MAKE_RENDER(Divide);
 MAKE_RENDER(Modulus);
 
+std::string ScalarVariable::render() const
+{
+    return name;
+}
+
 Declaration Variable::declaration() const
 {
     return Declaration(name, "int");
@@ -150,26 +162,25 @@ Declaration Variable::declaration() const
 
 ScalarVariable Variable::address() const
 {
-    if (index.has_value()) {
-        auto expr = std::any_cast<Expression>(index);
-        return ScalarVariable("&" + name + "[" + vrender(expr) + "]");
+    if(index)
+    {
+        return ScalarVariable("&" + name + "[" + vrender(*index) + "]");
     }
     return ScalarVariable("&" + name);
 }
 
 std::string Variable::render() const
 {
-    if(index.has_value())
+    if(index)
     {
-        auto expr = std::any_cast<Expression>(index);
-        return name + "[" + vrender(expr) + "]";
+        return name + "[" + vrender(*index) + "]";
     }
     return name;
 }
 
 Variable Variable::operator[](const Expression& index) const
 {
-    auto v  = Variable(name);
+    auto v = Variable(name);
     v.index = index;
     return v;
 }
@@ -197,6 +208,21 @@ Divide operator/(const Expression& a, const Expression& b)
 Modulus operator%(const Expression& a, const Expression& b)
 {
     return Modulus{a, b};
+}
+
+OptionalExpression::operator bool() const
+{
+    return expr.has_value();
+}
+
+Expression OptionalExpression::operator*() const
+{
+    return std::any_cast<Expression>(expr);
+}
+
+OptionalExpression::OptionalExpression(const Expression& expr)
+{
+    this->expr = expr;
 }
 
 //
@@ -243,7 +269,7 @@ std::string ArgumentList::render() const
     if(!arguments.empty())
     {
         f = arguments[0].render();
-        for(int i = 1; i < arguments.size(); ++i)
+        for(uint i = 1; i < arguments.size(); ++i)
         {
             f += ",";
             f += arguments[i].render();
@@ -271,8 +297,6 @@ std::string Call::render() const
     f += name + "(" + arguments.render() + ");";
     return f;
 }
-
-
 
 class StatementList
 {
@@ -383,9 +407,9 @@ struct MakePlanarVisitor
         {
             y.name = new_name;
         }
-        if(y.index.has_value())
+        if(y.index)
         {
-            y.index = std::visit(*this, std::any_cast<Expression>(y.index));
+            y.index = std::visit(*this, *y.index);
         }
         return Expression{y};
     }

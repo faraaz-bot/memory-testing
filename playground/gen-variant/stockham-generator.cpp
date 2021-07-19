@@ -1,8 +1,12 @@
 
-#include "generator.hpp"
+#include <cmath>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <unistd.h>
+
+#include "generator.hpp"
+
 
 //
 // Test!
@@ -38,10 +42,10 @@ Function make_device_fft(std::vector<int> factors)
     kdevice.body += thread.declaration();
     kdevice.body += Assign(thread, thread_id % threads_per_transform);
 
-    for(int pass = 0; pass < factors.size(); ++pass)
+    for(uint pass = 0; pass < factors.size(); ++pass)
     {
         auto width   = factors[pass];
-        auto nheight = product(factors, pass);
+//        auto nheight = product(factors, pass);
         auto height  = double(length) / width / threads_per_transform;
         auto iheight = floor(height);
 
