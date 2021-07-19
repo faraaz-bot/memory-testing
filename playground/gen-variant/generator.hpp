@@ -51,8 +51,11 @@ class Multiply;
 class Divide;
 class Modulus;
 
+class And;
+class Less;
+
 using Expression
-    = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
+= std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus, And, Less>;
 
 class OptionalExpression
 {
@@ -144,11 +147,17 @@ MAKE_ARITH(Subtract, " - ", 15);
 MAKE_ARITH(Divide, " / ", 25);
 MAKE_ARITH(Modulus, " % ", 25);
 
+MAKE_ARITH(And, " && ", 50);
+MAKE_ARITH(Less, " < ", 50);
+
 MAKE_RENDER(Add);
 MAKE_RENDER(Multiply);
 MAKE_RENDER(Subtract);
 MAKE_RENDER(Divide);
 MAKE_RENDER(Modulus);
+
+MAKE_RENDER(And);
+MAKE_RENDER(Less);
 
 std::string ScalarVariable::render() const
 {
@@ -180,7 +189,7 @@ std::string Variable::render() const
 
 Variable Variable::operator[](const Expression& index) const
 {
-    auto v = Variable(name);
+    auto v  = Variable(name);
     v.index = index;
     return v;
 }
@@ -210,6 +219,16 @@ Modulus operator%(const Expression& a, const Expression& b)
     return Modulus{a, b};
 }
 
+Less operator<(const Expression& a, const Expression& b)
+{
+    return Less{a, b};
+}
+
+And operator&&(const Expression& a, const Expression& b)
+{
+    return And{a, b};
+}
+
 OptionalExpression::operator bool() const
 {
     return expr.has_value();
@@ -232,9 +251,10 @@ OptionalExpression::OptionalExpression(const Expression& expr)
 class Assign;
 class Call;
 class For;
+class If;
 class StatementList;
 
-using Statement = std::variant<Declaration, Assign, Call, For>;
+using Statement = std::variant<Declaration, Assign, Call, For, If>;
 //using Statement = std::variant<Assign>;
 
 class Assign
@@ -320,6 +340,16 @@ public:
     std::string render() const;
 };
 
+class If
+{
+public:
+    Expression    condition;
+    StatementList body;
+    If(Expression condition, StatementList body)
+        : condition(condition), body(body){};
+    std::string render() const;
+};
+
 std::string StatementList::render() const
 {
     std::string r;
@@ -333,6 +363,15 @@ void operator+=(StatementList& stmts, const Statement& s)
     stmts.statements.push_back(s);
 }
 
+void operator+=(StatementList& stmts, const StatementList& s)
+{
+    //    stmts.statements.insert(stmts.statements.end(), s.statements.cbegin(), s.statements.cend());
+    for(auto x : s.statements)
+    {
+        stmts += x;
+    }
+}
+
 std::string For::render() const
 {
     std::string s;
@@ -340,6 +379,17 @@ std::string For::render() const
     s += initial.render() + "; ";
     s += vrender(condition) + "; ";
     s += vrender(iteration) + ") {\n ";
+    s += body.render();
+    s += "\n}\n";
+    return s;
+}
+
+std::string If::render() const
+{
+    std::string s;
+    s += "if(";
+    s += vrender(condition);
+    s += ") {\n";
     s += body.render();
     s += "\n}\n";
     return s;
@@ -425,6 +475,9 @@ struct MakePlanarVisitor
     MAKE_ARITH_VISITOR(Divide)
     MAKE_ARITH_VISITOR(Modulus)
 
+    MAKE_ARITH_VISITOR(And)
+    MAKE_ARITH_VISITOR(Less)
+
     Statement operator()(const Assign& x)
     {
         auto lhs = std::get<Variable>((*this)(x.lhs));
@@ -438,6 +491,12 @@ struct MakePlanarVisitor
         auto condition = std::visit(*this, x.condition);
         auto iteration = std::visit(*this, x.iteration);
         return Statement{For(initial, condition, iteration)};
+    }
+
+    Statement operator()(const If& x)
+    {
+        auto condition = std::visit(*this, x.condition);
+        return Statement{If(condition, x.body)};
     }
 
     Statement operator()(const Declaration& x)

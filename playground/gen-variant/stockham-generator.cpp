@@ -1,12 +1,12 @@
 
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <unistd.h>
 
 #include "generator.hpp"
-
 
 //
 // Test!
@@ -22,87 +22,129 @@ T product(std::vector<T> x, int last = -1)
     return std::accumulate(x.cbegin(), x.cend(), T(1), std::multiplies<T>());
 }
 
-Function make_device_fft(std::vector<int> factors)
+struct StockhamGenerator
 {
-    int length                = product(factors);
-    int threads_per_transform = length / factors[0];
+    Variable R{"R"}, thread{"thread"}, thread_id{"thread_id"}, lds{"lds"}, offset_lds{"offset_lds"},
+        write{"write"}, W{"W"}, t{"t"}, twiddles{"twiddles"};
 
-    auto kdevice = Function("forward_length" + std::to_string(length));
 
-    auto R          = Variable("R");
-    auto thread     = Variable("thread");
-    auto thread_id  = Variable("threadIdx.x");
-    auto lds        = Variable("lds");
-    auto offset_lds = Variable("offset_lds");
-    auto W          = Variable("W");
-    auto t          = Variable("t");
-    auto twiddles   = Variable("twiddles");
+    std::vector<int> factors;
 
-    kdevice.body += R.declaration();
-    kdevice.body += thread.declaration();
-    kdevice.body += Assign(thread, thread_id % threads_per_transform);
+    uint   length, width, threads_per_transform;
+    double height;
 
-    for(uint pass = 0; pass < factors.size(); ++pass)
+    StockhamGenerator(std::vector<int> factors)
+        : factors(factors)
     {
-        auto width   = factors[pass];
-//        auto nheight = product(factors, pass);
-        auto height  = double(length) / width / threads_per_transform;
+        length = product(factors);
+    };
+
+    StatementList add_work(std::function<StatementList(uint)> generator, bool guard = false) const
+    {
         auto iheight = floor(height);
+        if(height > iheight && threads_per_transform > length / width)
+            iheight += 1;
 
-        for(auto width : factors)
+        auto work = StatementList();
+        for(uint h = 0; h < iheight; ++h)
+            work += generator(h);
+
+        auto stmts = StatementList();
+        if(guard)
         {
-            // load lds
-            for(int h = 0; h < iheight; ++h)
-            {
-                for(int w = 0; w < width; ++w)
-                {
-                    auto tid = thread + h * threads_per_transform;
-                    auto idx = offset_lds + tid + w * (length / width);
-                    kdevice.body += Assign(R[h * width + w], lds[idx]);
-                }
-            }
-
-            // apply twiddle
-            for(int h = 0; h < iheight; ++h)
-            {
-                for(int w = 1; w < width; ++w)
-                {
-                    auto tid  = thread + h * threads_per_transform;
-                    auto tidx = offset_lds + tid + w * (length / width);
-                    auto ridx = h * width + w;
-                    kdevice.body += Assign(W, twiddles[tidx]);
-                    kdevice.body += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y);
-                    kdevice.body += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y);
-                    kdevice.body += Assign(R[ridx], t);
-                }
-            }
-
-            // butterfly
-            for(int h = 0; h < iheight; ++h)
-            {
-                auto args = ArgumentList();
-                for(int w = 0; w < width; ++w)
-                    args.arguments.push_back(R[w].address());
-                kdevice.body += Call("FwdRad" + std::to_string(width), args);
-            }
-
-            // store lds
-            for(int h = 0; h < iheight; ++h)
-            {
-                for(int w = 0; w < width; ++w)
-                {
-                    auto tid = thread + h * threads_per_transform;
-//                    auto idx = offset_lds + B(B(tid / cumheight) * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
-                    auto idx = offset_lds + w; // XXX
-                    kdevice.body += Assign(lds[idx], R[h * width + w]);
-
-                }
-            }
+            if(threads_per_transform != length / width)
+                stmts += If(write && (thread < length / width), work);
+            else
+                stmts += If(write, work);
         }
+        else
+        {
+            stmts += work;
+        }
+
+        if(height > iheight && threads_per_transform < length / width)
+        {
+            // XXX
+        }
+
+        return stmts;
     }
 
-    return kdevice;
-}
+    StatementList load_lds(uint h)
+    {
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset_lds + tid + w * (length / width);
+            stmts += Assign(R[h * width + w], lds[idx]);
+        }
+        return stmts;
+    }
+
+    StatementList apply_twiddle(uint h)
+    {
+        StatementList stmts;
+        for(uint w = 1; w < width; ++w)
+        {
+            auto tid  = thread + h * threads_per_transform;
+            auto tidx = offset_lds + tid + w * (length / width);
+            auto ridx = h * width + w;
+            stmts += Assign(W, twiddles[tidx]);
+            stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y);
+            stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y);
+            stmts += Assign(R[ridx], t);
+        }
+        return stmts;
+    }
+
+    StatementList butterfly(uint h)
+    {
+        StatementList stmts;
+        auto          args = ArgumentList();
+        for(uint w = 0; w < width; ++w)
+            args.arguments.push_back(R[h * width + w].address());
+        stmts += Call("FwdRad" + std::to_string(width), args);
+        return stmts;
+    }
+
+    StatementList store_lds(uint h)
+    {
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            //                    auto idx = offset_lds + B(B(tid / cumheight) * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
+            auto idx = offset_lds + w;    // XXX
+            stmts += Assign(lds[idx], R[h * width + w]);
+        }
+        return stmts;
+    }
+
+    Function make_device()
+    {
+        threads_per_transform = length / factors[0];
+
+        auto kdevice = Function("forward_length" + std::to_string(length));
+
+        kdevice.body += R.declaration();
+        kdevice.body += thread.declaration();
+        kdevice.body += Assign(thread, thread_id % threads_per_transform);
+
+        for(uint pass = 0; pass < factors.size(); ++pass)
+        {
+            width = factors[pass];
+            height = double(length) / width / threads_per_transform;
+
+            kdevice.body += add_work([this](uint h) { return load_lds(h); });
+            kdevice.body += add_work([this](uint h) { return apply_twiddle(h); });
+            kdevice.body += add_work([this](uint h) { return butterfly(h); });
+            kdevice.body += add_work([this](uint h) { return store_lds(h); });
+        }
+
+        return kdevice;
+    }
+};
 
 void format_and_write(std::string fname, std::string code)
 {
@@ -147,7 +189,8 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto device = make_device_fft(factors);
+    auto stockham = StockhamGenerator(factors);
+    auto device   = stockham.make_device();
 
     format_and_write("stockham_generated_kernel.h", device.render());
 }
