@@ -17,6 +17,12 @@ std::string vrender(const T& x)
     return std::visit([](const auto a) { return a.render(); }, x);
 }
 
+template <typename T>
+int get_precedence(const T& x)
+{
+    return std::visit([](const auto a) { return a.precedence; }, x);
+}
+
 //
 // Declarations
 //
@@ -54,8 +60,8 @@ class Modulus;
 class And;
 class Less;
 
-using Expression
-= std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus, And, Less>;
+using Expression = std::
+    variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus, And, Less>;
 
 class OptionalExpression
 {
@@ -73,6 +79,8 @@ class Literal
     std::string value;
 
 public:
+    int const precedence = 100;
+
     template <typename T>
     Literal(T l)
     {
@@ -87,6 +95,7 @@ public:
 
 struct ScalarVariable
 {
+    int const   precedence = 100;
     std::string name;
     ScalarVariable(std::string name)
         : name(name){};
@@ -96,6 +105,7 @@ struct ScalarVariable
 class Variable
 {
 public:
+    int const          precedence = 100;
     std::string        name;
     ScalarVariable     x, y;
     OptionalExpression index;
@@ -117,47 +127,54 @@ public:
     std::string render() const;
 };
 
-#define MAKE_ARITH(NAME, SEP, PRECEDENCE)          \
-    class NAME                                     \
-    {                                              \
-        int const   precedence = PRECEDENCE;       \
-        std::string separator{SEP};                \
-                                                   \
-    public:                                        \
-        std::vector<Expression> args;              \
-        NAME(std::initializer_list<Expression> il) \
-            : args(il){};                          \
-        NAME(std::vector<Expression> il)           \
-            : args(il){};                          \
-        std::string render() const;                \
+#define MAKE_ARITH(NAME, SEP, PRECEDENCE)                \
+    class NAME                                           \
+    {                                                    \
+        std::string separator{SEP};                      \
+                                                         \
+    public:                                              \
+        int const               precedence = PRECEDENCE; \
+        std::vector<Expression> args;                    \
+        NAME(std::initializer_list<Expression> il)       \
+            : args(il){};                                \
+        NAME(std::vector<Expression> il)                 \
+            : args(il){};                                \
+        std::string render() const;                      \
     };
 
-#define MAKE_RENDER(NAME)                      \
-    std::string NAME::render() const           \
-    {                                          \
-        std::string s = vrender(args[0]);      \
-        for(uint i = 1; i < args.size(); ++i)  \
-            s += separator + vrender(args[i]); \
-        return s;                              \
+#define MAKE_ARITH_METHODS(NAME)                 \
+    std::string NAME::render() const             \
+    {                                            \
+        std::string s;                           \
+        if(get_precedence(args[0]) < precedence) \
+            s += "(" + vrender(args[0]) + ")";   \
+        else                                     \
+            s += vrender(args[0]);               \
+        s += separator;                          \
+        if(get_precedence(args[1]) < precedence) \
+            s += "(" + vrender(args[1]) + ")";   \
+        else                                     \
+            s += vrender(args[1]);               \
+        return s;                                \
     }
 
-MAKE_ARITH(Add, " + ", 10);
-MAKE_ARITH(Multiply, " * ", 20);
-MAKE_ARITH(Subtract, " - ", 15);
-MAKE_ARITH(Divide, " / ", 25);
-MAKE_ARITH(Modulus, " % ", 25);
+MAKE_ARITH(Add, " + ", 50);
+MAKE_ARITH(Multiply, " * ", 100);
+MAKE_ARITH(Subtract, " - ", 50);
+MAKE_ARITH(Divide, " / ", 100);
+MAKE_ARITH(Modulus, " % ", 100);
 
-MAKE_ARITH(And, " && ", 50);
-MAKE_ARITH(Less, " < ", 50);
+MAKE_ARITH(And, " && ", 100);
+MAKE_ARITH(Less, " < ", 100);
 
-MAKE_RENDER(Add);
-MAKE_RENDER(Multiply);
-MAKE_RENDER(Subtract);
-MAKE_RENDER(Divide);
-MAKE_RENDER(Modulus);
+MAKE_ARITH_METHODS(Add);
+MAKE_ARITH_METHODS(Multiply);
+MAKE_ARITH_METHODS(Subtract);
+MAKE_ARITH_METHODS(Divide);
+MAKE_ARITH_METHODS(Modulus);
 
-MAKE_RENDER(And);
-MAKE_RENDER(Less);
+MAKE_ARITH_METHODS(And);
+MAKE_ARITH_METHODS(Less);
 
 std::string ScalarVariable::render() const
 {
@@ -346,7 +363,8 @@ public:
     Expression    condition;
     StatementList body;
     If(Expression condition, StatementList body)
-        : condition(condition), body(body){};
+        : condition(condition)
+        , body(body){};
     std::string render() const;
 };
 

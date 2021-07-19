@@ -25,12 +25,11 @@ T product(std::vector<T> x, int last = -1)
 struct StockhamGenerator
 {
     Variable R{"R"}, thread{"thread"}, thread_id{"thread_id"}, lds{"lds"}, offset_lds{"offset_lds"},
-        write{"write"}, W{"W"}, t{"t"}, twiddles{"twiddles"};
-
+        write{"write"}, W{"W"}, t{"t"}, twiddles{"twiddles"}, lstride{"lstride"};
 
     std::vector<int> factors;
 
-    uint   length, width, threads_per_transform;
+    uint   length, width, nheight, threads_per_transform;
     double height;
 
     StockhamGenerator(std::vector<int> factors)
@@ -88,7 +87,7 @@ struct StockhamGenerator
         for(uint w = 1; w < width; ++w)
         {
             auto tid  = thread + h * threads_per_transform;
-            auto tidx = offset_lds + tid + w * (length / width);
+            auto tidx = nheight - 1 + w - 1 + (width - 1) * (tid % nheight);
             auto ridx = h * width + w;
             stmts += Assign(W, twiddles[tidx]);
             stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y);
@@ -114,8 +113,7 @@ struct StockhamGenerator
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
-            //                    auto idx = offset_lds + B(B(tid / cumheight) * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
-            auto idx = offset_lds + w;    // XXX
+            auto idx = offset_lds + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * lstride;
             stmts += Assign(lds[idx], R[h * width + w]);
         }
         return stmts;
@@ -133,8 +131,9 @@ struct StockhamGenerator
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
-            width = factors[pass];
+            width  = factors[pass];
             height = double(length) / width / threads_per_transform;
+            nheight = product(factors, pass);
 
             kdevice.body += add_work([this](uint h) { return load_lds(h); });
             kdevice.body += add_work([this](uint h) { return apply_twiddle(h); });
