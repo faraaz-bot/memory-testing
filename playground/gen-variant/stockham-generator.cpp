@@ -26,10 +26,10 @@ struct StockhamGenerator
 {
     // clang-format off
     Variable
-          R{"R", "scalar_type", 8}
-        , thread{"thread", "size_t"}
+          R{"R", "scalar_type"}
+        , thread{"thread", "uint"}
         , thread_id{"thread_id", "void"}
-        , lds{"lds", "scalar_type"}
+        , lds{"lds", "scalar_type", .pointer=true}
         , offset_lds{"offset_lds", "uint"}
         , write{"write", "bool"}
         , W{"W", "scalar_type"}
@@ -45,10 +45,20 @@ struct StockhamGenerator
     uint   length, width, nheight, threads_per_transform;
     double height;
 
-    StockhamGenerator(std::vector<int> factors)
+    StockhamGenerator(std::vector<int> factors, uint threads_per_transform)
         : factors(factors)
+        , threads_per_transform(threads_per_transform)
     {
         length = product(factors);
+
+        uint nregisters = 0;
+        for(auto width : factors)
+        {
+            uint n = ceil(double(length) / width / threads_per_transform) * width;
+            if(n > nregisters)
+                nregisters = n;
+        }
+        R.size = OptionalExpression(Literal{nregisters});
     };
 
     StatementList add_work(std::function<StatementList(uint)> generator, bool guard = false) const
@@ -137,15 +147,17 @@ struct StockhamGenerator
 
     Function make_device()
     {
-        threads_per_transform = length / factors[0];
-
         auto kdevice = Function("forward_length" + std::to_string(length));
 
         kdevice.templates.append(scalar_type);
         kdevice.arguments.append(lds);
+        kdevice.arguments.append(offset_lds);
+        kdevice.arguments.append(write);
 
         kdevice.body += R.declaration();
         kdevice.body += thread.declaration();
+        kdevice.body += W.declaration();
+        kdevice.body += t.declaration();
         kdevice.body += Assign(thread, thread_id % threads_per_transform);
 
         for(uint pass = 0; pass < factors.size(); ++pass)
@@ -207,7 +219,7 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto stockham = StockhamGenerator(factors);
+    auto stockham = StockhamGenerator(factors, 7);
     auto device   = stockham.make_device();
 
     format_and_write("stockham_generated_kernel.h", device.render());

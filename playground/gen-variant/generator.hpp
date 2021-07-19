@@ -30,10 +30,13 @@ int get_precedence(const T& x)
 class Declaration
 {
 public:
-    std::string name, type, size;
-    Declaration(std::string name, std::string type, std::string size = "")
+    std::string name, type;
+    bool        pointer;
+    std::string size;
+    Declaration(std::string name, std::string type, bool pointer = false, std::string size = "")
         : name(name)
         , type(type)
+        , pointer(pointer)
         , size(size){};
     std::string render() const;
 };
@@ -41,8 +44,11 @@ public:
 std::string Declaration::render() const
 {
     std::string s;
-    s = type + " " + name;
-    if (!size.empty())
+    s = type;
+    if(pointer)
+        s += "*";
+    s += " " + name;
+    if(!size.empty())
         s += "[" + size + "]";
     s += ";";
     return s;
@@ -129,11 +135,12 @@ class Variable
 public:
     int const          precedence = 100;
     std::string        name, type;
+    bool               pointer;
     ScalarVariable     x, y;
     OptionalExpression index;
     OptionalExpression size;
 
-    Variable(std::string _name, std::string _type, int size = 0);
+    Variable(std::string _name, std::string _type, bool pointer = false, int size = 0);
 
     Variable(ScalarVariable v)
         : name(v.name)
@@ -202,11 +209,12 @@ std::string ScalarVariable::render() const
     return name;
 }
 
-Variable::Variable(std::string _name, std::string _type, int size)
+Variable::Variable(std::string _name, std::string _type, bool pointer, int size)
     : name(_name)
     , type(_type)
     , x(_name + ".x", _type)
     , y(_name + ".y", _type)
+    , pointer(pointer)
 {
     if(size > 0)
         this->size = Expression{size};
@@ -214,9 +222,9 @@ Variable::Variable(std::string _name, std::string _type, int size)
 
 Declaration Variable::declaration() const
 {
-    if (size)
-        return Declaration(name, type, vrender(*size));
-    return Declaration(name, type);
+    if(size)
+        return Declaration(name, type, pointer, vrender(*size));
+    return Declaration(name, type, pointer);
 }
 
 ScalarVariable Variable::address() const
@@ -358,15 +366,21 @@ std::string ArgumentList::render_decl() const
     std::string f;
     if(!arguments.empty())
     {
-        f = arguments[0].type + " " + arguments[0].name;
+        f = arguments[0].type;
+        if (arguments[0].pointer)
+            f += "*";
+        f += " " + arguments[0].name;
         if(arguments[0].size)
-            f += "[" + std::to_string(arguments[0].size) + "]";
+            f += "[]";
         for(uint i = 1; i < arguments.size(); ++i)
         {
             f += ",";
-            f += arguments[i].type + " " + arguments[i].name;
+            f += arguments[i].type;
+            if (arguments[i].pointer)
+                f += "*";
+            f += " " + arguments[i].name;
             if(arguments[i].size)
-                f += "[" + std::to_string(arguments[i].size) + "]";
+                f += "[]";
         }
     }
     return f;
@@ -501,7 +515,8 @@ public:
 std::string Function::render() const
 {
     std::string f;
-    if(templates) {
+    if(templates)
+    {
         f += "template<" + templates.render_decl() + ">";
     }
     f += "void " + name;
