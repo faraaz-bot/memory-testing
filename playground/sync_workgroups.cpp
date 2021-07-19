@@ -22,8 +22,13 @@ using namespace cooperative_groups;
 using cooperative_groups::thread_group;
 namespace cg = cooperative_groups;
 
+#define LEN 4 // the length along one dimension
+#define SOLUTION_NUM 4
+
 //-----------------------------------------------------------------------------
 // Helper functions
+
+typedef void (*TestCall)(int*);
 
 #define GPU_ERR_CHECK(expr)                     \
     {                                           \
@@ -101,8 +106,8 @@ __device__ inline void hip_atomic_store(volatile T* object,
 
 void __device__ plus_one_device(int* a, const int b_stride, const int c_stride)
 {
-    __shared__ int lds[3];
-    int offset       = blockIdx.x / b_stride * 9 + blockIdx.x % b_stride + threadIdx.x * c_stride;
+    __shared__ int lds[LEN];
+    int offset = blockIdx.x / b_stride * LEN * LEN + blockIdx.x % b_stride + threadIdx.x * c_stride;
     lds[threadIdx.x] = a[offset];
     __syncthreads();
     //printf("blockIdx.x %d, threadIdx.x %d, offset %d\n", (int)blockIdx.x, (int)threadIdx.x, offset);
@@ -120,18 +125,18 @@ void __global__ plus_one(int* a, const int b_stride, const int c_stride)
 
 void solution_0(int* d_data)
 {
-    int   b_stride     = 3;
-    int   c_stride     = 3;
+    int   b_stride     = LEN;
+    int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-    hipLaunchCooperativeKernel(plus_one, dim3(9), dim3(3), kernelArgs, 0, 0);
+    hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
 
     //hipDeviceSynchronize();
 
-    b_stride = 9;
-    c_stride = 9;
+    b_stride = LEN * LEN;
+    c_stride = LEN * LEN;
 
-    hipLaunchCooperativeKernel(plus_one, dim3(9), dim3(3), kernelArgs, 0, 0);
+    hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -146,18 +151,21 @@ void __global__ plus_one_twice_hip_coop(int* a, const int b_stride, const int c_
     cg::grid_group g = cooperative_groups::this_grid();
     g.sync();
 
-    bs = 9;
-    cs = 9;
+    bs = LEN * LEN;
+    cs = LEN * LEN;
     plus_one_device(a, bs, cs);
+
+    g.sync();
 }
 
 void solution_1(int* d_data)
 {
-    int   b_stride     = 3;
-    int   c_stride     = 3;
+    int   b_stride     = LEN;
+    int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-    hipLaunchCooperativeKernel(plus_one_twice_hip_coop, dim3(9), dim3(3), kernelArgs, 0, 0);
+    hipLaunchCooperativeKernel(
+        plus_one_twice_hip_coop, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -177,13 +185,14 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
     {
         //printf("blockIdx.x %3d, g_counter %x\n", (int)blockIdx.x, g_counter);
         atomicAdd(&g_counter, 1);
-        while(hip_atomic_load<int>(&g_counter, MemoryOrder::RELAXED, MemoryScope::DEVICE) < 9)
+        while(hip_atomic_load<int>(&g_counter, MemoryOrder::RELAXED, MemoryScope::DEVICE)
+              < LEN * LEN)
         {
         }
     }
 
-    bs = 9;
-    cs = 9;
+    bs = LEN * LEN;
+    cs = LEN * LEN;
     plus_one_device(a, bs, cs);
 
     if(threadIdx.x == 0)
@@ -194,16 +203,17 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
 void solution_2(int* d_data)
 {
-    int   b_stride     = 3;
-    int   c_stride     = 3;
+    int   b_stride     = LEN;
+    int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-    hipLaunchCooperativeKernel(plus_one_twice_sync_all_atomic, dim3(9), dim3(3), kernelArgs, 0, 0);
+    hipLaunchCooperativeKernel(
+        plus_one_twice_sync_all_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
 // solution_3: sync partioned workgroups with atomic
-__device__ int g_partitioned_counters[3] = {0, 0, 0};
+__device__ int g_partitioned_counters[LEN] = {0, 0, 0, 0};
 
 void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, const int c_stride)
 {
@@ -214,20 +224,20 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
     __threadfence();
 
-    int counterIdx = blockIdx.x % 3;
+    int counterIdx = blockIdx.x % LEN;
     if(threadIdx.x == 0)
     {
         //printf("blockIdx.x %3d, counterIdx %x\n", (int)blockIdx.x, counterIdx);
         atomicAdd(&g_partitioned_counters[counterIdx], 1);
         while(hip_atomic_load<int>(
                   &g_partitioned_counters[counterIdx], MemoryOrder::RELAXED, MemoryScope::DEVICE)
-              < 3)
+              < LEN)
         {
         }
     }
 
-    bs = 9;
-    cs = 9;
+    bs = LEN * LEN;
+    cs = LEN * LEN;
     plus_one_device(a, bs, cs);
 
     if(threadIdx.x == 0)
@@ -238,36 +248,82 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
 void solution_3(int* d_data)
 {
-    int   b_stride     = 3;
-    int   c_stride     = 3;
+    int   b_stride     = LEN;
+    int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
     hipLaunchCooperativeKernel(
-        plus_one_twice_sync_partion_atomic, dim3(9), dim3(3), kernelArgs, 0, 0);
+        plus_one_twice_sync_partion_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
 }
 
 //-----------------------------------------------------------------------------
 
 int main()
 {
-    int total_size  = 3 * 3 * 3;
+    int total_size  = LEN * LEN * LEN;
     int total_bytes = total_size * sizeof(int);
 
-    int* h_data = new int[total_size];
+    int* h_in  = new int[total_size];
+    int* h_out = new int[total_size * SOLUTION_NUM];
     int* d_data;
 
     for(auto i = 0; i < total_size; i++)
-        h_data[i] = i;
+        h_in[i] = i;
     GPU_ERR_CHECK(hipMalloc(&d_data, total_bytes));
-    GPU_ERR_CHECK(hipMemcpy(d_data, h_data, total_bytes, hipMemcpyHostToDevice));
 
-    solution_3(d_data);
+    TestCall solution[SOLUTION_NUM];
+    solution[0] = solution_0;
+    solution[1] = solution_1;
+    solution[2] = solution_2;
+    solution[3] = solution_3;
 
-    GPU_ERR_CHECK(hipMemcpy(h_data, d_data, total_bytes, hipMemcpyDeviceToHost));
+    for(auto i = 0; i < SOLUTION_NUM; i++)
+    {
+        GPU_ERR_CHECK(hipMemcpy(d_data, h_in, total_bytes, hipMemcpyHostToDevice));
+        hipEvent_t start, stop;
+        GPU_ERR_CHECK(hipEventCreate(&start));
+        GPU_ERR_CHECK(hipEventCreate(&stop));
 
-    for(auto i = 0; i < total_size; i++)
-        std::cout << "a[" << i << "]" << h_data[i] << ", " << std::endl;
+        // warm up once
+        solution[i](d_data);
+
+        GPU_ERR_CHECK(hipEventRecord(start));
+
+        for(int j = 0; j < 100; j++)
+        {
+            solution[i](d_data);
+            hipDeviceSynchronize();
+        }
+
+        GPU_ERR_CHECK(hipEventRecord(stop));
+        GPU_ERR_CHECK(hipEventSynchronize(stop));
+        float gpu_time;
+        GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, start, stop));
+        std::cout << "solution_" << i << ": " << gpu_time << " ms\n";
+
+        GPU_ERR_CHECK(
+            hipMemcpy(&h_out[i * total_size], d_data, total_bytes, hipMemcpyDeviceToHost));
+    }
+
+    // take the 1st run as reference to verify the output of each solution
+    std::cout << "verify...\n";
+    for(auto i = 1; i < SOLUTION_NUM; i++)
+        for(auto j = 0; j < total_size; j++)
+        {
+            if(h_out[i * total_size + j] != h_out[j])
+            {
+                std::cout << "solution_" << i << ": failed at " << j << ", ref " << h_out[j]
+                          << " vs " << h_out[i * total_size + j] << std::endl;
+                break;
+            }
+        }
+    std::cout << "done.\n";
+
+    // for(auto i = 0; i < total_size; i++)
+    //     std::cout << "a[" << i << "]" << h_out[i] << ", " << std::endl;
+
     GPU_ERR_CHECK(hipFree(d_data));
-    delete[] h_data;
+    delete[] h_in;
+    delete[] h_out;
     return 0;
 }
