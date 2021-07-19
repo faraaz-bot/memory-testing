@@ -221,11 +221,11 @@ Representative transforms:
 CP2K
 ^^^^
 
-JIRA tickets
+JIRA ticket for test failure:
 
 * `SWDEV-204930 <http://ontrack-internal.amd.com/browse/SWDEV-204930>`_
 
-Representative transforms:
+Representative transforms for accuracy test:
 
 * 3D Z2Z: ``rocfft-rider --length 42 32 32 --double``
 * 3D Z2Z: ``rocfft-rider --length 25 20 20 --double``
@@ -255,6 +255,7 @@ Misc but interesting
 
 JIRA tickets
 
+* `SWDEV-194172 <http://ontrack-internal.amd.com/browse/SWDEV-194172>`_
 * `SWDEV-254297 <http://ontrack-internal.amd.com/browse/SWDEV-254297>`_
 * `SWDEV-253931 <http://ontrack-internal.amd.com/browse/SWDEV-253931>`_
 
