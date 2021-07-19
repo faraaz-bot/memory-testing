@@ -24,8 +24,21 @@ T product(std::vector<T> x, int last = -1)
 
 struct StockhamGenerator
 {
-    Variable R{"R"}, thread{"thread"}, thread_id{"thread_id"}, lds{"lds"}, offset_lds{"offset_lds"},
-        write{"write"}, W{"W"}, t{"t"}, twiddles{"twiddles"}, lstride{"lstride"};
+    // clang-format off
+    Variable
+          R{"R", "scalar_type", 8}
+        , thread{"thread", "size_t"}
+        , thread_id{"thread_id", "void"}
+        , lds{"lds", "scalar_type"}
+        , offset_lds{"offset_lds", "uint"}
+        , write{"write", "bool"}
+        , W{"W", "scalar_type"}
+        , t{"t", "scalar_type"}
+        , twiddles{"twiddles", "scalar_type"}
+        , lstride{"lstride", "uint"}
+        , scalar_type{"scalar_type", "typename"}
+        ;
+    // clang-format on
 
     std::vector<int> factors;
 
@@ -40,7 +53,7 @@ struct StockhamGenerator
 
     StatementList add_work(std::function<StatementList(uint)> generator, bool guard = false) const
     {
-        auto iheight = floor(height);
+        uint iheight = floor(height);
         if(height > iheight && threads_per_transform > length / width)
             iheight += 1;
 
@@ -63,7 +76,8 @@ struct StockhamGenerator
 
         if(height > iheight && threads_per_transform < length / width)
         {
-            // XXX
+            work = generator(iheight);
+            stmts += If(write && (thread + iheight * threads_per_transform < length / width), work);
         }
 
         return stmts;
@@ -113,7 +127,9 @@ struct StockhamGenerator
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
-            auto idx = offset_lds + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * lstride;
+            auto idx
+                = offset_lds
+                  + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * lstride;
             stmts += Assign(lds[idx], R[h * width + w]);
         }
         return stmts;
@@ -125,14 +141,17 @@ struct StockhamGenerator
 
         auto kdevice = Function("forward_length" + std::to_string(length));
 
+        kdevice.templates.append(scalar_type);
+        kdevice.arguments.append(lds);
+
         kdevice.body += R.declaration();
         kdevice.body += thread.declaration();
         kdevice.body += Assign(thread, thread_id % threads_per_transform);
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
-            width  = factors[pass];
-            height = double(length) / width / threads_per_transform;
+            width   = factors[pass];
+            height  = double(length) / width / threads_per_transform;
             nheight = product(factors, pass);
 
             kdevice.body += add_work([this](uint h) { return load_lds(h); });

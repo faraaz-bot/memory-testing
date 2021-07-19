@@ -30,18 +30,39 @@ int get_precedence(const T& x)
 class Declaration
 {
 public:
-    std::string name;
-    std::string type;
-    Declaration(std::string name, std::string type)
+    std::string name, type, size;
+    Declaration(std::string name, std::string type, std::string size = "")
         : name(name)
-        , type(type){};
+        , type(type)
+        , size(size){};
     std::string render() const;
 };
 
 std::string Declaration::render() const
 {
-    return type + " " + name + ";";
+    std::string s;
+    s = type + " " + name;
+    if (!size.empty())
+        s += "[" + size + "]";
+    s += ";";
+    return s;
 }
+
+// class InlineDeclaration
+// {
+// public:
+//     std::string name;
+//     std::string type;
+//     InlineDeclaration(std::string name, std::string type)
+//         : name(name)
+//         , type(type){};
+//     std::string render() const;
+// };
+
+// std::string InlineDeclaration::render() const
+// {
+//     return type + " " + name;
+// }
 
 //
 // Expressions
@@ -96,9 +117,10 @@ public:
 struct ScalarVariable
 {
     int const   precedence = 100;
-    std::string name;
-    ScalarVariable(std::string name)
-        : name(name){};
+    std::string name, type;
+    ScalarVariable(std::string name, std::string type)
+        : name(name)
+        , type(type){};
     std::string render() const;
 };
 
@@ -106,19 +128,18 @@ class Variable
 {
 public:
     int const          precedence = 100;
-    std::string        name;
+    std::string        name, type;
     ScalarVariable     x, y;
     OptionalExpression index;
+    OptionalExpression size;
 
-    Variable(std::string _name)
-        : name(_name)
-        , x(_name + ".x")
-        , y(_name + ".y"){};
+    Variable(std::string _name, std::string _type, int size = 0);
 
     Variable(ScalarVariable v)
         : name(v.name)
-        , x(v.name + ".x")
-        , y(v.name + ".y"){};
+        , type(v.type)
+        , x(v.name + ".x", v.type)
+        , y(v.name + ".y", v.type){};
 
     Variable       operator[](const Expression& index) const;
     Declaration    declaration() const;
@@ -181,18 +202,30 @@ std::string ScalarVariable::render() const
     return name;
 }
 
+Variable::Variable(std::string _name, std::string _type, int size)
+    : name(_name)
+    , type(_type)
+    , x(_name + ".x", _type)
+    , y(_name + ".y", _type)
+{
+    if(size > 0)
+        this->size = Expression{size};
+}
+
 Declaration Variable::declaration() const
 {
-    return Declaration(name, "int");
+    if (size)
+        return Declaration(name, type, vrender(*size));
+    return Declaration(name, type);
 }
 
 ScalarVariable Variable::address() const
 {
     if(index)
     {
-        return ScalarVariable("&" + name + "[" + vrender(*index) + "]");
+        return ScalarVariable("&" + name + "[" + vrender(*index) + "]", type + "*");
     }
-    return ScalarVariable("&" + name);
+    return ScalarVariable("&" + name, type + "*");
 }
 
 std::string Variable::render() const
@@ -206,7 +239,7 @@ std::string Variable::render() const
 
 Variable Variable::operator[](const Expression& index) const
 {
-    auto v  = Variable(name);
+    auto v  = Variable(name, type);
     v.index = index;
     return v;
 }
@@ -298,7 +331,12 @@ public:
         : arguments(arguments){};
     std::vector<Variable> arguments;
     std::string           render() const;
+    std::string           render_decl() const;
+                          operator bool() const;
+    void                  append(Variable);
 };
+
+using TemplateList = ArgumentList;
 
 std::string ArgumentList::render() const
 {
@@ -313,6 +351,35 @@ std::string ArgumentList::render() const
         }
     }
     return f;
+}
+
+std::string ArgumentList::render_decl() const
+{
+    std::string f;
+    if(!arguments.empty())
+    {
+        f = arguments[0].type + " " + arguments[0].name;
+        if(arguments[0].size)
+            f += "[" + std::to_string(arguments[0].size) + "]";
+        for(uint i = 1; i < arguments.size(); ++i)
+        {
+            f += ",";
+            f += arguments[i].type + " " + arguments[i].name;
+            if(arguments[i].size)
+                f += "[" + std::to_string(arguments[i].size) + "]";
+        }
+    }
+    return f;
+}
+
+ArgumentList::operator bool() const
+{
+    return !arguments.empty();
+}
+
+void ArgumentList::append(Variable v)
+{
+    arguments.push_back(v);
 }
 
 class Call
@@ -423,6 +490,7 @@ public:
     std::string   name;
     StatementList body;
     ArgumentList  arguments;
+    TemplateList  templates;
 
     Function(std::string name)
         : name(name){};
@@ -433,7 +501,11 @@ public:
 std::string Function::render() const
 {
     std::string f;
-    f = "void " + name + "(" + arguments.render() + ") {\n";
+    if(templates) {
+        f += "template<" + templates.render_decl() + ">";
+    }
+    f += "void " + name;
+    f += "(" + arguments.render_decl() + ") {\n";
     f += body.render();
     f += "}\n";
     return f;
