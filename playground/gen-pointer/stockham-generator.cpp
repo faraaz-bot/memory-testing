@@ -20,15 +20,6 @@ struct LaunchParams
     int batches_per_block;
 };
 
-std::vector<int> unique_factors(std::vector<int> const& factors)
-{
-    auto result(factors);
-    std::sort(result.begin(), result.end());
-    auto end = std::unique(result.begin(), result.end());
-    result.resize(std::distance(result.begin(), end));
-    return result;
-}
-
 template <typename T>
 T product(std::vector<T> x, int last = -1)
 {
@@ -89,11 +80,6 @@ std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_
     //
     // variables definitions
     //
-
-    if(working_sets < 0)
-        working_sets = factors[1];
-
-    auto unique = unique_factors(factors);
 
     int  nregisters = *std::max_element(factors.cbegin(), factors.cend());
     auto registers  = array("R", "scalar_type", literal(2 * nregisters));
