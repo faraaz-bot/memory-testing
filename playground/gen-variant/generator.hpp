@@ -77,6 +77,7 @@ std::string Declaration::render() const
 struct ScalarVariable;
 class Variable;
 class Literal;
+class ComplexLiteral;
 
 class Add;
 class Subtract;
@@ -87,8 +88,17 @@ class Modulus;
 class And;
 class Less;
 
-using Expression = std::
-    variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus, And, Less>;
+using Expression = std::variant<ScalarVariable,
+                                Variable,
+                                Literal,
+                                ComplexLiteral,
+                                Add,
+                                Subtract,
+                                Multiply,
+                                Divide,
+                                Modulus,
+                                And,
+                                Less>;
 
 class OptionalExpression
 {
@@ -120,6 +130,32 @@ public:
     }
 };
 
+class ComplexLiteral
+{
+    std::string xvalue, yvalue;
+
+public:
+    int const precedence = 100;
+
+    template <typename T>
+    ComplexLiteral(T l, T r)
+    {
+        xvalue = std::to_string(l);
+        yvalue = std::to_string(r);
+    }
+
+    ComplexLiteral(std::string l, std::string r)
+    {
+        xvalue = l;
+        yvalue = r;
+    }
+
+    std::string render() const
+    {
+        return "{" + xvalue + ", " + yvalue + "}";
+    }
+};
+
 struct ScalarVariable
 {
     int const   precedence = 100;
@@ -146,11 +182,13 @@ public:
              bool        restrict = false,
              int         size     = 0);
 
-    Variable(ScalarVariable v)
+    Variable(const ScalarVariable& v)
         : name(v.name)
         , type(v.type)
         , x(v.name + ".x", v.type)
         , y(v.name + ".y", v.type){};
+
+    Variable(const Variable& v);
 
     Variable       operator[](const Expression& index) const;
     Declaration    declaration() const;
@@ -224,6 +262,22 @@ Variable::Variable(std::string _name, std::string _type, bool pointer, bool rest
 {
     if(size > 0)
         this->size = Expression{size};
+}
+
+Variable::Variable(const Variable& v)
+    : name(v.name)
+    , type(v.type)
+    , x(v.name + ".x", v.type)
+    , y(v.name + ".y", v.type)
+{
+    index = v.index;
+    size  = v.size;
+
+    if(index)
+    {
+        x.name = v.name + "[" + vrender(*index) + "].x";
+        y.name = v.name + "[" + vrender(*index) + "].y";
+    }
 }
 
 Declaration Variable::declaration() const
@@ -318,8 +372,7 @@ class For;
 class If;
 class StatementList;
 
-using Statement = std::variant<Declaration, Assign, Call, For, If>;
-//using Statement = std::variant<Assign>;
+using Statement = std::variant<StatementList, Declaration, Assign, Call, For, If>;
 
 class Assign
 {
@@ -437,10 +490,11 @@ public:
     Expression    condition;
     Expression    iteration;
     StatementList body;
-    For(Variable initial, Expression condition, Expression iteration)
+    For(Variable initial, Expression condition, Expression iteration, StatementList body)
         : initial(initial)
         , condition(condition)
-        , iteration(iteration){};
+        , iteration(iteration)
+        , body(body){};
     std::string render() const;
 };
 
@@ -533,15 +587,11 @@ std::string Function::render() const
 }
 
 //
-// Example of AST transform
-//
-
-//
-// make_planar
+// Re-write helpers
 //
 
 #define MAKE_ARITH_VISITOR(NAME)                  \
-    virtual Expression operator()(const NAME& v)  \
+    Expression operator()(const NAME& v)  \
     {                                             \
         std::vector<Expression> args;             \
         for(auto a : v.args)                      \
@@ -551,34 +601,104 @@ std::string Function::render() const
         return Expression{NAME{args}};            \
     }
 
+#define MAKE_VISITOR(RET, CLS)       \
+    RET operator()(const CLS& x)     \
+    {                                \
+        return RET(visit(*this, x)); \
+    }
+
+template <class Visitor>
+Expression visit(Visitor&& vis, const ScalarVariable& x)
+{
+    return x;
+}
+
+template <class Visitor>
+Expression visit(Visitor&& vis, const Variable& x) {
+    // XXX
+    return x;
+}
+
+template <class Visitor>
+Expression visit(Visitor&& vis, const Literal& x)
+{
+    return x;
+}
+
+template <class Visitor>
+Expression visit(Visitor&& vis, const ComplexLiteral& x)
+{
+    return x;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const For& x)
+{
+    auto initial   = std::get<Variable>(vis(x.initial));
+    auto condition = std::visit(vis, x.condition);
+    auto iteration = std::visit(vis, x.iteration);
+    auto body      = StatementList();
+    for(auto s : x.body.statements)
+    {
+        body += std::visit(vis, s);
+    }
+    return For(initial, condition, iteration, body);
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const If& x)
+{
+    auto condition = std::visit(vis, x.condition);
+    auto body      = StatementList();
+    for(auto s : x.body.statements)
+    {
+        body += std::visit(vis, s);
+    }
+    return If(condition, body);
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const Declaration& x)
+{
+    return x;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const Call& x)
+{
+    auto y = Call(x);
+    // XXX arguments
+    return y;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const StatementList& x)
+{
+    // XXX
+    return x;
+}
+
 struct MakePlanarVisitor
 {
-    std::string old_name{"x"};
-    std::string new_name{"X"};
+    std::string varname, rename, imname;
 
-    Expression operator()(const ScalarVariable& x)
+    MakePlanarVisitor(std::string varname)
+        : varname(varname)
     {
-        return Expression{x};
+        rename = varname + "re";
+        imname = varname + "im";
     }
 
-    Expression operator()(const Variable& x)
-    {
-        auto y = Variable{x};
-        if(x.name == old_name)
-        {
-            y.name = new_name;
-        }
-        if(y.index)
-        {
-            y.index = std::visit(*this, *y.index);
-        }
-        return Expression{y};
-    }
+    MAKE_VISITOR(Expression, ScalarVariable)
+    MAKE_VISITOR(Expression, Variable)
+    MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, ComplexLiteral)
 
-    Expression operator()(const Literal& x)
-    {
-        return Expression{x};
-    }
+    MAKE_VISITOR(Statement, For)
+    MAKE_VISITOR(Statement, If)
+    MAKE_VISITOR(Statement, Declaration)
+    MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, StatementList)
 
     MAKE_ARITH_VISITOR(Add)
     MAKE_ARITH_VISITOR(Subtract)
@@ -589,45 +709,75 @@ struct MakePlanarVisitor
     MAKE_ARITH_VISITOR(And)
     MAKE_ARITH_VISITOR(Less)
 
+    ArgumentList operator()(const ArgumentList& args)
+    {
+        ArgumentList nargs;
+        for(auto x : args.arguments)
+        {
+            if(x.name == varname)
+            {
+                auto re = Variable{x};
+                re.name = rename;
+                re.type = "real_type_t<" + x.type + ">";
+                auto im = Variable{x};
+                im.name = imname;
+                im.type = "real_type_t<" + x.type + ">";
+                nargs.append(re);
+                nargs.append(im);
+            }
+            else
+            {
+                nargs.append(x);
+            }
+        }
+        return nargs;
+    }
+
     Statement operator()(const Assign& x)
     {
-        auto lhs = std::get<Variable>((*this)(x.lhs));
-        auto rhs = std::visit(*this, x.rhs);
-        return Statement{Assign(lhs, rhs)};
+        if(x.lhs.name == varname && std::holds_alternative<Variable>(x.rhs))
+        {
+            // on lhs, lhs needs to be split; use .x and .y on rhs
+
+            auto rhs   = std::get<Variable>(x.rhs);
+            auto stmts = StatementList();
+
+            auto re = Variable(x.lhs);
+            re.name = rename;
+            auto im = Variable(x.lhs);
+            im.name = imname;
+
+            stmts += Assign(re, rhs.x);
+            stmts += Assign(im, rhs.y);
+            return Statement(stmts);
+        }
+        else if(std::holds_alternative<Variable>(x.rhs)
+                && std::get<Variable>(x.rhs).name == varname)
+        {
+            // on rhs, rhs needs to be joined as a complex literal
+
+            auto rhs = std::get<Variable>(x.rhs);
+            auto re  = Variable(rhs);
+            re.name  = rename;
+            auto im  = Variable(rhs);
+            im.name  = imname;
+            return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
+        }
+
+        return Statement(x);
     }
 
-    Statement operator()(const For& x)
-    {
-        auto initial   = std::get<Variable>((*this)(x.initial));
-        auto condition = std::visit(*this, x.condition);
-        auto iteration = std::visit(*this, x.iteration);
-        return Statement{For(initial, condition, iteration)};
-    }
-
-    Statement operator()(const If& x)
-    {
-        auto condition = std::visit(*this, x.condition);
-        return Statement{If(condition, x.body)};
-    }
-
-    Statement operator()(const Declaration& x)
-    {
-        return Statement{x};
-    }
-
-    Statement operator()(const Call& x)
-    {
-        return Statement{x};
-    }
 };
 
-StatementList make_planar(const StatementList& stmts)
+Function make_planar(const Function& f)
 {
-    auto visitor = MakePlanarVisitor();
-    auto nstmts  = StatementList();
-    for(auto s : stmts.statements)
+
+    auto visitor = MakePlanarVisitor("R");
+    auto g       = Function(f.name);
+    g.arguments  = visitor(f.arguments);
+    for(auto s : f.body.statements)
     {
-        nstmts += std::visit(visitor, s);
+        g.body += std::visit(visitor, s);
     }
-    return nstmts;
+    return g;
 }

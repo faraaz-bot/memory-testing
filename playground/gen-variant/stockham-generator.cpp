@@ -307,8 +307,9 @@ int main(int argc, char* argv[])
 
     auto stockham = StockhamGenerator(factors, 7, false);
     auto device   = stockham.make_device();
-    auto planar   = make_planar(device.body);
+    auto planar   = make_planar(device);
     std::cout << planar.render() << std::endl;
 
     format_and_write("stockham_generated_kernel.h", device.render());
+
 }
