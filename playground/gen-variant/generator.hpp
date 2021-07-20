@@ -372,7 +372,15 @@ class For;
 class If;
 class StatementList;
 
-using Statement = std::variant<StatementList, Declaration, Assign, Call, For, If>;
+struct SyncThreads {
+    std::string render() const { return "__syncthreads;"; }
+};
+
+struct Return {
+    std::string render() const { return "return;"; }
+};
+
+using Statement = std::variant<StatementList, Declaration, Assign, Call, For, If, SyncThreads, Return>;
 
 class Assign
 {
@@ -604,24 +612,33 @@ std::string Function::render() const
     }
 
 MAKE_TRIVIAL_VISIT(Expression, Add)
-MAKE_TRIVIAL_VISIT(Expression, Subtract)
-MAKE_TRIVIAL_VISIT(Expression, Multiply)
-MAKE_TRIVIAL_VISIT(Expression, Divide)
-MAKE_TRIVIAL_VISIT(Expression, Modulus)
-MAKE_TRIVIAL_VISIT(Expression, Less)
 MAKE_TRIVIAL_VISIT(Expression, And)
-
-MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
-MAKE_TRIVIAL_VISIT(Expression, Literal)
 MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
+MAKE_TRIVIAL_VISIT(Expression, Divide)
+MAKE_TRIVIAL_VISIT(Expression, Less)
+MAKE_TRIVIAL_VISIT(Expression, Literal)
+MAKE_TRIVIAL_VISIT(Expression, Modulus)
+MAKE_TRIVIAL_VISIT(Expression, Multiply)
+MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
+MAKE_TRIVIAL_VISIT(Expression, Subtract)
 
 MAKE_TRIVIAL_VISIT(Statement, Declaration)
+MAKE_TRIVIAL_VISIT(Statement, Return)
+MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
 
 template <class Visitor>
 Expression visit(Visitor&& vis, const Variable& x)
 {
     // XXX
     return x;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const Call& x)
+{
+    auto y = Call(x);
+    // XXX arguments
+    return y;
 }
 
 template <class Visitor>
@@ -651,10 +668,13 @@ Statement visit(Visitor&& vis, const If& x)
 }
 
 template <class Visitor>
-Statement visit(Visitor&& vis, const Call& x)
+Statement visit(Visitor&& vis, const StatementList& x)
 {
-    auto y = Call(x);
-    // XXX arguments
+    auto y = StatementList();
+    for(auto s : x.statements)
+    {
+        y += std::visit(vis, s);
+    }
     return y;
 }
 
@@ -665,17 +685,6 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
     for(auto s : x.arguments)
     {
         y.append(std::get<Variable>(vis(s)));
-    }
-    return y;
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const StatementList& x)
-{
-    auto y = StatementList();
-    for(auto s : x.statements)
-    {
-        y += std::visit(vis, s);
     }
     return y;
 }
@@ -704,24 +713,25 @@ struct MakePlanarVisitor
         imname = varname + "im";
     }
 
-    MAKE_VISITOR(Expression, ScalarVariable)
-    MAKE_VISITOR(Expression, Variable)
-    MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, Add)
+    MAKE_VISITOR(Expression, And)
     MAKE_VISITOR(Expression, ComplexLiteral)
+    MAKE_VISITOR(Expression, Divide)
+    MAKE_VISITOR(Expression, Less)
+    MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, Modulus)
+    MAKE_VISITOR(Expression, Multiply)
+    MAKE_VISITOR(Expression, ScalarVariable)
+    MAKE_VISITOR(Expression, Subtract)
+    MAKE_VISITOR(Expression, Variable)
 
+    MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, Declaration)
     MAKE_VISITOR(Statement, For)
     MAKE_VISITOR(Statement, If)
-    MAKE_VISITOR(Statement, Declaration)
-    MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
-
-    MAKE_VISITOR(Expression, Add)
-    MAKE_VISITOR(Expression, Subtract)
-    MAKE_VISITOR(Expression, Multiply)
-    MAKE_VISITOR(Expression, Divide)
-    MAKE_VISITOR(Expression, Modulus)
-    MAKE_VISITOR(Expression, And)
-    MAKE_VISITOR(Expression, Less)
+    MAKE_VISITOR(Statement, SyncThreads)
 
     ArgumentList operator()(const ArgumentList& x)
     {
