@@ -3,7 +3,11 @@
 //
 
 #include <algorithm>
+#include <cmath>
+#include <functional>
 #include <memory>
+#include <numeric>
+#include <string>
 #include <vector>
 
 #include "generator.hpp"
@@ -30,329 +34,283 @@ T product(std::vector<T> x, int last = -1)
     return std::accumulate(x.cbegin(), x.cend(), T(1), std::multiplies<T>());
 }
 
-//
-// ideally: estimate lds usage; try to max out occupancy
-//
-LaunchParams get_launch_params(std::vector<int> const& factors,
-                               int                     bytes_per_element = 16,
-                               int                     lds_byte_limit    = 32 * 1024)
+// //
+// // ideally: estimate lds usage; try to max out occupancy
+// //
+// LaunchParams get_launch_params(std::vector<int> const& factors,
+//                                int                     bytes_per_element = 16,
+//                                int                     lds_byte_limit    = 32 * 1024)
+// {
+//     LaunchParams params;
+
+//     auto length          = product(factors);
+//     auto bytes_per_batch = length * bytes_per_element;
+//     auto max_factor      = *std::max_element(factors.cbegin(), factors.cend());
+
+//     params.batches_per_block = lds_byte_limit / bytes_per_batch;
+//     params.threads_per_block = length / max_factor * params.batches_per_block;
+
+//     return params;
+// }
+
+struct StockhamGenerator
 {
-    LaunchParams params;
 
-    auto length          = product(factors);
-    auto bytes_per_batch = length * bytes_per_element;
-    auto max_factor      = *std::max_element(factors.cbegin(), factors.cend());
+    std::shared_ptr<ScalarVariable> scalar_type;
+    std::shared_ptr<ScalarVariable> write, thread, thread_id;
+    std::shared_ptr<ArrayVariable>  lds, buf, twiddles, R;
+    std::shared_ptr<ScalarVariable> stride_lds, offset_lds;
+    std::shared_ptr<ScalarVariable> stride_buf, offset_buf;
+    std::shared_ptr<ScalarVariable> W, t;
 
-    params.batches_per_block = lds_byte_limit / bytes_per_batch;
-    params.threads_per_block = length / max_factor * params.batches_per_block;
+    std::vector<int> factors;
 
-    return params;
-}
+    uint   length, width, nheight, threads_per_transform;
+    double height;
+    bool   half_lds;
 
-std::shared_ptr<Function> make_device_fft(std::vector<int> factors, int working_sets = -1)
-{
-    //
-    // function and argument definitions
-    //
-    auto length      = product(factors);
-    auto fft         = function("forward_length" + std::to_string(length) + "_device");
-    auto scalar_type = variable("scalar_type", "typename");
-    auto inout       = array("inout", "scalar_type *");
-    auto lds         = array("lds", "scalar_type *");
-    auto twiddles    = array("twiddles", "const scalar_type *");
-    auto stride_in   = variable("stride_in", "int");
-    auto stride_out  = variable("stride_out", "int");
-    auto offset_in   = variable("offset_in", "int");
-    auto offset_out  = variable("offset_out", "int");
-    auto offset_lds  = variable("offset_lds", "int");
-
-    fft->type_qualifier = DEVICE;
-    fft->templates.push_back(scalar_type->argument());
-    fft->arguments.push_back(inout->argument());
-    fft->arguments.push_back(lds->argument());
-    fft->arguments.push_back(twiddles->argument());
-    fft->arguments.push_back(stride_in->argument());
-    fft->arguments.push_back(stride_out->argument());
-    fft->arguments.push_back(offset_in->argument());
-    fft->arguments.push_back(offset_out->argument());
-    fft->arguments.push_back(offset_lds->argument());
-
-    //
-    // variables definitions
-    //
-
-    int  nregisters = *std::max_element(factors.cbegin(), factors.cend());
-    auto registers  = array("R", "scalar_type", literal(2 * nregisters));
-    fft->body.push_back(registers->declaration());
-
-    auto thread    = scalar("thread", "int");
-    auto thread_id = scalar("threadIdx.x");
-    auto W         = scalar("W", "scalar_type");
-    auto t         = scalar("t", "scalar_type");
-
-    fft->body.push_back(thread->declaration());
-    fft->body.push_back(W->declaration());
-    fft->body.push_back(t->declaration());
-
-    fft->body.push_back(line_break());
-
-    // shortcuts
-    auto Z = *inout;
-    auto X = *lds;
-    auto R = *registers;
-    auto T = *twiddles;
-
-    auto tpb = literal(length / factors[0]);
-
-    for(int pass = 0; pass < factors.size(); ++pass)
+    StockhamGenerator(std::vector<int>& factors, uint threads_per_transform, bool half_lds = false)
+        : factors(factors)
+        , threads_per_transform(threads_per_transform)
+        , half_lds(half_lds)
     {
-        auto width   = factors[pass];
-        auto nheight = product(factors, pass);
+        length = product(factors);
 
-        std::shared_ptr<IfBlock> load[2], butterfly[2], store[2];
-
-        for(int subpass = 0; subpass < 2; ++subpass)
+        uint nregisters = 0;
+        for(auto width : factors)
         {
-            std::shared_ptr<Node> needs_work, thread_assign;
+            uint n = ceil(double(length) / width / threads_per_transform) * width;
+            if(n > nregisters)
+                nregisters = n;
+        }
 
-            if(subpass == 0)
+        scalar_type = scalar("scalar_type", "typename");
+        write       = scalar("write", "bool");
+        thread      = scalar("thread", "size_t");
+        thread_id   = scalar("threadIdx.x", "");
+        lds         = array("lds", "scalar_type");
+        buf         = array("buf", "scalar_type");
+        twiddles    = array("twiddles", "scalar_type");
+        R           = array("R", "scalar_type", literal(nregisters));
+        stride_lds  = scalar("stride_lds", "uint");
+        offset_lds  = scalar("offset_lds", "uint");
+        stride_buf  = scalar("stride_buf", "uint");
+        offset_buf  = scalar("offset_buf", "uint");
+        W           = scalar("W", "scalar_type");
+        t           = scalar("t", "scalar_type");
+    };
+
+    StatementList add_work(std::function<StatementList(uint)> generator,
+                           /* uint                               width  = -1, */
+                           /* double                             height = -1.0, */
+                           bool guard = false) const
+    {
+        /* if(width < 0) */
+        /*     width = this->width; */
+
+        /* if(height < 0.0) */
+        /*     height = this->height; */
+
+        uint iheight = floor(height);
+        if(height > iheight && threads_per_transform > length / width)
+            iheight += 1;
+
+        auto work = StatementList();
+        for(uint h = 0; h < iheight; ++h)
+            work += generator(h);
+
+        auto stmts = StatementList();
+        if(guard)
+        {
+            if(threads_per_transform != length / width)
+                stmts += if_block(write && (thread < length / width), work);
+            else
+                stmts += if_block(write, work);
+        }
+        else
+        {
+            stmts += work;
+        }
+
+        if(height > iheight && threads_per_transform < length / width)
+        {
+            work = generator(iheight);
+            stmts += if_block(write && (thread + iheight * threads_per_transform < length / width),
+                              work);
+        }
+
+        return stmts;
+    }
+
+    StatementList load_lds(uint h)    //, uint width = -1, uint component = -1)
+    {
+        /* if(width < 0) */
+        /*     width = this->width; */
+        auto R   = *std::dynamic_pointer_cast<ArrayVariable>(this->R);
+        auto lds = *std::dynamic_pointer_cast<ArrayVariable>(this->lds);
+
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset_lds + tid + w * (length / width);
+            stmts += assign(R[h * width + w], lds[idx]);
+        }
+        return stmts;
+    }
+
+    StatementList load_global(uint h)
+    {
+        auto R   = *this->R;
+        auto buf = *this->buf;
+
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset_buf + (tid + w * (length / width)) * stride_buf;
+            stmts += assign(R[h * width + w], buf[idx]);
+        }
+        return stmts;
+    }
+
+    StatementList apply_twiddle(uint h)
+    {
+        auto R        = *this->R;
+        auto twiddles = *this->twiddles;
+
+        StatementList stmts;
+        for(uint w = 1; w < width; ++w)
+        {
+            auto tid  = thread + h * threads_per_transform;
+            auto tidx = (tid % nheight) * (width - 1) + (nheight - 1 + w - 1);
+            auto ridx = h * width + w;
+            stmts += assign(W, twiddles[tidx]);
+            stmts += assign(t->x, W->x * R[ridx]->x - W->y * R[ridx]->y);
+            stmts += assign(t->y, W->y * R[ridx]->x + W->x * R[ridx]->y);
+            stmts += assign(R[ridx], t);
+        }
+        return stmts;
+    }
+
+    StatementList butterfly(uint h)
+    {
+        auto R = *this->R;
+
+        StatementList stmts;
+        auto          args = ArgumentList();
+        for(uint w = 0; w < width; ++w)
+            args.append(R[h * width + w]->address());
+        stmts += call("FwdRad" + std::to_string(width), args);
+        return stmts;
+    }
+
+    StatementList store_lds(uint h, uint lwidth = -1, uint component = -1)
+    {
+        /* if(lwidth < 0) */
+        /*     lwidth = this->width; */
+        auto R   = *this->R;
+        auto lds = *this->lds;
+
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset_lds
+                       + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight)
+                             * stride_lds;
+            stmts += assign(lds[idx], R[h * width + w]);
+        }
+        return stmts;
+    }
+
+    StatementList store_global(uint h)
+    {
+        auto R   = *this->R;
+        auto buf = *this->buf;
+
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset_buf
+                       + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight)
+                             * stride_buf;
+            stmts += assign(buf[idx], R[h * width + w]);
+        }
+        return stmts;
+    }
+
+    std::shared_ptr<Function> make_device()
+    {
+        auto kdevice = std::make_shared<Function>("forward_length" + std::to_string(length));
+
+        kdevice->templates.append(scalar_type);
+
+        kdevice->arguments.append(lds);
+        kdevice->arguments.append(stride_lds);
+        kdevice->arguments.append(offset_lds);
+        if(half_lds)
+        {
+            kdevice->arguments.append(buf);
+            kdevice->arguments.append(stride_buf);
+            kdevice->arguments.append(offset_buf);
+        }
+        kdevice->arguments.append(write);
+
+        kdevice->body += thread->declaration();
+        kdevice->body += R->declaration();
+        kdevice->body += W->declaration();
+        kdevice->body += t->declaration();
+
+        kdevice->body += assign(thread, thread_id % threads_per_transform);
+
+        for(uint pass = 0; pass < factors.size(); ++pass)
+        {
+            width   = factors[pass];
+            height  = double(length) / width / threads_per_transform;
+            nheight = product(factors, pass);
+
+            if(pass == 0 && half_lds)
+                kdevice->body += add_work([this](uint h) { return load_global(h); });
+            else
+                kdevice->body += add_work([this](uint h) { return load_lds(h); });
+
+            kdevice->body += add_work([this](uint h) { return apply_twiddle(h); });
+            kdevice->body += add_work([this](uint h) { return butterfly(h); });
+
+            if(half_lds)
             {
-                needs_work    = literal_true();
-                thread_assign = assign(thread, mod({thread_id, tpb}));
+                if(pass < factors.size() - 1)
+                {
+                    for(uint component = 0; component < 2; ++component)
+                    {
+                        /* kdevice->body += add_work( */
+                        /*     [this](uint h) { return store_lds(h, factors[pass], component); }, */
+                        /*     factors[pass], */
+                        /*     double(length) / factors[pass] / threads_per_transform); */
+
+                        /* // XXX sync */
+                        /* kdevice->body += add_work( */
+                        /*     [&,this](uint h) { return load_lds(h, factors[pass + 1], component); }, */
+                        /*     factors[pass + 1], */
+                        /*     double(length) / factors[pass + 1] / threads_per_transform); */
+                    }
+                }
+                else
+                {
+                    kdevice->body += add_work([this](uint h) { return store_global(h); });
+                }
             }
             else
             {
-                needs_work    = less(add({mod({thread_id, tpb}), tpb}), literal(length / width));
-                thread_assign = assign(thread, add({mod({thread_id, tpb}), tpb}));
-            }
-
-            load[subpass] = if_block(needs_work);
-            load[subpass]->body.push_back(thread_assign);
-
-            // load
-            if(pass == 0)
-            {
-                // load from inout
-                for(int w = 0; w < width; ++w)
-                {
-                    // clang-format off
-                    auto idx = add({
-                                    offset_in,
-                                    multiply({
-                                                    group(add({
-                                                                            thread,
-                                                                            literal((length / width) * w)})),
-                                                    literal(1)//stride_in
-                                            })});
-                    // clang-format on
-                    load[subpass]->body.push_back(assign(R[subpass * width + w], Z[idx]));
-                }
-            }
-            else
-            {
-                // load from lds
-                for(int w = 0; w < width; ++w)
-                {
-                    // clang-format off
-                    auto idx = add({
-                                    offset_lds,
-                                    thread,
-                                    literal((length / width) * w)});
-                    // clang-format on
-                    load[subpass]->body.push_back(assign(R[subpass * width + w], X[idx]));
-                }
-
-                // twiddle
-                for(int w = 1; w < width; ++w)
-                {
-                    // clang-format off
-                    auto tidx = add({
-                                    literal(nheight - 1 + w - 1),
-                                    multiply({
-                                                    literal(width - 1),
-                                                    group(
-                                                            mod({
-                                                                            thread,
-                                                                            literal(nheight)}))})});
-                    // clang-format on
-                    auto r = subpass * width + w;
-                    load[subpass]->body.push_back(assign(W, T[tidx]));
-                    load[subpass]->body.push_back(
-                        assign(t->x, sub({multiply({W->x, R[r]->x}), multiply({W->y, R[r]->y})})));
-                    load[subpass]->body.push_back(
-                        assign(t->y, add({multiply({W->y, R[r]->x}), multiply({W->x, R[r]->y})})));
-                    load[subpass]->body.push_back(assign(R[r], t));
-                }
-            }
-
-            // butterly
-            butterfly[subpass] = if_block(needs_work);
-            //            butterfly[subpass]->body.push_back(thread_assign);
-            auto fwd = call("FwdRad" + std::to_string(width) + "B1");
-            for(int w = 0; w < width; ++w)
-                fwd->arguments.push_back(R[subpass * width + w]->address());
-            butterfly[subpass]->body.push_back(fwd);
-
-            // write
-            store[subpass] = if_block(needs_work);
-            store[subpass]->body.push_back(thread_assign);
-            store[subpass]->body.push_back(line_break());
-
-            if(pass < factors.size() - 1)
-            {
-                // write to lds
-                for(int w = 0; w < width; ++w)
-                {
-                    // clang-format off
-                    auto idx = add({
-                                    offset_lds,
-                                    group(add({
-                                                            multiply({group(divide({thread, literal(nheight)})), literal(width*nheight)}),
-                                                            mod({thread, literal(nheight)}),
-                                                            literal(w*nheight)}))});
-                    // clang-format on
-                    store[subpass]->body.push_back(assign(X[idx], R[subpass * width + w]));
-                }
-            }
-            else
-            {
-                for(int w = 0; w < width; ++w)
-                {
-                    // clang-format off
-                    auto idx = add({
-                                    offset_out,
-                                    multiply({
-                                                    group(add({
-                                                                            thread,
-                                                                            literal((length / width) * w)
-                                                                    })),
-                                                    literal(1)//stride_out
-                                            })});
-                    // clang-format on
-                    store[subpass]->body.push_back(assign(Z[idx], R[subpass * width + w]));
-                }
+                kdevice->body += add_work([this](uint h) { return store_lds(h); });
             }
         }
 
-        if(pass > 0)
-            fft->body.push_back(sync_threads());
-        fft->body.push_back(load[0]);
-        fft->body.push_back(load[1]);
-        fft->body.push_back(butterfly[0]);
-        fft->body.push_back(butterfly[1]);
-        fft->body.push_back(store[0]);
-        fft->body.push_back(store[1]);
+        return kdevice;
     }
-
-    return fft;
-}
-
-std::shared_ptr<Function> make_global_fft(std::vector<int> factors)
-{
-    auto length = product(factors);
-    auto fft    = function("forward_length" + std::to_string(length));
-
-    auto scalar_type = variable("scalar_type", "typename");
-    auto inout       = array("inout", "scalar_type *");
-    auto twiddles    = array("twiddles", "const scalar_type *");
-    auto stride_in   = variable("stride_in", "int");
-    auto stride_out  = variable("stride_out", "int");
-    auto nbatch      = variable("nbatch", "int");
-
-    fft->type_qualifier = GLOBAL;
-    fft->templates.push_back(scalar_type->argument());
-    fft->arguments.push_back(inout->argument());
-    fft->arguments.push_back(nbatch->argument());
-    fft->arguments.push_back(twiddles->argument());
-    fft->arguments.push_back(stride_in->argument());
-    fft->arguments.push_back(stride_out->argument());
-
-    auto params = get_launch_params(factors);
-
-    auto lds = array("lds", "__shared__ scalar_type", literal(params.batches_per_block * length));
-    fft->body.push_back(lds->declaration());
-    fft->body.push_back(line_break());
-
-    auto thread_id  = scalar("threadIdx.x");
-    auto block_id   = scalar("blockIdx.x");
-    auto offset_in  = variable("offset_in", "int");
-    auto offset_out = variable("offset_out", "int");
-    auto offset_lds = variable("offset_lds", "int");
-    auto batch      = variable("batch", "int");
-
-    fft->body.push_back(batch->declaration());
-    fft->body.push_back(offset_in->declaration());
-    fft->body.push_back(offset_out->declaration());
-    fft->body.push_back(offset_lds->declaration());
-
-    fft->body.push_back(assign(batch,
-                               add({multiply({block_id, literal(params.batches_per_block)}),
-                                    divide({thread_id, literal(length / factors[0])})})));
-    fft->body.push_back(assign(offset_in, multiply({literal(length), batch})));
-    fft->body.push_back(assign(offset_out, multiply({literal(length), batch})));
-    fft->body.push_back(assign(
-        offset_lds,
-        multiply({literal(length), group(mod({batch, literal(params.batches_per_block)}))})));
-
-    auto batch_early_exit = if_block(greater_equal(batch, nbatch));
-    batch_early_exit->body.push_back(return_statement());
-    fft->body.push_back(batch_early_exit);
-
-    auto device = call("forward_length" + std::to_string(length) + "_device");
-    device->templates.push_back(scalar_type);
-    device->arguments.push_back(inout);
-    device->arguments.push_back(lds);
-    device->arguments.push_back(twiddles);
-    device->arguments.push_back(stride_in);
-    device->arguments.push_back(stride_out);
-    device->arguments.push_back(offset_in);
-    device->arguments.push_back(offset_out);
-    device->arguments.push_back(offset_lds);
-    fft->body.push_back(device);
-
-    return fft;
-}
-
-std::shared_ptr<Function> make_host_fft(std::vector<int> factors)
-{
-    auto length = product(factors);
-    auto fft    = function("forward_length" + std::to_string(length) + "_launch");
-
-    auto scalar_type = variable("scalar_type", "typename");
-    auto inout       = array("inout", "scalar_type *");
-    auto twiddles    = array("twiddles", "const scalar_type *");
-    auto stride_in   = variable("stride_in", "int");
-    auto stride_out  = variable("stride_out", "int");
-    auto nbatch      = variable("nbatch", "int");
-
-    fft->templates.push_back(scalar_type->argument());
-    fft->arguments.push_back(inout->argument());
-    fft->arguments.push_back(nbatch->argument());
-    fft->arguments.push_back(twiddles->argument());
-    fft->arguments.push_back(stride_in->argument());
-    fft->arguments.push_back(stride_out->argument());
-
-    auto global = call("forward_length" + std::to_string(length) + "");
-    global->templates.push_back(scalar_type);
-    global->arguments.push_back(inout);
-    global->arguments.push_back(nbatch);
-    global->arguments.push_back(twiddles);
-    global->arguments.push_back(stride_in);
-    global->arguments.push_back(stride_out);
-
-    auto params = get_launch_params(factors);
-
-    auto nblocks = variable("nblocks", "int");
-    fft->body.push_back(nblocks->declaration());
-    fft->body.push_back(assign(nblocks,
-                               divide({group(add({nbatch, literal(params.batches_per_block - 1)})),
-                                       literal(params.batches_per_block)})));
-    global->kernel_arguments.push_back(nblocks);
-    global->kernel_arguments.push_back(literal(params.threads_per_block));
-    fft->body.push_back(global);
-
-    return fft;
-}
+};
 
 int main(int argc, char* argv[])
 {
@@ -361,9 +319,14 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto device = make_device_fft(factors);
+    auto stockham = StockhamGenerator(factors, 7);
+    auto device   = stockham.make_device();
+
+    /*
     auto global = make_global_fft(factors);
     auto host   = make_host_fft(factors);
+*/
 
-    format_and_write("stockham_generated_kernel.h", device->render() + global->render() + host->render());
+    format_and_write("stockham_generated_kernel.h",
+                     device->render());    // + global->render() + host->render());
 }

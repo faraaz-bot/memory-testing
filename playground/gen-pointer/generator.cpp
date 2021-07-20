@@ -69,8 +69,36 @@ namespace gen
         if(x.empty())
             return "";
         std::string s = x[0]->render();
-        for(int i = 1; i < x.size(); ++i)
+        for(uint i = 1; i < x.size(); ++i)
             s += seperator + x[i]->render();
+        return s;
+    }
+
+    // std::string join(std::string seperator, StatementList x)
+    // {
+    //     return join(seperator, x.statements);
+    // }
+
+    void ArgumentList::append(std::shared_ptr<Node> a)
+    {
+        arguments.push_back(a);
+    }
+
+    bool ArgumentList::empty() const
+    {
+        return arguments.empty();
+    }
+
+    std::string ArgumentList::render() const
+    {
+        return join(", ", arguments);
+    }
+
+    std::string StatementList::render() const
+    {
+        std::string s;
+        for(auto x: statements)
+            s += x->render();
         return s;
     }
 
@@ -78,95 +106,30 @@ namespace gen
     // Arithmetic
     //
 
-    std::string Add::render() const
-    {
-        return join(" + ", operands);
+#define MAKE_BINARY_RENDER(NAME)            \
+    std::string NAME::render() const        \
+    {                                       \
+        std::string s;                      \
+        if(lhs->precedence < precedence)    \
+            s += "(" + lhs->render() + ")"; \
+        else                                \
+            s += lhs->render();             \
+        s += separator;                     \
+        if(rhs->precedence < precedence)    \
+            s += "(" + rhs->render() + ")"; \
+        else                                \
+            s += rhs->render();             \
+        return s;                           \
     }
 
-    std::shared_ptr<Add> add(std::vector<std::shared_ptr<Node>> operands)
-    {
-        return std::make_shared<Add>(operands);
-    }
+    MAKE_BINARY_RENDER(Add);
+    MAKE_BINARY_RENDER(Multiply);
+    MAKE_BINARY_RENDER(Subtract);
+    MAKE_BINARY_RENDER(Divide);
+    MAKE_BINARY_RENDER(Modulus);
 
-    std::string Subtract::render() const
-    {
-        return join(" - ", operands);
-    }
-
-    std::shared_ptr<Subtract> sub(std::vector<std::shared_ptr<Node>> operands)
-    {
-        return std::make_shared<Subtract>(operands);
-    }
-
-    std::string Multiply::render() const
-    {
-        return join(" * ", operands);
-    }
-
-    std::shared_ptr<Multiply> multiply(std::vector<std::shared_ptr<Node>> operands)
-    {
-        return std::make_shared<Multiply>(operands);
-    }
-
-    std::string Divide::render() const
-    {
-        return join(" / ", operands);
-    }
-
-    std::shared_ptr<Divide> divide(std::vector<std::shared_ptr<Node>> operands)
-    {
-        return std::make_shared<Divide>(operands);
-    }
-
-    std::string Mod::render() const
-    {
-        return join(" % ", operands);
-    }
-
-    std::shared_ptr<Mod> mod(std::vector<std::shared_ptr<Node>> operands)
-    {
-        return std::make_shared<Mod>(operands);
-    }
-
-    std::string Group::render() const
-    {
-        return "( " + group->render() + " )";
-    }
-
-    std::shared_ptr<Group> group(std::shared_ptr<Node> group)
-    {
-        return std::make_shared<Group>(group);
-    }
-
-    //
-    // Operators
-    //
-
-    std::string BinaryOperator::render() const
-    {
-        return lhs->render() + " " + op + " " + rhs->render();
-    }
-
-    std::shared_ptr<BinaryOperator> greater(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
-    {
-        return std::make_shared<BinaryOperator>(">", lhs, rhs);
-    }
-
-    std::shared_ptr<BinaryOperator> greater_equal(std::shared_ptr<Node> lhs,
-                                                  std::shared_ptr<Node> rhs)
-    {
-        return std::make_shared<BinaryOperator>(">=", lhs, rhs);
-    }
-
-    std::shared_ptr<BinaryOperator> less(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
-    {
-        return std::make_shared<BinaryOperator>("<", lhs, rhs);
-    }
-
-    std::shared_ptr<BinaryOperator> less_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
-    {
-        return std::make_shared<BinaryOperator>("<=", lhs, rhs);
-    }
+    MAKE_BINARY_RENDER(And);
+    MAKE_BINARY_RENDER(Less);
 
     //
     // Variables
@@ -267,12 +230,12 @@ namespace gen
 
     std::string IfBlock::render() const
     {
-        return "if(" + condition->render() + ") {" + join("", body) + "}";
+        return "if(" + condition->render() + ") {" + join("", body.statements) + "}";
     }
 
-    std::shared_ptr<IfBlock> if_block(std::shared_ptr<Node> condition)
+    std::shared_ptr<Node> if_block(std::shared_ptr<Node> condition, StatementList body)
     {
-        return std::make_shared<IfBlock>(condition);
+        return std::make_shared<IfBlock>(condition, body);
     }
 
     //
@@ -283,7 +246,7 @@ namespace gen
     {
         std::string s;
         if(!templates.empty())
-            s += "template <" + join(", ", templates) + "> ";
+            s += "template <" + join(", ", templates.arguments) + "> ";
         if(type_qualifier == DEVICE)
             s += "__device__ ";
         if(type_qualifier == GLOBAL)
@@ -291,8 +254,8 @@ namespace gen
         if(type_qualifier == HOST)
             s += "__host__ ";
         s += "void ";
-        s += name + "(" + join(", ", arguments) + ") {";
-        s += join("\n", body);
+        s += name + "(" + join(", ", arguments.arguments) + ") {";
+        s += join("\n", body.statements);
         s += "}";
         return s;
     }
@@ -306,16 +269,21 @@ namespace gen
     {
         std::string s = name;
         if(!templates.empty())
-            s += "<" + join(", ", templates) + ">";
+            s += "<" + join(", ", templates.arguments) + ">";
         if(!kernel_arguments.empty())
-            s += "<<<" + join(", ", kernel_arguments) + ">>>";
-        s += "(" + join(", ", arguments) + ");";
+            s += "<<<" + join(", ", kernel_arguments.arguments) + ">>>";
+        s += "(" + join(", ", arguments.arguments) + ");";
         return s;
     }
 
     std::shared_ptr<FunctionCall> call(std::string name)
     {
         return std::make_shared<FunctionCall>(name);
+    }
+
+    std::shared_ptr<FunctionCall> call(std::string name, ArgumentList args)
+    {
+        return std::make_shared<FunctionCall>(name, args);
     }
 
     //

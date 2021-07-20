@@ -19,6 +19,8 @@ namespace gen
 
     struct Node
     {
+        int precedence = 100;
+
         virtual std::string render() const = 0;
         virtual ~Node()                    = default;
     };
@@ -40,7 +42,10 @@ namespace gen
     struct Keyword : Node
     {
         std::string keyword;
-        Keyword(std::string keyword) : keyword(keyword) { }
+        Keyword(std::string keyword)
+            : keyword(keyword)
+        {
+        }
         std::string render() const override;
     };
 
@@ -48,6 +53,35 @@ namespace gen
     std::shared_ptr<Keyword> sync_threads();
 
     void format_and_write(std::string fname, std::string code);
+
+    struct ArgumentList : Node
+    {
+        std::vector<std::shared_ptr<Node>> arguments;
+        ArgumentList(){};
+        std::string render() const;
+        void        append(std::shared_ptr<Node> a);
+        bool        empty() const;
+    };
+
+    using TemplateList = ArgumentList;
+
+    struct StatementList : Node
+    {
+        std::vector<std::shared_ptr<Node>> statements;
+        StatementList(){};
+        std::string render() const;
+    };
+
+    inline void operator+=(StatementList& stmts, const std::shared_ptr<Node>& s)
+    {
+        stmts.statements.push_back(s);
+    }
+
+    inline void operator+=(StatementList& stmts, const StatementList& s)
+    {
+        for(auto x : s.statements)
+            stmts.statements.push_back(x);
+    }
 
     //
     // Helpers
@@ -59,99 +93,29 @@ namespace gen
     // Arithmetic
     //
 
-    struct Add : Node
-    {
-        std::vector<std::shared_ptr<Node>> operands;
-        Add(std::vector<std::shared_ptr<Node>> o)
-            : operands{o}
-        {
-        }
-        std::string render() const override;
+#define MAKE_BINARY(NAME, SEP, PRECEDENCE)                         \
+    struct NAME : Node                                             \
+    {                                                              \
+        std::string separator{SEP};                                \
+                                                                   \
+        std::shared_ptr<Node> lhs, rhs;                            \
+        NAME(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs) \
+            : lhs(lhs)                                             \
+            , rhs(rhs)                                             \
+        {                                                          \
+            precedence = PRECEDENCE;                               \
+        };                                                         \
+        std::string render() const;                                \
     };
 
-    std::shared_ptr<Add> add(std::vector<std::shared_ptr<Node>> operands);
+    MAKE_BINARY(Add, " + ", 50);
+    MAKE_BINARY(Multiply, " * ", 100);
+    MAKE_BINARY(Subtract, " - ", 50);
+    MAKE_BINARY(Divide, " / ", 100);
+    MAKE_BINARY(Modulus, " % ", 100);
 
-    struct Subtract : Node
-    {
-        std::vector<std::shared_ptr<Node>> operands;
-        Subtract(std::vector<std::shared_ptr<Node>> o)
-            : operands{o}
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<Subtract> sub(std::vector<std::shared_ptr<Node>> operands);
-
-    struct Multiply : Node
-    {
-        std::vector<std::shared_ptr<Node>> operands;
-        Multiply(std::vector<std::shared_ptr<Node>> o)
-            : operands{o}
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<Multiply> multiply(std::vector<std::shared_ptr<Node>> operands);
-
-    struct Divide : Node
-    {
-        std::vector<std::shared_ptr<Node>> operands;
-        Divide(std::vector<std::shared_ptr<Node>> o)
-            : operands{o}
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<Divide> divide(std::vector<std::shared_ptr<Node>> operands);
-
-    struct Mod : Node
-    {
-        std::vector<std::shared_ptr<Node>> operands;
-        Mod(std::vector<std::shared_ptr<Node>> o)
-            : operands{o}
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<Mod> mod(std::vector<std::shared_ptr<Node>> operands);
-
-    struct Group : Node
-    {
-        std::shared_ptr<Node> group;
-        Group(std::shared_ptr<Node> group)
-            : group(group)
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<Group> group(std::shared_ptr<Node> group);
-
-    //
-    // Operators
-    //
-
-    struct BinaryOperator : Node
-    {
-        std::string           op;
-        std::shared_ptr<Node> lhs, rhs;
-        BinaryOperator(std::string op, std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs)
-            : op(op)
-            , lhs(lhs)
-            , rhs(rhs)
-        {
-        }
-        std::string render() const override;
-    };
-
-    std::shared_ptr<BinaryOperator> greater(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
-    std::shared_ptr<BinaryOperator> less(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
-    std::shared_ptr<BinaryOperator> greater_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
-    std::shared_ptr<BinaryOperator> less_equal(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs);
+    MAKE_BINARY(And, " && ", 100);
+    MAKE_BINARY(Less, " < ", 100);
 
     //
     // Variables
@@ -176,6 +140,12 @@ namespace gen
     std::shared_ptr<Literal> literal(T l)
     {
         return std::make_shared<Literal>(l);
+    }
+
+    template <typename T>
+    std::shared_ptr<Node> literal(std::shared_ptr<T> l)
+    {
+        return l;
     }
 
     std::shared_ptr<Literal> literal_true();
@@ -289,6 +259,11 @@ namespace gen
         {
             return scalar(name + "[" + std::to_string(i) + "]");
         }
+
+        std::shared_ptr<ScalarVariable> operator[](uint i)
+        {
+            return scalar(name + "[" + std::to_string(i) + "]");
+        }
     };
 
     std::shared_ptr<ArrayVariable> array(std::string name);
@@ -315,16 +290,17 @@ namespace gen
 
     struct IfBlock : Node
     {
-        std::shared_ptr<Node>              condition;
-        std::vector<std::shared_ptr<Node>> body;
-        IfBlock(std::shared_ptr<Node> condition)
+        std::shared_ptr<Node> condition;
+        StatementList         body;
+        IfBlock(std::shared_ptr<Node> condition, StatementList body)
             : condition(condition)
+            , body(body)
         {
         }
         std::string render() const override;
     };
 
-    std::shared_ptr<IfBlock> if_block(std::shared_ptr<Node> condition);
+    std::shared_ptr<Node> if_block(std::shared_ptr<Node> condition, StatementList body);
 
     //
     // Functions
@@ -340,14 +316,20 @@ namespace gen
 
     struct Function : Node
     {
-        std::string                        name;
-        std::vector<std::shared_ptr<Node>> templates;
-        std::vector<std::shared_ptr<Node>> arguments;
-        std::vector<std::shared_ptr<Node>> kernel_arguments;
-        std::vector<std::shared_ptr<Node>> body;
-        enum FunctionTypeQualifier         type_qualifier;
+        std::string                name;
+        TemplateList               templates;
+        ArgumentList               arguments;
+        ArgumentList               kernel_arguments;
+        StatementList              body;
+        enum FunctionTypeQualifier type_qualifier;
         Function(std::string name)
             : name(name)
+            , type_qualifier(NONE)
+        {
+        }
+        Function(std::string name, ArgumentList args)
+            : name(name)
+            , arguments(args)
             , type_qualifier(NONE)
         {
         }
@@ -362,5 +344,39 @@ namespace gen
     };
 
     std::shared_ptr<FunctionCall> call(std::string name);
+    std::shared_ptr<FunctionCall> call(std::string name, ArgumentList args);
+
+    //
+    // Operators
+    //
+
+#define MAKE_OVERLOAD(NAME, OP)                                                           \
+    inline std::shared_ptr<NAME> OP(std::shared_ptr<Node> lhs, std::shared_ptr<Node> rhs) \
+    {                                                                                     \
+        return std::make_shared<NAME>(lhs, rhs);                                          \
+    }                                                                                     \
+    template <typename T>                                                                 \
+    inline std::shared_ptr<NAME> OP(std::shared_ptr<Node> lhs, T rhs)                     \
+    {                                                                                     \
+        return std::make_shared<NAME>(lhs, literal(rhs));                                 \
+    }                                                                                     \
+    inline std::shared_ptr<NAME> OP(std::shared_ptr<ScalarVariable> lhs,                  \
+                                    std::shared_ptr<Node>           rhs)                  \
+    {                                                                                     \
+        return std::make_shared<NAME>(lhs, rhs);                                          \
+    }                                                                                     \
+    template <typename T>                                                                 \
+    inline std::shared_ptr<NAME> OP(std::shared_ptr<ScalarVariable> lhs, T rhs)           \
+    {                                                                                     \
+        return std::make_shared<NAME>(lhs, literal(rhs));                                 \
+    }
+
+    MAKE_OVERLOAD(Add, operator+)
+    MAKE_OVERLOAD(Subtract, operator-)
+    MAKE_OVERLOAD(Multiply, operator*)
+    MAKE_OVERLOAD(Divide, operator/)
+    MAKE_OVERLOAD(Modulus, operator%)
+    MAKE_OVERLOAD(Less, operator<)
+    MAKE_OVERLOAD(And, operator&&)
 
 }
