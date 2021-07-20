@@ -590,44 +590,37 @@ std::string Function::render() const
 // Re-write helpers
 //
 
-#define MAKE_ARITH_VISITOR(NAME)                  \
-    Expression operator()(const NAME& v)  \
-    {                                             \
-        std::vector<Expression> args;             \
-        for(auto a : v.args)                      \
-        {                                         \
-            args.push_back(std::visit(*this, a)); \
-        }                                         \
-        return Expression{NAME{args}};            \
-    }
-
 #define MAKE_VISITOR(RET, CLS)       \
     RET operator()(const CLS& x)     \
     {                                \
         return RET(visit(*this, x)); \
     }
 
-template <class Visitor>
-Expression visit(Visitor&& vis, const ScalarVariable& x)
-{
-    return x;
-}
+#define MAKE_TRIVIAL_VISIT(RET, CLS)       \
+    template <class Visitor>               \
+    RET visit(Visitor&& vis, const CLS& x) \
+    {                                      \
+        return x;                          \
+    }
+
+MAKE_TRIVIAL_VISIT(Expression, Add)
+MAKE_TRIVIAL_VISIT(Expression, Subtract)
+MAKE_TRIVIAL_VISIT(Expression, Multiply)
+MAKE_TRIVIAL_VISIT(Expression, Divide)
+MAKE_TRIVIAL_VISIT(Expression, Modulus)
+MAKE_TRIVIAL_VISIT(Expression, Less)
+MAKE_TRIVIAL_VISIT(Expression, And)
+
+MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
+MAKE_TRIVIAL_VISIT(Expression, Literal)
+MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
+
+MAKE_TRIVIAL_VISIT(Statement, Declaration)
 
 template <class Visitor>
-Expression visit(Visitor&& vis, const Variable& x) {
+Expression visit(Visitor&& vis, const Variable& x)
+{
     // XXX
-    return x;
-}
-
-template <class Visitor>
-Expression visit(Visitor&& vis, const Literal& x)
-{
-    return x;
-}
-
-template <class Visitor>
-Expression visit(Visitor&& vis, const ComplexLiteral& x)
-{
     return x;
 }
 
@@ -658,12 +651,6 @@ Statement visit(Visitor&& vis, const If& x)
 }
 
 template <class Visitor>
-Statement visit(Visitor&& vis, const Declaration& x)
-{
-    return x;
-}
-
-template <class Visitor>
 Statement visit(Visitor&& vis, const Call& x)
 {
     auto y = Call(x);
@@ -672,11 +659,39 @@ Statement visit(Visitor&& vis, const Call& x)
 }
 
 template <class Visitor>
+ArgumentList visit(Visitor&& vis, const ArgumentList& x)
+{
+    auto y = ArgumentList();
+    for(auto s : x.arguments)
+    {
+        y.append(std::get<Variable>(vis(s)));
+    }
+    return y;
+}
+
+template <class Visitor>
 Statement visit(Visitor&& vis, const StatementList& x)
 {
-    // XXX
-    return x;
+    auto y = StatementList();
+    for(auto s : x.statements)
+    {
+        y += std::visit(vis, s);
+    }
+    return y;
 }
+
+template <class Visitor>
+Function visit(Visitor&& vis, const Function& x)
+{
+    auto y      = Function(x.name);
+    y.arguments = visit(vis, x.arguments);
+    y.body      = std::get<StatementList>(visit(vis, x.body));
+    return y;
+}
+
+//
+// Make planar
+//
 
 struct MakePlanarVisitor
 {
@@ -700,37 +715,36 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, Call)
     MAKE_VISITOR(Statement, StatementList)
 
-    MAKE_ARITH_VISITOR(Add)
-    MAKE_ARITH_VISITOR(Subtract)
-    MAKE_ARITH_VISITOR(Multiply)
-    MAKE_ARITH_VISITOR(Divide)
-    MAKE_ARITH_VISITOR(Modulus)
+    MAKE_VISITOR(Expression, Add)
+    MAKE_VISITOR(Expression, Subtract)
+    MAKE_VISITOR(Expression, Multiply)
+    MAKE_VISITOR(Expression, Divide)
+    MAKE_VISITOR(Expression, Modulus)
+    MAKE_VISITOR(Expression, And)
+    MAKE_VISITOR(Expression, Less)
 
-    MAKE_ARITH_VISITOR(And)
-    MAKE_ARITH_VISITOR(Less)
-
-    ArgumentList operator()(const ArgumentList& args)
+    ArgumentList operator()(const ArgumentList& x)
     {
-        ArgumentList nargs;
-        for(auto x : args.arguments)
+        ArgumentList y;
+        for(auto a : x.arguments)
         {
-            if(x.name == varname)
+            if(a.name == varname)
             {
-                auto re = Variable{x};
+                auto re = Variable(a);
                 re.name = rename;
-                re.type = "real_type_t<" + x.type + ">";
-                auto im = Variable{x};
+                re.type = "real_type_t<" + a.type + ">";
+                auto im = Variable(a);
                 im.name = imname;
-                im.type = "real_type_t<" + x.type + ">";
-                nargs.append(re);
-                nargs.append(im);
+                im.type = "real_type_t<" + a.type + ">";
+                y.append(re);
+                y.append(im);
             }
             else
             {
-                nargs.append(x);
+                y.append(a);
             }
         }
-        return nargs;
+        return y;
     }
 
     Statement operator()(const Assign& x)
@@ -767,17 +781,17 @@ struct MakePlanarVisitor
         return Statement(x);
     }
 
+    Function operator()(const Function& x)
+    {
+        auto y      = Function(x.name);
+        y.arguments = (*this)(x.arguments);
+        y.body      = std::get<StatementList>(visit(*this, x.body));
+        return y;
+    }
 };
 
 Function make_planar(const Function& f)
 {
-
-    auto visitor = MakePlanarVisitor("R");
-    auto g       = Function(f.name);
-    g.arguments  = visitor(f.arguments);
-    for(auto s : f.body.statements)
-    {
-        g.body += std::visit(visitor, s);
-    }
-    return g;
+    auto visitor = MakePlanarVisitor("lds");
+    return visitor(f);
 }
