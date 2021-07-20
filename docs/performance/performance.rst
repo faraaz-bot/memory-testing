@@ -105,53 +105,6 @@ Representative transforms for ticket 257111 (low priority):
 
 This case is represented in the ``cholla2d`` performance suite.
 
-
-VASP
-^^^^
-
-JIRA tickets
-
-* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_: Optimize Z2Z 3D Performance for MI200
-
-Representative transforms:
-
-* 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
-
-This case is represented in the ``vasp1d`` and ``vasp3d`` performance suites.
-
-Results:
-
-* `2021-03-10 (rocFFT 173a6b1) vasp <_static/vasp-17ea6b1-vs-release.html>`_
-
-
-MI200
-^^^^^
-
-JIRA tickets
-
-* `SWDEV-279412 <http://ontrack-internal.amd.com/browse/SWDEV-279412>`_: MI200 perf drops
-
-Representative transforms:
-
-* 2D 4k: ``rocfft-rider --length 4096 4096 -t   3 -N 10 --double -o``
-* 3D VASP: ``rocfft-rider --length 336 336 56 -o --double -N 10``
-* 2D MD?: ``rocfft-rider --length 336 18816 -N 10 --double -o``
-
-These are the in the ``mi2002d`` and ``mi2003d`` suites.
-
-
-HACC
-^^^^
-
-JIRA tickets
-
-* `SWDEV-254556 <http://ontrack-internal.amd.com/browse/SWDEV-254556>`_
-
-Representative transforms (stride is 1):
-
-* 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
-
-
 GROMACS
 ^^^^^^^
 
@@ -186,24 +139,6 @@ Representative transforms:
 These cases are represented in the ``gromacs3d`` performance suite.
 
 
-AMBER
-^^^^^
-
-JIRA tickets
-
-* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
-
-Representative transforms:
-
-* 3D R2C: ``rocfft-rider -t 2 -o --length 64 64 64``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 64 64 64``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 240 224 224``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 240 224 224``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 128 128 256``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 128 128 256``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 80 84 144``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 80 84 14``
-
 NAMD
 ^^^^
 
@@ -218,19 +153,91 @@ Representative transforms:
 * 3D R2C: ``rocfft-rider -t 2 -o --length 108 108 80``
 * 3D C2R: ``rocfft-rider -t 3 -o --length 108 108 80``
 
-CP2K
+  
+AMBER
+^^^^^
+
+JIRA tickets
+
+* `SWDEV-286632 <http://ontrack-internal.amd.com/browse/SWDEV-286632>`_
+* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
+  
+Representative transforms:
+
+* 3D R2C: ``rocfft-rider -t 2 -o --length 64 64 64``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 64 64 64``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 240 224 224``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 240 224 224``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 128 128 256``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 128 128 256``
+* 3D R2C: ``rocfft-rider -t 2 -o --length 80 84 144``
+* 3D C2R: ``rocfft-rider -t 3 -o --length 80 84 14``
+
+
+VASP
 ^^^^
 
 JIRA tickets
 
-* `SWDEV-204930 <http://ontrack-internal.amd.com/browse/SWDEV-204930>`_
+* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_: Optimize Z2Z 3D Performance for MI200
 
 Representative transforms:
+
+* 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
+
+This case is represented in the ``vasp1d`` and ``vasp3d`` performance suites.
+
+Results:
+
+* `2021-03-10 (rocFFT 173a6b1) vasp <_static/vasp-17ea6b1-vs-release.html>`_
+
+  
+CP2K
+^^^^
+
+JIRA ticket for test failure:
+
+* `SWDEV-204930 <http://ontrack-internal.amd.com/browse/SWDEV-204930>`_
+
+Representative transforms for accuracy test:
 
 * 3D Z2Z: ``rocfft-rider --length 42 32 32 --double``
 * 3D Z2Z: ``rocfft-rider --length 25 20 20 --double``
 * 3D Z2Z: ``rocfft-rider --length 75 55 55 --double``
 
+We aren't really sure which problem sizes are actually important for
+performance, and a discussion with Leopold Grinberg indicates that
+there is a large number of small 3D ffts.
+
+  
+HACC
+^^^^
+
+JIRA tickets
+
+* `SWDEV-254556 <http://ontrack-internal.amd.com/browse/SWDEV-254556>`_
+
+Representative transforms (stride is 1):
+
+* 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
+  
+
+MI200
+^^^^^
+
+JIRA tickets
+
+* `SWDEV-279412 <http://ontrack-internal.amd.com/browse/SWDEV-279412>`_: MI200 perf drops
+
+Representative transforms:
+
+* 2D 4k: ``rocfft-rider --length 4096 4096 -t   3 -N 10 --double -o``
+* 3D VASP: ``rocfft-rider --length 336 336 56 -o --double -N 10``
+* 2D MD?: ``rocfft-rider --length 336 18816 -N 10 --double -o``
+
+These are the in the ``mi2002d`` and ``mi2003d`` suites.
+
+  
 Shoreline MI200
 ^^^^^^^^^^^^^^^
 
@@ -255,6 +262,7 @@ Misc but interesting
 
 JIRA tickets
 
+* `SWDEV-194172 <http://ontrack-internal.amd.com/browse/SWDEV-194172>`_
 * `SWDEV-254297 <http://ontrack-internal.amd.com/browse/SWDEV-254297>`_
 * `SWDEV-253931 <http://ontrack-internal.amd.com/browse/SWDEV-253931>`_
 
