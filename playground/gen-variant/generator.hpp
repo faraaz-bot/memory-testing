@@ -135,12 +135,16 @@ class Variable
 public:
     int const          precedence = 100;
     std::string        name, type;
-    bool               pointer;
+    bool               pointer, restrict;
     ScalarVariable     x, y;
     OptionalExpression index;
     OptionalExpression size;
 
-    Variable(std::string _name, std::string _type, bool pointer = false, int size = 0);
+    Variable(std::string _name,
+             std::string _type,
+             bool        pointer  = false,
+             bool        restrict = false,
+             int         size     = 0);
 
     Variable(ScalarVariable v)
         : name(v.name)
@@ -209,12 +213,14 @@ std::string ScalarVariable::render() const
     return name;
 }
 
-Variable::Variable(std::string _name, std::string _type, bool pointer, int size)
+Variable::Variable(std::string _name, std::string _type, bool pointer, bool restrict, int size)
     : name(_name)
     , type(_type)
+    , pointer(pointer)
+    , restrict(restrict)
     , x(_name + ".x", _type)
     , y(_name + ".y", _type)
-    , pointer(pointer)
+
 {
     if(size > 0)
         this->size = Expression{size};
@@ -367,7 +373,7 @@ std::string ArgumentList::render_decl() const
     if(!arguments.empty())
     {
         f = arguments[0].type;
-        if (arguments[0].pointer)
+        if(arguments[0].pointer)
             f += "*";
         f += " " + arguments[0].name;
         if(arguments[0].size)
@@ -376,7 +382,7 @@ std::string ArgumentList::render_decl() const
         {
             f += ",";
             f += arguments[i].type;
-            if (arguments[i].pointer)
+            if(arguments[i].pointer)
                 f += "*";
             f += " " + arguments[i].name;
             if(arguments[i].size)
@@ -535,7 +541,7 @@ std::string Function::render() const
 //
 
 #define MAKE_ARITH_VISITOR(NAME)                  \
-    Expression operator()(const NAME& v)          \
+    virtual Expression operator()(const NAME& v)  \
     {                                             \
         std::vector<Expression> args;             \
         for(auto a : v.args)                      \
