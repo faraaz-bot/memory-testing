@@ -383,11 +383,19 @@ class For;
 class If;
 class StatementList;
 
+struct LineBreak
+{
+    std::string render() const
+    {
+        return "\n\n";
+    }
+};
+
 struct SyncThreads
 {
     std::string render() const
     {
-        return "__syncthreads;";
+        return "__syncthreads;\n";
     }
 };
 
@@ -395,12 +403,36 @@ struct Return
 {
     std::string render() const
     {
-        return "return;";
+        return "return;\n";
     }
 };
 
-using Statement
-    = std::variant<StatementList, Declaration, Assign, Call, For, If, SyncThreads, Return>;
+struct CommentLines
+{
+    std::vector<std::string> comments;
+    std::string              render() const
+    {
+        std::string s;
+        for(auto c : comments)
+        {
+            s += "// " + c + "\n";
+        }
+        return s;
+    }
+    CommentLines(std::initializer_list<std::string> il)
+        : comments(il){};
+};
+
+using Statement = std::variant<Assign,
+                               Call,
+                               CommentLines,
+                               Declaration,
+                               For,
+                               If,
+                               LineBreak,
+                               Return,
+                               SyncThreads,
+                               StatementList>;
 
 class Assign
 {
@@ -642,7 +674,9 @@ MAKE_TRIVIAL_VISIT(Expression, Multiply)
 MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
 MAKE_TRIVIAL_VISIT(Expression, Subtract)
 
+MAKE_TRIVIAL_VISIT(Statement, CommentLines)
 MAKE_TRIVIAL_VISIT(Statement, Declaration)
+MAKE_TRIVIAL_VISIT(Statement, LineBreak)
 MAKE_TRIVIAL_VISIT(Statement, Return)
 MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
 
@@ -746,9 +780,11 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, Variable)
 
     MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, CommentLines)
     MAKE_VISITOR(Statement, Declaration)
     MAKE_VISITOR(Statement, For)
     MAKE_VISITOR(Statement, If)
+    MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
     MAKE_VISITOR(Statement, SyncThreads)

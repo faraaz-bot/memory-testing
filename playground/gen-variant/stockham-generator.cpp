@@ -69,7 +69,7 @@ struct StockhamGenerator
     StatementList add_work(std::function<StatementList(uint)> generator,
                            uint                               width,
                            double                             height,
-                           bool                               guard  = false) const
+                           bool                               guard = false) const
     {
         uint iheight = floor(height);
         if(height > iheight && threads_per_transform > length / width)
@@ -108,11 +108,11 @@ struct StockhamGenerator
         {
             auto tid = thread + h * threads_per_transform;
             auto idx = offset_lds + tid + w * (length / width);
-            if (component < 0)
+            if(component < 0)
                 stmts += Assign(R[h * width + w], lds[idx]);
-            else if (component == 0)
+            else if(component == 0)
                 stmts += Assign(R[h * width + w].x, lds[idx].x);
-            else if (component == 1)
+            else if(component == 1)
                 stmts += Assign(R[h * width + w].y, lds[idx].y);
         }
         return stmts;
@@ -165,11 +165,11 @@ struct StockhamGenerator
             auto idx = offset_lds
                        + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight)
                              * stride_lds;
-            if (component < 0)
+            if(component < 0)
                 stmts += Assign(lds[idx], R[h * width + w]);
-            else if (component == 0)
+            else if(component == 0)
                 stmts += Assign(lds[idx].x, R[h * width + w].x);
-            else if (component == 1)
+            else if(component == 1)
                 stmts += Assign(lds[idx].y, R[h * width + w].y);
         }
         return stmts;
@@ -219,12 +219,21 @@ struct StockhamGenerator
             height  = double(length) / width / threads_per_transform;
             nheight = product(factors, pass);
 
-//            kdevice.body += SyncThreads();
+            kdevice.body += LineBreak();
+            kdevice.body += CommentLines{
+                "pass " + std::to_string(pass) + ", width " + std::to_string(width),
+                "using " + std::to_string(threads_per_transform) + " threads we need to do "
+                    + std::to_string(length / width) + " butterflies",
+                "therefore each threads will do " + std::to_string(height) + " butterflies"};
+            kdevice.body += SyncThreads();
 
             if(pass == 0 && half_lds)
-                kdevice.body += add_work([this](uint h) { return load_global(h); }, width, height, true);
-            else
-                kdevice.body += add_work([this](uint h) { return load_lds(h, width, -1); }, width, height);
+                kdevice.body
+                    += add_work([this](uint h) { return load_global(h); }, width, height, true);
+
+            if (!half_lds)
+                kdevice.body
+                    += add_work([this](uint h) { return load_lds(h, width, -1); }, width, height);
 
             kdevice.body += add_work([this](uint h) { return apply_twiddle(h); }, width, height);
             kdevice.body += add_work([this](uint h) { return butterfly(h); }, width, height);
@@ -236,25 +245,31 @@ struct StockhamGenerator
                     for(uint component = 0; component < 2; ++component)
                     {
                         kdevice.body += add_work(
-                            [&,this](uint h) { return store_lds(h, factors[pass], component); },
+                            [&, this](uint h) { return store_lds(h, factors[pass], component); },
                             factors[pass],
-                            double(length) / factors[pass] / threads_per_transform, true);
+                            double(length) / factors[pass] / threads_per_transform,
+                            true);
+                        kdevice.body += SyncThreads();
 
                         // XXX sync
                         kdevice.body += add_work(
-                            [&,this](uint h) { return load_lds(h, factors[pass + 1], component); },
+                            [&, this](uint h) { return load_lds(h, factors[pass + 1], component); },
                             factors[pass + 1],
                             double(length) / factors[pass + 1] / threads_per_transform);
+                        kdevice.body += SyncThreads();
                     }
                 }
                 else
                 {
-                    kdevice.body += add_work([this](uint h) { return store_global(h); }, width, height, true);
+                    kdevice.body += add_work(
+                        [this](uint h) { return store_global(h); }, width, height, true);
                 }
             }
             else
             {
-                kdevice.body += add_work([this](uint h) { return store_lds(h, width, -1); }, width, height, true);
+                kdevice.body += SyncThreads();
+                kdevice.body += add_work(
+                    [this](uint h) { return store_lds(h, width, -1); }, width, height, true);
             }
         }
 
@@ -305,7 +320,7 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto stockham = StockhamGenerator(factors, 7, true);
+    auto stockham = StockhamGenerator(factors, 7, false);
     auto device   = stockham.make_device();
     auto planar   = make_planar(device, "buf");
 
