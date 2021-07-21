@@ -151,7 +151,7 @@ struct StockhamGenerator
         StatementList stmts;
         auto          args = ArgumentList();
         for(uint w = 0; w < width; ++w)
-            args.arguments.push_back(R[h * width + w].address());
+            args.append(R[h * width + w].address());
         stmts += Call("FwdRad" + std::to_string(width), args);
         return stmts;
     }
