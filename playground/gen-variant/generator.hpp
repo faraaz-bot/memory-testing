@@ -17,6 +17,12 @@ std::string vrender(const T& x)
     return std::visit([](const auto a) { return a.render(); }, x);
 }
 
+template <typename T>
+int get_precedence(const T& x)
+{
+    return std::visit([](const auto a) { return a.precedence; }, x);
+}
+
 //
 // Declarations
 //
@@ -24,18 +30,45 @@ std::string vrender(const T& x)
 class Declaration
 {
 public:
-    std::string name;
-    std::string type;
-    Declaration(std::string name, std::string type)
+    std::string name, type;
+    bool        pointer;
+    std::string size;
+    Declaration(std::string name, std::string type, bool pointer = false, std::string size = "")
         : name(name)
-        , type(type){};
+        , type(type)
+        , pointer(pointer)
+        , size(size){};
     std::string render() const;
 };
 
 std::string Declaration::render() const
 {
-    return type + " " + name + ";";
+    std::string s;
+    s = type;
+    if(pointer)
+        s += "*";
+    s += " " + name;
+    if(!size.empty())
+        s += "[" + size + "]";
+    s += ";";
+    return s;
 }
+
+// class InlineDeclaration
+// {
+// public:
+//     std::string name;
+//     std::string type;
+//     InlineDeclaration(std::string name, std::string type)
+//         : name(name)
+//         , type(type){};
+//     std::string render() const;
+// };
+
+// std::string InlineDeclaration::render() const
+// {
+//     return type + " " + name;
+// }
 
 //
 // Expressions
@@ -51,14 +84,30 @@ class Multiply;
 class Divide;
 class Modulus;
 
-using Expression
-    = std::variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus>;
+class And;
+class Less;
+
+using Expression = std::
+    variant<ScalarVariable, Variable, Literal, Add, Subtract, Multiply, Divide, Modulus, And, Less>;
+
+class OptionalExpression
+{
+    std::any expr;
+
+public:
+    OptionalExpression(){};
+    OptionalExpression(const Expression& expr);
+    Expression operator*() const;
+               operator bool() const;
+};
 
 class Literal
 {
     std::string value;
 
 public:
+    int const precedence = 100;
+
     template <typename T>
     Literal(T l)
     {
@@ -73,103 +122,138 @@ public:
 
 struct ScalarVariable
 {
-    ScalarVariable(std::string name)
-        : name(name){};
-    std::string name;
-    std::string render() const
-    {
-        return name;
-    };
+    int const   precedence = 100;
+    std::string name, type;
+    ScalarVariable(std::string name, std::string type)
+        : name(name)
+        , type(type){};
+    std::string render() const;
 };
 
 class Variable
 {
 public:
-    ScalarVariable x, y;
-    std::string    name;
-    // Expression index;
-    std::any index;
+    int const          precedence = 100;
+    std::string        name, type;
+    bool               pointer, restrict;
+    ScalarVariable     x, y;
+    OptionalExpression index;
+    OptionalExpression size;
 
-    Variable(std::string _name)
-        : name(_name)
-        , x(_name + ".x")
-        , y(_name + ".y"){};
+    Variable(std::string _name,
+             std::string _type,
+             bool        pointer  = false,
+             bool        restrict = false,
+             int         size     = 0);
 
     Variable(ScalarVariable v)
         : name(v.name)
-        , x("")
-        , y(""){};
+        , type(v.type)
+        , x(v.name + ".x", v.type)
+        , y(v.name + ".y", v.type){};
 
-    Variable    operator[](const Expression& index) const;
-    Declaration declaration() const;
+    Variable       operator[](const Expression& index) const;
+    Declaration    declaration() const;
     ScalarVariable address() const;
 
     std::string render() const;
 };
 
-#define MAKE_ARITH(NAME, SEP, PRECEDENCE)          \
-    class NAME                                     \
-    {                                              \
-        int const   precedence = PRECEDENCE;       \
-        std::string separator{SEP};                \
-                                                   \
-    public:                                        \
-        std::vector<Expression> args;              \
-        NAME(std::initializer_list<Expression> il) \
-            : args(il){};                          \
-        NAME(std::vector<Expression> il)           \
-            : args(il){};                          \
-        std::string render() const;                \
+#define MAKE_ARITH(NAME, SEP, PRECEDENCE)                \
+    class NAME                                           \
+    {                                                    \
+        std::string separator{SEP};                      \
+                                                         \
+    public:                                              \
+        int const               precedence = PRECEDENCE; \
+        std::vector<Expression> args;                    \
+        NAME(std::initializer_list<Expression> il)       \
+            : args(il){};                                \
+        NAME(std::vector<Expression> il)                 \
+            : args(il){};                                \
+        std::string render() const;                      \
     };
 
-#define MAKE_RENDER(NAME)                      \
-    std::string NAME::render() const           \
-    {                                          \
-        std::string s = vrender(args[0]);      \
-        for(int i = 1; i < args.size(); ++i)   \
-            s += separator + vrender(args[i]); \
-        return s;                              \
+#define MAKE_ARITH_METHODS(NAME)                 \
+    std::string NAME::render() const             \
+    {                                            \
+        std::string s;                           \
+        if(get_precedence(args[0]) < precedence) \
+            s += "(" + vrender(args[0]) + ")";   \
+        else                                     \
+            s += vrender(args[0]);               \
+        s += separator;                          \
+        if(get_precedence(args[1]) < precedence) \
+            s += "(" + vrender(args[1]) + ")";   \
+        else                                     \
+            s += vrender(args[1]);               \
+        return s;                                \
     }
 
-MAKE_ARITH(Add, " + ", 10);
-MAKE_ARITH(Multiply, " * ", 20);
-MAKE_ARITH(Subtract, " - ", 15);
-MAKE_ARITH(Divide, " / ", 25);
-MAKE_ARITH(Modulus, " % ", 25);
+MAKE_ARITH(Add, " + ", 50);
+MAKE_ARITH(Multiply, " * ", 100);
+MAKE_ARITH(Subtract, " - ", 50);
+MAKE_ARITH(Divide, " / ", 100);
+MAKE_ARITH(Modulus, " % ", 100);
 
-MAKE_RENDER(Add);
-MAKE_RENDER(Multiply);
-MAKE_RENDER(Subtract);
-MAKE_RENDER(Divide);
-MAKE_RENDER(Modulus);
+MAKE_ARITH(And, " && ", 100);
+MAKE_ARITH(Less, " < ", 100);
+
+MAKE_ARITH_METHODS(Add);
+MAKE_ARITH_METHODS(Multiply);
+MAKE_ARITH_METHODS(Subtract);
+MAKE_ARITH_METHODS(Divide);
+MAKE_ARITH_METHODS(Modulus);
+
+MAKE_ARITH_METHODS(And);
+MAKE_ARITH_METHODS(Less);
+
+std::string ScalarVariable::render() const
+{
+    return name;
+}
+
+Variable::Variable(std::string _name, std::string _type, bool pointer, bool restrict, int size)
+    : name(_name)
+    , type(_type)
+    , pointer(pointer)
+    , restrict(restrict)
+    , x(_name + ".x", _type)
+    , y(_name + ".y", _type)
+
+{
+    if(size > 0)
+        this->size = Expression{size};
+}
 
 Declaration Variable::declaration() const
 {
-    return Declaration(name, "int");
+    if(size)
+        return Declaration(name, type, pointer, vrender(*size));
+    return Declaration(name, type, pointer);
 }
 
 ScalarVariable Variable::address() const
 {
-    if (index.has_value()) {
-        auto expr = std::any_cast<Expression>(index);
-        return ScalarVariable("&" + name + "[" + vrender(expr) + "]");
+    if(index)
+    {
+        return ScalarVariable("&" + name + "[" + vrender(*index) + "]", type + "*");
     }
-    return ScalarVariable("&" + name);
+    return ScalarVariable("&" + name, type + "*");
 }
 
 std::string Variable::render() const
 {
-    if(index.has_value())
+    if(index)
     {
-        auto expr = std::any_cast<Expression>(index);
-        return name + "[" + vrender(expr) + "]";
+        return name + "[" + vrender(*index) + "]";
     }
     return name;
 }
 
 Variable Variable::operator[](const Expression& index) const
 {
-    auto v  = Variable(name);
+    auto v  = Variable(name, type);
     v.index = index;
     return v;
 }
@@ -199,6 +283,31 @@ Modulus operator%(const Expression& a, const Expression& b)
     return Modulus{a, b};
 }
 
+Less operator<(const Expression& a, const Expression& b)
+{
+    return Less{a, b};
+}
+
+And operator&&(const Expression& a, const Expression& b)
+{
+    return And{a, b};
+}
+
+OptionalExpression::operator bool() const
+{
+    return expr.has_value();
+}
+
+Expression OptionalExpression::operator*() const
+{
+    return std::any_cast<Expression>(expr);
+}
+
+OptionalExpression::OptionalExpression(const Expression& expr)
+{
+    this->expr = expr;
+}
+
 //
 // Statements
 //
@@ -206,9 +315,10 @@ Modulus operator%(const Expression& a, const Expression& b)
 class Assign;
 class Call;
 class For;
+class If;
 class StatementList;
 
-using Statement = std::variant<Declaration, Assign, Call, For>;
+using Statement = std::variant<Declaration, Assign, Call, For, If>;
 //using Statement = std::variant<Assign>;
 
 class Assign
@@ -235,7 +345,12 @@ public:
         : arguments(arguments){};
     std::vector<Variable> arguments;
     std::string           render() const;
+    std::string           render_decl() const;
+                          operator bool() const;
+    void                  append(Variable);
 };
+
+using TemplateList = ArgumentList;
 
 std::string ArgumentList::render() const
 {
@@ -243,13 +358,48 @@ std::string ArgumentList::render() const
     if(!arguments.empty())
     {
         f = arguments[0].render();
-        for(int i = 1; i < arguments.size(); ++i)
+        for(uint i = 1; i < arguments.size(); ++i)
         {
             f += ",";
             f += arguments[i].render();
         }
     }
     return f;
+}
+
+std::string ArgumentList::render_decl() const
+{
+    std::string f;
+    if(!arguments.empty())
+    {
+        f = arguments[0].type;
+        if(arguments[0].pointer)
+            f += "*";
+        f += " " + arguments[0].name;
+        if(arguments[0].size)
+            f += "[]";
+        for(uint i = 1; i < arguments.size(); ++i)
+        {
+            f += ",";
+            f += arguments[i].type;
+            if(arguments[i].pointer)
+                f += "*";
+            f += " " + arguments[i].name;
+            if(arguments[i].size)
+                f += "[]";
+        }
+    }
+    return f;
+}
+
+ArgumentList::operator bool() const
+{
+    return !arguments.empty();
+}
+
+void ArgumentList::append(Variable v)
+{
+    arguments.push_back(v);
 }
 
 class Call
@@ -271,8 +421,6 @@ std::string Call::render() const
     f += name + "(" + arguments.render() + ");";
     return f;
 }
-
-
 
 class StatementList
 {
@@ -296,6 +444,17 @@ public:
     std::string render() const;
 };
 
+class If
+{
+public:
+    Expression    condition;
+    StatementList body;
+    If(Expression condition, StatementList body)
+        : condition(condition)
+        , body(body){};
+    std::string render() const;
+};
+
 std::string StatementList::render() const
 {
     std::string r;
@@ -309,6 +468,15 @@ void operator+=(StatementList& stmts, const Statement& s)
     stmts.statements.push_back(s);
 }
 
+void operator+=(StatementList& stmts, const StatementList& s)
+{
+    //    stmts.statements.insert(stmts.statements.end(), s.statements.cbegin(), s.statements.cend());
+    for(auto x : s.statements)
+    {
+        stmts += x;
+    }
+}
+
 std::string For::render() const
 {
     std::string s;
@@ -316,6 +484,17 @@ std::string For::render() const
     s += initial.render() + "; ";
     s += vrender(condition) + "; ";
     s += vrender(iteration) + ") {\n ";
+    s += body.render();
+    s += "\n}\n";
+    return s;
+}
+
+std::string If::render() const
+{
+    std::string s;
+    s += "if(";
+    s += vrender(condition);
+    s += ") {\n";
     s += body.render();
     s += "\n}\n";
     return s;
@@ -331,6 +510,7 @@ public:
     std::string   name;
     StatementList body;
     ArgumentList  arguments;
+    TemplateList  templates;
 
     Function(std::string name)
         : name(name){};
@@ -341,7 +521,12 @@ public:
 std::string Function::render() const
 {
     std::string f;
-    f = "void " + name + "(" + arguments.render() + ") {\n";
+    if(templates)
+    {
+        f += "template<" + templates.render_decl() + ">";
+    }
+    f += "void " + name;
+    f += "(" + arguments.render_decl() + ") {\n";
     f += body.render();
     f += "}\n";
     return f;
@@ -356,7 +541,7 @@ std::string Function::render() const
 //
 
 #define MAKE_ARITH_VISITOR(NAME)                  \
-    Expression operator()(const NAME& v)          \
+    virtual Expression operator()(const NAME& v)  \
     {                                             \
         std::vector<Expression> args;             \
         for(auto a : v.args)                      \
@@ -383,9 +568,9 @@ struct MakePlanarVisitor
         {
             y.name = new_name;
         }
-        if(y.index.has_value())
+        if(y.index)
         {
-            y.index = std::visit(*this, std::any_cast<Expression>(y.index));
+            y.index = std::visit(*this, *y.index);
         }
         return Expression{y};
     }
@@ -401,6 +586,9 @@ struct MakePlanarVisitor
     MAKE_ARITH_VISITOR(Divide)
     MAKE_ARITH_VISITOR(Modulus)
 
+    MAKE_ARITH_VISITOR(And)
+    MAKE_ARITH_VISITOR(Less)
+
     Statement operator()(const Assign& x)
     {
         auto lhs = std::get<Variable>((*this)(x.lhs));
@@ -414,6 +602,12 @@ struct MakePlanarVisitor
         auto condition = std::visit(*this, x.condition);
         auto iteration = std::visit(*this, x.iteration);
         return Statement{For(initial, condition, iteration)};
+    }
+
+    Statement operator()(const If& x)
+    {
+        auto condition = std::visit(*this, x.condition);
+        return Statement{If(condition, x.body)};
     }
 
     Statement operator()(const Declaration& x)
