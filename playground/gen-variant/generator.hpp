@@ -54,22 +54,6 @@ std::string Declaration::render() const
     return s;
 }
 
-// class InlineDeclaration
-// {
-// public:
-//     std::string name;
-//     std::string type;
-//     InlineDeclaration(std::string name, std::string type)
-//         : name(name)
-//         , type(type){};
-//     std::string render() const;
-// };
-
-// std::string InlineDeclaration::render() const
-// {
-//     return type + " " + name;
-// }
-
 //
 // Expressions
 //
@@ -683,42 +667,11 @@ MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
 template <class Visitor>
 Expression visit(Visitor&& vis, const Variable& x)
 {
-    // XXX
-    return x;
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const Call& x)
-{
-    auto y = Call(x);
-    // XXX arguments
+    auto y = Variable(x);
+    // y.x = std::get<ScalarVariable>(vis(y.x));
+    // y.y = std::get<ScalarVariable>(vis(y.y));
+    // if (y.index) y.index = vis(*y.index);
     return y;
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const For& x)
-{
-    auto initial   = std::get<Variable>(vis(x.initial));
-    auto condition = std::visit(vis, x.condition);
-    auto iteration = std::visit(vis, x.iteration);
-    auto body      = StatementList();
-    for(auto s : x.body.statements)
-    {
-        body += std::visit(vis, s);
-    }
-    return For(initial, condition, iteration, body);
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const If& x)
-{
-    auto condition = std::visit(vis, x.condition);
-    auto body      = StatementList();
-    for(auto s : x.body.statements)
-    {
-        body += std::visit(vis, s);
-    }
-    return If(condition, body);
 }
 
 template <class Visitor>
@@ -741,6 +694,32 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
         y.append(std::get<Variable>(vis(s)));
     }
     return y;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const Call& x)
+{
+    auto y = Call(x);
+    y.arguments = visit(vis, x.arguments);
+    return y;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const For& x)
+{
+    auto initial   = std::get<Variable>(vis(x.initial));
+    auto condition = std::visit(vis, x.condition);
+    auto iteration = std::visit(vis, x.iteration);
+    auto body      = std::get<StatementList>(visit(vis, x.body));
+    return For(initial, condition, iteration, body);
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const If& x)
+{
+    auto condition = std::visit(vis, x.condition);
+    auto body      = std::get<StatementList>(visit(vis, x.body));
+    return If(condition, body);
 }
 
 template <class Visitor>
