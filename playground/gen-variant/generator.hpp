@@ -189,6 +189,7 @@ public:
         , y(v.name + ".y", v.type){};
 
     Variable(const Variable& v);
+    Variable(const Variable& v, const Expression& index);
 
     Variable       operator[](const Expression& index) const;
     Declaration    declaration() const;
@@ -280,6 +281,18 @@ Variable::Variable(const Variable& v)
     }
 }
 
+Variable::Variable(const Variable& v, const Expression& _index)
+    : name(v.name)
+    , type(v.type)
+    , x(v.name, v.type)
+    , y(v.name, v.type)
+    , index(_index)
+{
+    size   = v.size;
+    x.name = v.name + "[" + vrender(*index) + "].x";
+    y.name = v.name + "[" + vrender(*index) + "].y";
+}
+
 Declaration Variable::declaration() const
 {
     if(size)
@@ -307,9 +320,7 @@ std::string Variable::render() const
 
 Variable Variable::operator[](const Expression& index) const
 {
-    auto v  = Variable(name, type);
-    v.index = index;
-    return v;
+    return Variable(*this, index);
 }
 
 Add operator+(const Expression& a, const Expression& b)
@@ -372,15 +383,24 @@ class For;
 class If;
 class StatementList;
 
-struct SyncThreads {
-    std::string render() const { return "__syncthreads;"; }
+struct SyncThreads
+{
+    std::string render() const
+    {
+        return "__syncthreads;";
+    }
 };
 
-struct Return {
-    std::string render() const { return "return;"; }
+struct Return
+{
+    std::string render() const
+    {
+        return "return;";
+    }
 };
 
-using Statement = std::variant<StatementList, Declaration, Assign, Call, For, If, SyncThreads, Return>;
+using Statement
+    = std::variant<StatementList, Declaration, Assign, Call, For, If, SyncThreads, Return>;
 
 class Assign
 {
@@ -800,8 +820,8 @@ struct MakePlanarVisitor
     }
 };
 
-Function make_planar(const Function& f)
+Function make_planar(const Function& f, std::string varname)
 {
-    auto visitor = MakePlanarVisitor("lds");
+    auto visitor = MakePlanarVisitor(varname);
     return visitor(f);
 }
