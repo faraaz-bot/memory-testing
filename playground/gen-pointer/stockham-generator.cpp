@@ -314,6 +314,7 @@ int main(int argc, char* argv[])
 
     auto stockham = StockhamGenerator(factors, 7);
     auto device   = stockham.make_device();
+    auto planar   = make_planar(device, "lds");
 
     /*
     auto global = make_global_fft(factors);
@@ -321,5 +322,5 @@ int main(int argc, char* argv[])
 */
 
     format_and_write("stockham_generated_kernel.h",
-                     device->render());    // + global->render() + host->render());
+                     planar->render());    // + global->render() + host->render());
 }

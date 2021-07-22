@@ -379,4 +379,8 @@ namespace gen
     MAKE_OVERLOAD(Less, operator<)
     MAKE_OVERLOAD(And, operator&&)
 
+
+
+    std::shared_ptr<Function> make_planar(std::shared_ptr<Function> f, std::string varname);
+
 }

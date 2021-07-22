@@ -97,7 +97,7 @@ namespace gen
     std::string StatementList::render() const
     {
         std::string s;
-        for(auto x: statements)
+        for(auto x : statements)
             s += x->render();
         return s;
     }
@@ -325,5 +325,168 @@ namespace gen
         ofile << formatted.str();
         ofile.close();
     }
+
+    //
+    // AST transformations
+    //
+
+    //
+    // Planar
+    //
+    struct MakePlanarVisitor
+    {
+        std::string varname, rename, imname;
+
+        MakePlanarVisitor(std::string varname)
+            : varname(varname)
+        {
+            rename = varname + "re";
+            imname = varname + "im";
+        }
+
+        // MAKE_VISITOR(Expression, Add)
+        // MAKE_VISITOR(Expression, And)
+        // MAKE_VISITOR(Expression, ComplexLiteral)
+        // MAKE_VISITOR(Expression, Divide)
+        // MAKE_VISITOR(Expression, Less)
+        // MAKE_VISITOR(Expression, Literal)
+        // MAKE_VISITOR(Expression, Modulus)
+        // MAKE_VISITOR(Expression, Multiply)
+        // MAKE_VISITOR(Expression, ScalarVariable)
+        // MAKE_VISITOR(Expression, Subtract)
+        // MAKE_VISITOR(Expression, Variable)
+
+        // MAKE_VISITOR(Statement, Call)
+        // MAKE_VISITOR(Statement, CommentLines)
+        // MAKE_VISITOR(Statement, Declaration)
+        // MAKE_VISITOR(Statement, For)
+        // MAKE_VISITOR(Statement, If)
+        // MAKE_VISITOR(Statement, LineBreak)
+        // MAKE_VISITOR(Statement, Return)
+        // MAKE_VISITOR(Statement, StatementList)
+        // MAKE_VISITOR(Statement, SyncThreads)
+
+        ArgumentList operator()(const ArgumentList& x)
+        {
+            ArgumentList y;
+            for(auto a : x.arguments)
+            {
+                auto var = std::dynamic_pointer_cast<Variable>(a);
+                if(var)
+                {
+                    auto aname = var->name;
+                    if(aname == varname)
+                    {
+                        auto re  = std::make_shared<Variable>(var->name, var->type, var->size);
+                        re->name = rename;
+                        re->type = "real_type_t<" + var->type + ">";
+                        auto im  = std::make_shared<Variable>(var->name, var->type, var->size);
+                        im->name = imname;
+                        im->type = "real_type_t<" + var->type + ">";
+                        y.append(re);
+                        y.append(im);
+                    }
+                    else
+                    {
+                        y.append(a);
+                    }
+                }
+                else
+                {
+                    y.append(a);
+                }
+            }
+            return y;
+        }
+
+        StatementList operator()(const StatementList& x)
+        {
+            StatementList y;
+            for(auto a : x.statements) {
+                y += a;
+            }
+            return y;
+        }
+
+
+        // Statement operator()(const Assign& x)
+        //     {
+        //         if(x.lhs.name == varname && std::holds_alternative<Variable>(x.rhs))
+        //         {
+        //             // on lhs, lhs needs to be split; use .x and .y on rhs
+
+        //             auto rhs   = std::get<Variable>(x.rhs);
+        //             auto stmts = StatementList();
+
+        //             auto re = Variable(x.lhs);
+        //             re.name = rename;
+        //             auto im = Variable(x.lhs);
+        //             im.name = imname;
+
+        //             stmts += Assign(re, rhs.x);
+        //             stmts += Assign(im, rhs.y);
+        //             return Statement(stmts);
+        //         }
+        //         else if(std::holds_alternative<Variable>(x.rhs)
+        //                 && std::get<Variable>(x.rhs).name == varname)
+        //         {
+        //             // on rhs, rhs needs to be joined as a complex literal
+
+        //             auto rhs = std::get<Variable>(x.rhs);
+        //             auto re  = Variable(rhs);
+        //             re.name  = rename;
+        //             auto im  = Variable(rhs);
+        //             im.name  = imname;
+        //             return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
+        //         }
+
+        //         return Statement(x);
+        //     }
+
+        std::shared_ptr<Function> operator()(const std::shared_ptr<Function>& x)
+        {
+            auto nargs   = (*this)(x->arguments);
+            auto y       = std::make_shared<Function>(x->name, nargs);
+            y->arguments = (*this)(x->arguments);
+            y->body      = (*this)(x->body);
+            return y;
+        }
+    };
+
+    std::shared_ptr<Function> make_planar(std::shared_ptr<Function> x, std::string varname)
+    {
+        auto visitor = MakePlanarVisitor(varname);
+        return visitor(x);
+    }
+
+    /*
+        auto args = std::dynamic_pointer_cast<ArgumentList>(x);
+        if (args) {
+            auto nargs = std::make_shared<ArgumentList>();
+            for(auto arg : args->arguments) {
+                auto var = std::dynamic_pointer_cast<Variable>(arg);
+                if (var) {
+                    if (var->name == varname) {
+                        auto nvar = std::make_shared<Variable>(var->name, var->type, var->size);
+                        nvar->type = "real_type_t<" + var->type + ">";
+                        nargs->append(nvar);
+                    } else {
+                        nargs->append(var);
+                    }
+                } else {
+                    nargs->append(arg);
+                }
+            }
+            return nargs;
+        }
+
+        auto func = std::dynamic_pointer_cast<Function>(x);
+        if (func) {
+            auto alist = make_planar(func->arguments);
+            auto nfunc = std::make_shared<Function>(func->name, alist);
+        }
+
+        return x;
+*/
 
 }
