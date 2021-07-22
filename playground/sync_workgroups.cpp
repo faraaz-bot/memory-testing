@@ -23,7 +23,7 @@ using cooperative_groups::thread_group;
 namespace cg = cooperative_groups;
 
 #define LEN 4 // the length along one dimension
-#define SOLUTION_NUM 4
+#define SOLUTION_NUM 5
 
 //-----------------------------------------------------------------------------
 // Helper functions
@@ -94,7 +94,7 @@ __device__ inline T hip_atomic_load(volatile T* object,
 template <typename T>
 __device__ inline void hip_atomic_store(volatile T* object,
                                         T           desired,
-                                        MemoryOrder order = MemoryOrder::SEQ_CST,
+                                        MemoryOrder order = MemoryOrder::RELAXED,
                                         MemoryScope scope = MemoryScope::DEVICE)
 {
     assert(order != MemoryOrder::ACQUIRE);
@@ -108,11 +108,18 @@ void __device__ plus_one_device(int* a, const int b_stride, const int c_stride)
 {
     __shared__ int lds[LEN];
     int offset = blockIdx.x / b_stride * LEN * LEN + blockIdx.x % b_stride + threadIdx.x * c_stride;
-    lds[threadIdx.x] = a[offset];
+
+    if(threadIdx.x < LEN)
+        lds[threadIdx.x] = a[offset];
+
     __syncthreads();
-    //printf("blockIdx.x %d, threadIdx.x %d, offset %d\n", (int)blockIdx.x, (int)threadIdx.x, offset);
-    lds[threadIdx.x] = lds[threadIdx.x] + 1;
-    a[offset]        = lds[threadIdx.x];
+
+    if(threadIdx.x < LEN)
+    {
+        //printf("blockIdx.x %d, threadIdx.x %d, offset %d\n", (int)blockIdx.x, (int)threadIdx.x, offset);
+        lds[threadIdx.x] = lds[threadIdx.x] + 1;
+        a[offset]        = lds[threadIdx.x];
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -125,18 +132,17 @@ void __global__ plus_one(int* a, const int b_stride, const int c_stride)
 
 void solution_0(int* d_data)
 {
-    int   b_stride     = LEN;
-    int   c_stride     = LEN;
-    void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
+    int b_stride = LEN;
+    int c_stride = LEN;
 
-    hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+    plus_one<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, b_stride, b_stride);
 
     //hipDeviceSynchronize();
 
     b_stride = LEN * LEN;
     c_stride = LEN * LEN;
 
-    hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+    plus_one<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, b_stride, b_stride);
 }
 
 //-----------------------------------------------------------------------------
@@ -185,8 +191,7 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
     {
         //printf("blockIdx.x %3d, g_counter %x\n", (int)blockIdx.x, g_counter);
         atomicAdd(&g_counter, 1);
-        while(hip_atomic_load<int>(&g_counter, MemoryOrder::RELAXED, MemoryScope::DEVICE)
-              < LEN * LEN)
+        while(hip_atomic_load<int>(&g_counter) < LEN * LEN)
         {
         }
     }
@@ -203,12 +208,7 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
 void solution_2(int* d_data)
 {
-    int   b_stride     = LEN;
-    int   c_stride     = LEN;
-    void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
-
-    hipLaunchCooperativeKernel(
-        plus_one_twice_sync_all_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+    plus_one_twice_sync_all_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
 }
 
 //-----------------------------------------------------------------------------
@@ -229,9 +229,7 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
     {
         //printf("blockIdx.x %3d, counterIdx %x\n", (int)blockIdx.x, counterIdx);
         atomicAdd(&g_partitioned_counters[counterIdx], 1);
-        while(hip_atomic_load<int>(
-                  &g_partitioned_counters[counterIdx], MemoryOrder::RELAXED, MemoryScope::DEVICE)
-              < LEN)
+        while(hip_atomic_load<int>(&g_partitioned_counters[counterIdx]) < LEN)
         {
         }
     }
@@ -248,12 +246,76 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
 void solution_3(int* d_data)
 {
+    plus_one_twice_sync_partion_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
+}
+
+//-----------------------------------------------------------------------------
+// solution_4: sync all workgroups without atomic
+__device__ int g_in[LEN * LEN]  = {0};
+__device__ int g_out[LEN * LEN] = {0};
+
+__device__ void grid_sync(int val)
+{
+    if(threadIdx.x == 0)
+    {
+        //g_in[blockIdx.x] = val;
+        hip_atomic_store<int>(&g_in[blockIdx.x], val);
+    }
+
+    if(blockIdx.x == 0) // assume work group 0 has enough threads to cover gridDim.x
+    {
+        if(threadIdx.x < gridDim.x)
+        {
+            while(hip_atomic_load<int>(&g_in[threadIdx.x]) != val)
+            {
+            }
+        }
+        __syncthreads();
+
+        if(threadIdx.x < gridDim.x)
+        {
+            //g_out[threadIdx.x] = val;
+            hip_atomic_store<int>(&g_out[threadIdx.x], val);
+        }
+    }
+
+    if(threadIdx.x == 0)
+    {
+        while(hip_atomic_load<int>(&g_out[blockIdx.x]) != val)
+        {
+        }
+    }
+    __syncthreads();
+}
+
+void __global__ plus_one_twice_sync_all_no_atomic(int* a, const int b_stride, const int c_stride)
+{
+    int bs = b_stride;
+    int cs = c_stride;
+
+    plus_one_device(a, bs, cs);
+
+    __threadfence();
+
+    grid_sync(1);
+
+    bs = LEN * LEN;
+    cs = LEN * LEN;
+    plus_one_device(a, bs, cs);
+
+    grid_sync(0);
+}
+
+void solution_4(int* d_data)
+{
     int   b_stride     = LEN;
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
     hipLaunchCooperativeKernel(
-        plus_one_twice_sync_partion_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        plus_one_twice_sync_all_no_atomic, dim3(LEN * LEN), dim3(LEN * LEN), kernelArgs, 0, 0);
+
+    //plus_one_twice_sync_all_no_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
 }
 
 //-----------------------------------------------------------------------------
@@ -276,6 +338,7 @@ int main()
     solution[1] = solution_1;
     solution[2] = solution_2;
     solution[3] = solution_3;
+    solution[4] = solution_4;
 
     for(auto i = 0; i < SOLUTION_NUM; i++)
     {
@@ -292,7 +355,6 @@ int main()
         for(int j = 0; j < 100; j++)
         {
             solution[i](d_data);
-            hipDeviceSynchronize();
         }
 
         GPU_ERR_CHECK(hipEventRecord(stop));

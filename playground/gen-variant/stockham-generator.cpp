@@ -289,7 +289,7 @@ void format_and_write(std::string fname, std::string code)
     ofile << code;
     ofile.close();
 
-    std::string cmd = "clang-format-10 -i -style=file " + tname;
+    std::string cmd = "/opt/rocm/llvm/bin/clang-format -i -style=file " + tname;
     std::system(cmd.c_str());
     ifile.open(tname);
     formatted << ifile.rdbuf();
