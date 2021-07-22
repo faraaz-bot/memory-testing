@@ -276,7 +276,7 @@ def clients():
     transforms = [NS(label='real_forward'), NS(label='real_backward')]
     dtype      = NS(label='single', dtype=np.float32)
     placement  = NS(label='inplace')
-    for tranform in transforms:
+    for transform in transforms:
         for suite in [gromacs3d, amber3d, namd3d, cp2k]:
             label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
             yield dict(label=label,
