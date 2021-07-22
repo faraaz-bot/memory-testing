@@ -273,7 +273,7 @@ def clients():
                    placement=placement)
 
     # one, real forward/backward, single, inplace
-    transforms = [NS(label='complex_backward'), NS(label='complex_backward')]
+    transforms = [NS(label='real_forward'), NS(label='real_backward')]
     dtype      = NS(label='single', dtype=np.float32)
     placement  = NS(label='inplace')
     for tranform in transforms:
