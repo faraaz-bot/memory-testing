@@ -162,9 +162,9 @@ public:
 
     Variable(std::string _name,
              std::string _type,
-             bool        pointer  = false,
-             bool        restrict = false,
-             int         size     = 0);
+             bool        pointer = false,
+             bool restrict       = false,
+             int size            = 0);
 
     Variable(const ScalarVariable& v)
         : name(v.name)
@@ -379,7 +379,7 @@ struct SyncThreads
 {
     std::string render() const
     {
-        return "__syncthreads;\n";
+        return "__syncthreads();\n";
     }
 };
 
@@ -530,14 +530,20 @@ public:
 class For
 {
 public:
-    Variable      initial;
+    Variable      var;
+    Expression    initial;
     Expression    condition;
-    Expression    iteration;
+    Expression    increment;
     StatementList body;
-    For(Variable initial, Expression condition, Expression iteration, StatementList body)
-        : initial(initial)
+    For(Variable      var,
+        Expression    initial,
+        Expression    condition,
+        Expression    increment,
+        StatementList body = {})
+        : var(var)
+        , initial(initial)
         , condition(condition)
-        , iteration(iteration)
+        , increment(increment)
         , body(body){};
     std::string render() const;
 };
@@ -579,9 +585,12 @@ std::string For::render() const
 {
     std::string s;
     s += "for(";
-    s += initial.render() + "; ";
+    s += var.type + " " + var.name + " = ";
+    s += vrender(initial) + "; ";
     s += vrender(condition) + "; ";
-    s += vrender(iteration) + ") {\n ";
+
+    s += var.name + " += " + vrender(increment);
+    s += ") {\n ";
     s += body.render();
     s += "\n}\n";
     return s;
@@ -699,7 +708,7 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
 template <class Visitor>
 Statement visit(Visitor&& vis, const Call& x)
 {
-    auto y = Call(x);
+    auto y      = Call(x);
     y.arguments = visit(vis, x.arguments);
     return y;
 }
@@ -707,11 +716,12 @@ Statement visit(Visitor&& vis, const Call& x)
 template <class Visitor>
 Statement visit(Visitor&& vis, const For& x)
 {
-    auto initial   = std::get<Variable>(vis(x.initial));
+    auto var       = std::get<Variable>(vis(x.var));
+    auto initial   = std::visit(vis, x.initial);
     auto condition = std::visit(vis, x.condition);
-    auto iteration = std::visit(vis, x.iteration);
+    auto increment = std::visit(vis, x.increment);
     auto body      = std::get<StatementList>(visit(vis, x.body));
-    return For(initial, condition, iteration, body);
+    return For(var, initial, condition, increment, body);
 }
 
 template <class Visitor>
@@ -808,7 +818,7 @@ struct MakePlanarVisitor
 
             stmts += Assign(re, rhs.x);
             stmts += Assign(im, rhs.y);
-            return Statement(stmts);
+            return stmts;
         }
         else if(std::holds_alternative<Variable>(x.rhs)
                 && std::get<Variable>(x.rhs).name == varname)
@@ -820,10 +830,10 @@ struct MakePlanarVisitor
             re.name  = rename;
             auto im  = Variable(rhs);
             im.name  = imname;
-            return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
+            return Assign(x.lhs, ComplexLiteral(re.render(), im.render()));
         }
 
-        return Statement(x);
+        return x;
     }
 
     Function operator()(const Function& x)

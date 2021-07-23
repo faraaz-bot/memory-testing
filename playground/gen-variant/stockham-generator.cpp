@@ -231,7 +231,7 @@ struct StockhamGenerator
                 kdevice.body
                     += add_work([this](uint h) { return load_global(h); }, width, height, true);
 
-            if (!half_lds)
+            if(!half_lds)
                 kdevice.body
                     += add_work([this](uint h) { return load_lds(h, width, -1); }, width, height);
 
@@ -272,6 +272,16 @@ struct StockhamGenerator
                     [this](uint h) { return store_lds(h, width, -1); }, width, height, true);
             }
         }
+
+        // add for loop to test how that works
+        Variable accumulator{"accumulator", "int"};
+        Variable var{"myvar", "int"};
+
+        kdevice.body += accumulator.declaration();
+        kdevice.body += Assign{accumulator, Literal{0}};
+        For forloop(Variable{"myvar", "int"}, Literal{0}, Less{var, Literal{1}}, Literal{1});
+        forloop.body += Assign{accumulator, Add{accumulator, var}};
+        kdevice.body += forloop;
 
         return kdevice;
     }
