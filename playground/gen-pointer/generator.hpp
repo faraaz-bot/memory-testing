@@ -182,8 +182,8 @@ namespace gen
 
     struct Variable : Node
     {
-        std::string           name, type;
-        std::shared_ptr<Node> size;
+        std::string           name, type, component;
+        std::shared_ptr<Node> size, index;
         Variable() {}
         Variable(std::string name)
             : name(name)
@@ -200,6 +200,16 @@ namespace gen
             , size(size)
         {
         }
+        Variable(std::string           name,
+                 std::string           type,
+                 std::shared_ptr<Node> size,
+                 std::shared_ptr<Node> index)
+            : name(name)
+            , type(type)
+            , size(size)
+            , index(index)
+        {
+        }
         std::string                          render() const override;
         std::shared_ptr<VariableDeclaration> declaration() const;
         std::shared_ptr<VariableArgument>    argument() const;
@@ -208,7 +218,7 @@ namespace gen
 
     std::shared_ptr<Variable> variable(std::string name, std::string type);
 
-    struct ScalarVariable : Variable
+    struct ScalarVariable : public Variable
     {
         std::shared_ptr<ScalarVariable> x, y;
         ScalarVariable()
@@ -225,14 +235,23 @@ namespace gen
         {
             make_xy();
         }
+        ScalarVariable(std::string name, std::string type, std::shared_ptr<Node> index)
+            : Variable(name, type, nullptr, index)
+        {
+            make_xy();
+        }
         void make_xy()
         {
-            x       = std::make_shared<ScalarVariable>();
-            y       = std::make_shared<ScalarVariable>();
+            x = std::make_shared<ScalarVariable>();
+            y = std::make_shared<ScalarVariable>();
+            x->name = name;
+            y->name = name;
             x->type = "real_type_t<" + type + ">";
-            x->name = name + ".x";
             y->type = "real_type_t<" + type + ">";
-            y->name = name + ".y";
+            x->index = index;
+            y->index = index;
+            x->component = ".x";
+            y->component = ".y";
         }
     };
 
@@ -246,23 +265,23 @@ namespace gen
         template <typename T>
         std::shared_ptr<ScalarVariable> at(T i)
         {
-            return scalar(name + "[" + i->render() + "]");
+            return std::make_shared<ScalarVariable>(name, type, i);
         }
 
         template <typename T>
         std::shared_ptr<ScalarVariable> operator[](T i)
         {
-            return scalar(name + "[" + i->render() + "]");
+            return std::make_shared<ScalarVariable>(name, type, literal(i));
         }
 
         std::shared_ptr<ScalarVariable> operator[](int i)
         {
-            return scalar(name + "[" + std::to_string(i) + "]");
+            return std::make_shared<ScalarVariable>(name, type, literal(i));
         }
 
         std::shared_ptr<ScalarVariable> operator[](uint i)
         {
-            return scalar(name + "[" + std::to_string(i) + "]");
+            return std::make_shared<ScalarVariable>(name, type, literal(i));
         }
     };
 
@@ -379,8 +398,6 @@ namespace gen
     MAKE_OVERLOAD(Less, operator<)
     MAKE_OVERLOAD(And, operator&&)
 
-
-
-    std::shared_ptr<Function> make_planar(std::shared_ptr<Function> f, std::string varname);
+    std::shared_ptr<Function> make_planar(const std::shared_ptr<Function>& f, std::string varname);
 
 }

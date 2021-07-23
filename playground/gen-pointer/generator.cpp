@@ -165,7 +165,14 @@ namespace gen
 
     std::string Variable::render() const
     {
-        return name;
+        std::string s;
+        s += name;
+        if(index)
+        {
+            s += "[" + index->render() + "]";
+        }
+        s += component;
+        return s;
     }
 
     std::shared_ptr<VariableDeclaration> Variable::declaration() const
@@ -330,11 +337,140 @@ namespace gen
     // AST transformations
     //
 
+    class CopyVisitor
+    {
+    public:
+        virtual ArgumentList operator()(const ArgumentList& x)
+        {
+            ArgumentList y;
+            for(auto a : x.arguments)
+            {
+                y.append((*this)(a));
+            }
+            return y;
+        }
+
+        virtual StatementList operator()(const StatementList& x)
+        {
+            StatementList y;
+            for(auto a : x.statements)
+            {
+                y += (*this)(a);
+            }
+            return y;
+        }
+
+        virtual std::shared_ptr<Function> operator()(const std::shared_ptr<Function>& x)
+        {
+            auto nargs   = (*this)(x->arguments);
+            auto y       = std::make_shared<Function>(x->name, nargs);
+            y->arguments = (*this)(x->arguments);
+            y->body      = (*this)(x->body);
+            return y;
+        }
+
+        virtual std::shared_ptr<Assign> operator()(const std::shared_ptr<Assign>& x)
+        {
+            auto lhs = (*this)(x->lhs);
+            auto rhs = (*this)(x->rhs);
+            return assign(lhs, rhs);
+        }
+
+        virtual std::shared_ptr<Add> operator()(const std::shared_ptr<Add>& x)
+        {
+            auto lhs = (*this)(x->lhs);
+            auto rhs = (*this)(x->rhs);
+            return std::make_shared<Add>(lhs, rhs);
+        }
+
+        virtual std::shared_ptr<VariableDeclaration>
+            operator()(const std::shared_ptr<VariableDeclaration>& x)
+        {
+            if(x->size)
+            {
+                auto size = (*this)(x->size);
+                return std::make_shared<VariableDeclaration>(x->name, x->type, size);
+            }
+            return std::make_shared<VariableDeclaration>(x->name, x->type, nullptr);
+        }
+
+        virtual std::shared_ptr<ScalarVariable> operator()(const std::shared_ptr<ScalarVariable>& x)
+        {
+            return x;
+        }
+
+        virtual std::shared_ptr<Variable> operator()(const std::shared_ptr<Variable>& x)
+        {
+            std::shared_ptr<Node> size, index;
+            if(x->size)
+                size = (*this)(x->size);
+            if(x->index)
+                index = (*this)(x->index);
+            return std::make_shared<Variable>(x->name, x->type, size, index);
+        }
+
+        virtual std::shared_ptr<Modulus> operator()(const std::shared_ptr<Modulus>& x)
+        {
+            auto lhs = (*this)(x->lhs);
+            auto rhs = (*this)(x->rhs);
+            return std::make_shared<Modulus>(lhs, rhs);
+        }
+
+        virtual std::shared_ptr<Literal> operator()(const std::shared_ptr<Literal>& x)
+        {
+            return x;
+        }
+
+        virtual std::shared_ptr<Keyword> operator()(const std::shared_ptr<Keyword>& x)
+        {
+            return x;
+        }
+
+#define MAKE_DISPATCH(CLS)                \
+    if(std::dynamic_pointer_cast<CLS>(x)) \
+        return (*this)(std::dynamic_pointer_cast<CLS>(x));
+
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Node>& x)
+        {
+            std::cout << x->render() << std::endl;
+
+            MAKE_DISPATCH(Assign)
+            MAKE_DISPATCH(Add)
+            MAKE_DISPATCH(And)
+            //            MAKE_DISPATCH(ComplexLiteral)
+            MAKE_DISPATCH(Divide)
+            MAKE_DISPATCH(Less)
+            MAKE_DISPATCH(Literal)
+            MAKE_DISPATCH(Modulus)
+            MAKE_DISPATCH(Multiply)
+            // MAKE_DISPATCH(ScalarVariable)
+            // MAKE_DISPATCH(Subtract)
+            MAKE_DISPATCH(Variable)
+
+            // MAKE_DISPATCH(Call)
+            // MAKE_DISPATCH(CommentLines)
+            MAKE_DISPATCH(VariableDeclaration)
+            // MAKE_DISPATCH(For)
+            // MAKE_DISPATCH(If)
+            // MAKE_DISPATCH(LineBreak)
+            // MAKE_DISPATCH(Return)
+            // MAKE_DISPATCH(StatementList)
+            MAKE_DISPATCH(Keyword)
+
+            std::cout << "UNHANDLED " << x->render() << std::endl;
+
+            return x;
+        }
+    };
+
     //
     // Planar
     //
-    struct MakePlanarVisitor
+    class MakePlanarVisitor : public CopyVisitor
     {
+    public:
+        using CopyVisitor::operator();
+
         std::string varname, rename, imname;
 
         MakePlanarVisitor(std::string varname)
@@ -344,29 +480,7 @@ namespace gen
             imname = varname + "im";
         }
 
-        // MAKE_VISITOR(Expression, Add)
-        // MAKE_VISITOR(Expression, And)
-        // MAKE_VISITOR(Expression, ComplexLiteral)
-        // MAKE_VISITOR(Expression, Divide)
-        // MAKE_VISITOR(Expression, Less)
-        // MAKE_VISITOR(Expression, Literal)
-        // MAKE_VISITOR(Expression, Modulus)
-        // MAKE_VISITOR(Expression, Multiply)
-        // MAKE_VISITOR(Expression, ScalarVariable)
-        // MAKE_VISITOR(Expression, Subtract)
-        // MAKE_VISITOR(Expression, Variable)
-
-        // MAKE_VISITOR(Statement, Call)
-        // MAKE_VISITOR(Statement, CommentLines)
-        // MAKE_VISITOR(Statement, Declaration)
-        // MAKE_VISITOR(Statement, For)
-        // MAKE_VISITOR(Statement, If)
-        // MAKE_VISITOR(Statement, LineBreak)
-        // MAKE_VISITOR(Statement, Return)
-        // MAKE_VISITOR(Statement, StatementList)
-        // MAKE_VISITOR(Statement, SyncThreads)
-
-        ArgumentList operator()(const ArgumentList& x)
+        ArgumentList operator()(const ArgumentList& x) override
         {
             ArgumentList y;
             for(auto a : x.arguments)
@@ -399,94 +513,49 @@ namespace gen
             return y;
         }
 
-        StatementList operator()(const StatementList& x)
+        std::shared_ptr<Assign> operator()(const std::shared_ptr<Assign>& x) override
         {
-            StatementList y;
-            for(auto a : x.statements) {
-                y += a;
+            auto lhs = std::dynamic_pointer_cast<ScalarVariable>(x->lhs);
+            auto rhs = std::dynamic_pointer_cast<Variable>(x->rhs);
+
+            if (lhs == nullptr || rhs == nullptr)
+                return CopyVisitor::operator()(x);
+
+            if(lhs->name == varname)
+            {
+                // on lhs, lhs needs to be split; use .x and .y on rhs
+
+                auto stmts = StatementList();
+
+                auto re = std::make_shared<ScalarVariable>(lhs->name, lhs->type, lhs->index);
+                re->name = rename;
+                // auto im = Variable(x.lhs);
+                // im.name = imname;
+
+                // stmts += Assign(re, rhs.x);
+                // stmts += Assign(im, rhs.y);
+                // return Statement(stmts);
             }
-            return y;
-        }
+            else if(rhs->name == varname)
+            {
+                // on rhs, rhs needs to be joined as a complex literal
 
+                // auto rhs = std::get<Variable>(x.rhs);
+                // auto re  = Variable(rhs);
+                // re.name  = rename;
+                // auto im  = Variable(rhs);
+                // im.name  = imname;
+                // return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
+            }
 
-        // Statement operator()(const Assign& x)
-        //     {
-        //         if(x.lhs.name == varname && std::holds_alternative<Variable>(x.rhs))
-        //         {
-        //             // on lhs, lhs needs to be split; use .x and .y on rhs
-
-        //             auto rhs   = std::get<Variable>(x.rhs);
-        //             auto stmts = StatementList();
-
-        //             auto re = Variable(x.lhs);
-        //             re.name = rename;
-        //             auto im = Variable(x.lhs);
-        //             im.name = imname;
-
-        //             stmts += Assign(re, rhs.x);
-        //             stmts += Assign(im, rhs.y);
-        //             return Statement(stmts);
-        //         }
-        //         else if(std::holds_alternative<Variable>(x.rhs)
-        //                 && std::get<Variable>(x.rhs).name == varname)
-        //         {
-        //             // on rhs, rhs needs to be joined as a complex literal
-
-        //             auto rhs = std::get<Variable>(x.rhs);
-        //             auto re  = Variable(rhs);
-        //             re.name  = rename;
-        //             auto im  = Variable(rhs);
-        //             im.name  = imname;
-        //             return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
-        //         }
-
-        //         return Statement(x);
-        //     }
-
-        std::shared_ptr<Function> operator()(const std::shared_ptr<Function>& x)
-        {
-            auto nargs   = (*this)(x->arguments);
-            auto y       = std::make_shared<Function>(x->name, nargs);
-            y->arguments = (*this)(x->arguments);
-            y->body      = (*this)(x->body);
-            return y;
+            return CopyVisitor::operator()(x);
         }
     };
 
-    std::shared_ptr<Function> make_planar(std::shared_ptr<Function> x, std::string varname)
+    std::shared_ptr<Function> make_planar(const std::shared_ptr<Function>& x, std::string varname)
     {
         auto visitor = MakePlanarVisitor(varname);
         return visitor(x);
     }
-
-    /*
-        auto args = std::dynamic_pointer_cast<ArgumentList>(x);
-        if (args) {
-            auto nargs = std::make_shared<ArgumentList>();
-            for(auto arg : args->arguments) {
-                auto var = std::dynamic_pointer_cast<Variable>(arg);
-                if (var) {
-                    if (var->name == varname) {
-                        auto nvar = std::make_shared<Variable>(var->name, var->type, var->size);
-                        nvar->type = "real_type_t<" + var->type + ">";
-                        nargs->append(nvar);
-                    } else {
-                        nargs->append(var);
-                    }
-                } else {
-                    nargs->append(arg);
-                }
-            }
-            return nargs;
-        }
-
-        auto func = std::dynamic_pointer_cast<Function>(x);
-        if (func) {
-            auto alist = make_planar(func->arguments);
-            auto nfunc = std::make_shared<Function>(func->name, alist);
-        }
-
-        return x;
-*/
 
 }
