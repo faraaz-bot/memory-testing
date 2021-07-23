@@ -130,6 +130,7 @@ namespace gen
 
     MAKE_BINARY_RENDER(And);
     MAKE_BINARY_RENDER(Less);
+    MAKE_BINARY_RENDER(Greater);
 
     //
     // Variables
@@ -337,6 +338,14 @@ namespace gen
     // AST transformations
     //
 
+#define MAKE_BINARY_VISITOR(CLS)                                            \
+    virtual std::shared_ptr<Node> operator()(const std::shared_ptr<CLS>& x) \
+    {                                                                       \
+        auto lhs = (*this)(x->lhs);                                         \
+        auto rhs = (*this)(x->rhs);                                         \
+        return std::make_shared<CLS>(lhs, rhs);                             \
+    }
+
     class CopyVisitor
     {
     public:
@@ -360,7 +369,7 @@ namespace gen
             return y;
         }
 
-        virtual std::shared_ptr<Function> operator()(const std::shared_ptr<Function>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Function>& x)
         {
             auto nargs   = (*this)(x->arguments);
             auto y       = std::make_shared<Function>(x->name, nargs);
@@ -369,22 +378,16 @@ namespace gen
             return y;
         }
 
-        virtual std::shared_ptr<Assign> operator()(const std::shared_ptr<Assign>& x)
-        {
-            auto lhs = (*this)(x->lhs);
-            auto rhs = (*this)(x->rhs);
-            return assign(lhs, rhs);
-        }
+        MAKE_BINARY_VISITOR(Add)
+        MAKE_BINARY_VISITOR(And)
+        MAKE_BINARY_VISITOR(Assign)
+        MAKE_BINARY_VISITOR(Divide)
+        MAKE_BINARY_VISITOR(Less)
+        MAKE_BINARY_VISITOR(Modulus)
+        MAKE_BINARY_VISITOR(Multiply)
+        MAKE_BINARY_VISITOR(Subtract)
 
-        virtual std::shared_ptr<Add> operator()(const std::shared_ptr<Add>& x)
-        {
-            auto lhs = (*this)(x->lhs);
-            auto rhs = (*this)(x->rhs);
-            return std::make_shared<Add>(lhs, rhs);
-        }
-
-        virtual std::shared_ptr<VariableDeclaration>
-            operator()(const std::shared_ptr<VariableDeclaration>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<VariableDeclaration>& x)
         {
             if(x->size)
             {
@@ -394,36 +397,62 @@ namespace gen
             return std::make_shared<VariableDeclaration>(x->name, x->type, nullptr);
         }
 
-        virtual std::shared_ptr<ScalarVariable> operator()(const std::shared_ptr<ScalarVariable>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<ScalarVariable>& x)
         {
-            return x;
+            auto y = std::make_shared<ScalarVariable>(x->name, x->type, x->index);
+            y->component = x->component;
+            // y->x = (*this)(x->x);
+            // y->y = (*this)(x->y);
+            return y;
         }
 
-        virtual std::shared_ptr<Variable> operator()(const std::shared_ptr<Variable>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Variable>& x)
         {
             std::shared_ptr<Node> size, index;
             if(x->size)
                 size = (*this)(x->size);
             if(x->index)
                 index = (*this)(x->index);
-            return std::make_shared<Variable>(x->name, x->type, size, index);
+            auto y = std::make_shared<Variable>(x->name, x->type, size, index);
+            y->component = x->component;
+            return y;
         }
 
-        virtual std::shared_ptr<Modulus> operator()(const std::shared_ptr<Modulus>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<ComplexLiteral>& x)
         {
-            auto lhs = (*this)(x->lhs);
-            auto rhs = (*this)(x->rhs);
-            return std::make_shared<Modulus>(lhs, rhs);
+            auto re = (*this)(x->re);
+            auto im = (*this)(x->im);
+            return std::make_shared<ComplexLiteral>(re, im);
         }
 
-        virtual std::shared_ptr<Literal> operator()(const std::shared_ptr<Literal>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Literal>& x)
+        {
+            return x;
+        }
+
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Keyword>& x)
         {
             return x;
         }
 
-        virtual std::shared_ptr<Keyword> operator()(const std::shared_ptr<Keyword>& x)
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<LineBreak>& x)
         {
             return x;
+        }
+
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<IfBlock>& x)
+        {
+            auto condition = (*this)(x->condition);
+            auto body      = (*this)(x->body);
+            return std::make_shared<IfBlock>(condition, body);
+        }
+
+        virtual std::shared_ptr<Node> operator()(const std::shared_ptr<FunctionCall>& x)
+        {
+            auto f       = std::make_shared<FunctionCall>(x->name);
+            f->arguments = (*this)(x->arguments);
+            f->body      = (*this)(x->body);
+            return f;
         }
 
 #define MAKE_DISPATCH(CLS)                \
@@ -432,30 +461,27 @@ namespace gen
 
         virtual std::shared_ptr<Node> operator()(const std::shared_ptr<Node>& x)
         {
-            std::cout << x->render() << std::endl;
-
-            MAKE_DISPATCH(Assign)
             MAKE_DISPATCH(Add)
             MAKE_DISPATCH(And)
-            //            MAKE_DISPATCH(ComplexLiteral)
+            MAKE_DISPATCH(Assign)
+            MAKE_DISPATCH(ComplexLiteral)
             MAKE_DISPATCH(Divide)
             MAKE_DISPATCH(Less)
             MAKE_DISPATCH(Literal)
             MAKE_DISPATCH(Modulus)
             MAKE_DISPATCH(Multiply)
-            // MAKE_DISPATCH(ScalarVariable)
-            // MAKE_DISPATCH(Subtract)
+            MAKE_DISPATCH(Subtract)
             MAKE_DISPATCH(Variable)
 
-            // MAKE_DISPATCH(Call)
+            MAKE_DISPATCH(ScalarVariable)
+
+            MAKE_DISPATCH(FunctionCall)
             // MAKE_DISPATCH(CommentLines)
             MAKE_DISPATCH(VariableDeclaration)
             // MAKE_DISPATCH(For)
-            // MAKE_DISPATCH(If)
-            // MAKE_DISPATCH(LineBreak)
-            // MAKE_DISPATCH(Return)
-            // MAKE_DISPATCH(StatementList)
+            MAKE_DISPATCH(IfBlock)
             MAKE_DISPATCH(Keyword)
+            MAKE_DISPATCH(LineBreak)
 
             std::cout << "UNHANDLED " << x->render() << std::endl;
 
@@ -513,39 +539,41 @@ namespace gen
             return y;
         }
 
-        std::shared_ptr<Assign> operator()(const std::shared_ptr<Assign>& x) override
+        std::shared_ptr<Node> operator()(const std::shared_ptr<Assign>& x) override
         {
             auto lhs = std::dynamic_pointer_cast<ScalarVariable>(x->lhs);
-            auto rhs = std::dynamic_pointer_cast<Variable>(x->rhs);
+            auto rhs = std::dynamic_pointer_cast<ScalarVariable>(x->rhs);
 
-            if (lhs == nullptr || rhs == nullptr)
+            if(lhs == nullptr || rhs == nullptr)
                 return CopyVisitor::operator()(x);
 
             if(lhs->name == varname)
             {
                 // on lhs, lhs needs to be split; use .x and .y on rhs
 
-                auto stmts = StatementList();
+                auto stmts = std::make_shared<StatementList>();
 
-                auto re = std::make_shared<ScalarVariable>(lhs->name, lhs->type, lhs->index);
+                auto re  = std::make_shared<ScalarVariable>(lhs->name, lhs->type, lhs->index);
                 re->name = rename;
-                // auto im = Variable(x.lhs);
-                // im.name = imname;
+                auto im  = std::make_shared<ScalarVariable>(lhs->name, lhs->type, lhs->index);
+                im->name = imname;
 
-                // stmts += Assign(re, rhs.x);
-                // stmts += Assign(im, rhs.y);
-                // return Statement(stmts);
+                *stmts += assign(re, rhs->x);
+                *stmts += assign(im, rhs->y);
+
+                return std::dynamic_pointer_cast<Node>(stmts);
             }
             else if(rhs->name == varname)
             {
                 // on rhs, rhs needs to be joined as a complex literal
 
-                // auto rhs = std::get<Variable>(x.rhs);
-                // auto re  = Variable(rhs);
-                // re.name  = rename;
-                // auto im  = Variable(rhs);
-                // im.name  = imname;
-                // return Statement(Assign(x.lhs, ComplexLiteral(re.render(), im.render())));
+                auto rhs = std::dynamic_pointer_cast<ScalarVariable>(x->rhs);
+                auto re  = std::make_shared<ScalarVariable>(rhs->name, rhs->type, rhs->index);
+                re->name = rename;
+                auto im  = std::make_shared<ScalarVariable>(rhs->name, rhs->type, rhs->index);
+                im->name = imname;
+
+                return std::make_shared<Assign>(lhs, std::make_shared<ComplexLiteral>(re, im));
             }
 
             return CopyVisitor::operator()(x);
@@ -555,7 +583,7 @@ namespace gen
     std::shared_ptr<Function> make_planar(const std::shared_ptr<Function>& x, std::string varname)
     {
         auto visitor = MakePlanarVisitor(varname);
-        return visitor(x);
+        return std::dynamic_pointer_cast<Function>(visitor(x));
     }
 
 }

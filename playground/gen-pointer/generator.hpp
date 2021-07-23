@@ -116,6 +116,7 @@ namespace gen
 
     MAKE_BINARY(And, " && ", 100);
     MAKE_BINARY(Less, " < ", 100);
+    MAKE_BINARY(Greater, " > ", 100);
 
     //
     // Variables
@@ -150,6 +151,15 @@ namespace gen
 
     std::shared_ptr<Literal> literal_true();
     std::shared_ptr<Literal> literal_false();
+
+    struct ComplexLiteral : Node
+    {
+        std::shared_ptr<Node> re, im;
+        ComplexLiteral(std::shared_ptr<Node> re, std::shared_ptr<Node> im) : re(re), im(im) {};
+        std::string render() const {
+            return "{" + re->render() + ", " + im->render() + "}";
+        }
+    };
 
     struct VariableDeclaration : Node
     {

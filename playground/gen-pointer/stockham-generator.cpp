@@ -312,9 +312,9 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto stockham = StockhamGenerator(factors, 7);
+    auto stockham = StockhamGenerator(factors, 7, true);
     auto device   = stockham.make_device();
-    auto planar   = make_planar(device, "lds");
+    auto planar   = make_planar(device, "buf");
 
     /*
     auto global = make_global_fft(factors);
