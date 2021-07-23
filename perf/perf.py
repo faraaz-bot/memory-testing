@@ -34,6 +34,7 @@ def local(cmd, echo=True, **kwargs):
     """
     if echo:
         print('local: ' + cmd)
+    logging.info('local: ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
 
 
@@ -63,7 +64,7 @@ def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/ro
         defs += ['-DCMAKE_CXX_COMPILER_LAUNCHER=ccache']
 
     local(f'cmake {sjoin(defs)} ..', cwd=build, check=True)
-    local('make -j 8', cwd=build, check=True)
+    local('make -j $(nproc)', cwd=build, check=True)
 
     if dest:
         local('make install', cwd=build, check=True)
@@ -198,6 +199,33 @@ def load_suite(suite):
     return ns['make_suite'](s)
 
 
+def run_dyna(build1, build2, ntrials, suite, output):
+    """Compare performance of two builds using dynamic library loading."""
+
+    from perflib.rocfft import RIDERFFTTestRunner as TestRunner
+
+    generator = load_suite(suite)
+
+    output = path(output)
+    output.mkdir(exist_ok=True)
+
+    for build in [build1, build2]:
+        specs = output / build / 'specs.txt'
+        specs.parent.mkdir(exist_ok=True)
+        specs.write_text(str(perflib.get_machine_specs(0)))
+
+    dino = path(build1) / 'dyna-rocfft-rider'
+
+    for test in generator():
+        runner = TestRunner(**test,
+                            rider=dino, ntrials=ntrials,
+                            builds=[path(build1), path(build2)])
+        print(f'# running {runner.label}')
+        results = runner.run()
+        runner.write(output, runner.label + '.dat', results, title=runner.label)
+
+
+
 @cli.command()
 @click.option('--ntrials', type=int, default=10, help='Number of trials (default 10).')
 @click.option('--verify', type=bool, default=False, is_flag=True, help='Verify results (default False).')
@@ -254,54 +282,66 @@ def list(suite):
 @click.option('--output', type=str, default='.', help='Output directory to save results in.')
 def dyna(build1, build2, ntrials, suite, output):
     """Compare performance of two builds using dynamic library loading."""
-
-    from perflib.rocfft import RIDERFFTTestRunner as TestRunner
-
-    generator = load_suite(suite)
-
-    output = path(output)
-    output.mkdir(exist_ok=True)
-
-    for build in [build1, build2]:
-        specs = output / build / 'specs.txt'
-        specs.parent.mkdir(exist_ok=True)
-        specs.write_text(str(perflib.get_machine_specs(0)))
-
-    dino = path(build1) / 'dyna-rocfft-rider'
-
-    for test in generator():
-        runner = TestRunner(**test,
-                            rider=dino, ntrials=ntrials,
-                            builds=[path(build1), path(build2)])
-        print(f'# running {runner.label}')
-        results = runner.run()
-        runner.write(output, runner.label + '.dat', results, title=runner.label)
+    run_dyna(build1, build2, ntrials, suite, output)
 
 
 @cli.command()
-def autodyna():
+@click.option('--host', type=str, default=None)
+@click.option('--reference-branch', type=str, default=None)
+@click.option('--reference-repository', type=str, default=None)
+@click.option('--branch', type=str, default=None)
+@click.option('--repository', type=str, default=None)
+@click.option('--suite', type=str, default=None)
+@click.option('--user', type=str, envvar='PERF_USER')
+def autodyna(host, reference_branch, reference_repository, branch, repository, suite, user):
     """Compare performance of two builds automagically."""
 
-    branch1 = click.prompt("Reference branch", default="develop", type=str)
-    repo1   = click.prompt("Reference repo  ", default="git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git", type=str)
-    build1  = path(f'build-{branch1}')
+    if host is None:
+        host = click.prompt('Host', default='localhost', type=str)
 
-    branch2 = click.prompt("PR branch", type=str)
-    repo2   = click.prompt("PR repo  ", default=repo1, type=str)
-    build2  = path(f'build-{branch2}')
-    output  = path(f'dyna-{branch2}')
+    if reference_branch is None:
+        reference_branch = click.prompt('Reference branch', default='develop', type=str)
+
+    if reference_repository is None:
+        reference_repository = click.prompt('Reference repo',
+                                            default='git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git', type=str)
+
+    if branch is None:
+        branch = click.prompt('PR branch', type=str)
+
+    if repository is None:
+        repository = f'git@github.com:{user}/rocFFT-internal.git'
+        repository = click.prompt('PR repo', default=repository, type=str)
+
+    if suite is None:
+        suite = click.prompt('Test suite', default='all', type=str)
+
+    if host != 'localhost':
+        cmd = ['ssh', host, 'nohup', 'perf', 'autodyna']
+        cmd += ['--host', 'localhost']
+        cmd += ['--reference-branch', reference_branch]
+        cmd += ['--reference-repository', reference_repository]
+        cmd += ['--branch', branch]
+        cmd += ['--repository', repository]
+        cmd += ['--suite', suite]
+        local(sjoin(cmd))
+        return
+
+    build1  = path(f'build-{reference_branch}').resolve()
+    build2  = path(f'build-{branch}').resolve()
+    output  = path(f'dyna-{branch}').resolve()
 
     lib1 = build1 / 'lib' / 'librocfft.so'
+    lib1.parent.mkdir(parents=True, exist_ok=True)
     if not lib1.exists():
-        build_rocfft(branch1, dest=build1, repo=repo1, ccache=True)
+        build_rocfft(reference_branch, dest=build1, repo=reference_repository, ccache=True)
 
     lib2 = build2 / 'lib' / 'librocfft.so'
+    lib2.parent.mkdir(parents=True, exist_ok=True)
     if not lib2.exists():
-        build_rocfft(branch2, dest=build2, repo=repo2, ccache=True)
+        build_rocfft(branch, dest=build2, repo=repository, ccache=True)
 
-
-
-
+    run_dyna(build1, build2, ntrials=10, suite=suite, output=output)
 
 
 
