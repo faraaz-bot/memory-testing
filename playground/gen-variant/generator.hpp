@@ -24,37 +24,6 @@ int get_precedence(const T& x)
 }
 
 //
-// Declarations
-//
-
-class Declaration
-{
-public:
-    std::string name, type;
-    bool        pointer;
-    std::string size;
-    Declaration(std::string name, std::string type, bool pointer = false, std::string size = "")
-        : name(name)
-        , type(type)
-        , pointer(pointer)
-        , size(size){};
-    std::string render() const;
-};
-
-std::string Declaration::render() const
-{
-    std::string s;
-    s = type;
-    if(pointer)
-        s += "*";
-    s += " " + name;
-    if(!size.empty())
-        s += "[" + size + "]";
-    s += ";";
-    return s;
-}
-
-//
 // Expressions
 //
 
@@ -176,7 +145,6 @@ public:
     Variable(const Variable& v, const Expression& index);
 
     Variable       operator[](const Expression& index) const;
-    Declaration    declaration() const;
     ScalarVariable address() const;
 
     std::string render() const;
@@ -252,6 +220,8 @@ Variable::Variable(std::string _name, std::string _type, bool pointer, bool rest
 Variable::Variable(const Variable& v)
     : name(v.name)
     , type(v.type)
+    , pointer(v.pointer)
+    , restrict(v.restrict)
     , x(v.name + ".x", v.type)
     , y(v.name + ".y", v.type)
 {
@@ -268,6 +238,8 @@ Variable::Variable(const Variable& v)
 Variable::Variable(const Variable& v, const Expression& _index)
     : name(v.name)
     , type(v.type)
+    , pointer(v.pointer)
+    , restrict(v.restrict)
     , x(v.name, v.type)
     , y(v.name, v.type)
     , index(_index)
@@ -275,13 +247,6 @@ Variable::Variable(const Variable& v, const Expression& _index)
     size   = v.size;
     x.name = v.name + "[" + vrender(*index) + "].x";
     y.name = v.name + "[" + vrender(*index) + "].y";
-}
-
-Declaration Variable::declaration() const
-{
-    if(size)
-        return Declaration(name, type, pointer, vrender(*size));
-    return Declaration(name, type, pointer);
 }
 
 ScalarVariable Variable::address() const
@@ -363,6 +328,7 @@ OptionalExpression::OptionalExpression(const Expression& expr)
 
 class Assign;
 class Call;
+class Declaration;
 class For;
 class If;
 class StatementList;
@@ -497,6 +463,38 @@ ArgumentList::operator bool() const
 void ArgumentList::append(Variable v)
 {
     arguments.push_back(v);
+}
+
+//
+// Declarations
+//
+
+class Declaration
+{
+public:
+    Variable                  var;
+    std::optional<Expression> value;
+    Declaration(Variable v)
+        : var(v){};
+    Declaration(Variable v, Expression val)
+        : var(v)
+        , value(val){};
+    std::string render() const;
+};
+
+std::string Declaration::render() const
+{
+    std::string s;
+    s = var.type;
+    if(var.pointer)
+        s += "*";
+    s += " " + var.name;
+    if(var.size)
+        s += "[" + vrender(*var.size) + "]";
+    if(value)
+        s += " = " + vrender(*value);
+    s += ";";
+    return s;
 }
 
 class Call

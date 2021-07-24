@@ -206,12 +206,10 @@ struct StockhamGenerator
         }
         kdevice.arguments.append(write);
 
-        kdevice.body += thread.declaration();
-        kdevice.body += R.declaration();
-        kdevice.body += W.declaration();
-        kdevice.body += t.declaration();
-
-        kdevice.body += Assign(thread, thread_id % threads_per_transform);
+        kdevice.body += Declaration(thread, thread_id % threads_per_transform);
+        kdevice.body += Declaration(R);
+        kdevice.body += Declaration(W);
+        kdevice.body += Declaration(t);
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
@@ -277,8 +275,7 @@ struct StockhamGenerator
         Variable accumulator{"accumulator", "int"};
         Variable var{"myvar", "int"};
 
-        kdevice.body += accumulator.declaration();
-        kdevice.body += Assign{accumulator, Literal{0}};
+        kdevice.body += Declaration(accumulator, Literal{0});
         For forloop(Variable{"myvar", "int"}, Literal{0}, Less{var, Literal{1}}, Literal{1});
         forloop.body += Assign{accumulator, Add{accumulator, var}};
         kdevice.body += forloop;
