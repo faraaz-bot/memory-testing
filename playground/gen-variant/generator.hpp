@@ -46,6 +46,12 @@ class Less;
 class LessEqual;
 class Greater;
 class GreaterEqual;
+class Equal;
+class NotEqual;
+
+class UnaryMinus;
+class PreIncrement;
+class PreDecrement;
 
 using Expression = std::variant<ScalarVariable,
                                 Variable,
@@ -63,7 +69,12 @@ using Expression = std::variant<ScalarVariable,
                                 Less,
                                 LessEqual,
                                 Greater,
-                                GreaterEqual>;
+                                GreaterEqual,
+                                Equal,
+                                NotEqual,
+                                UnaryMinus,
+                                PreIncrement,
+                                PreDecrement>;
 
 class OptionalExpression
 {
@@ -162,10 +173,10 @@ public:
     std::string render() const;
 };
 
-#define MAKE_BINARY(NAME, SEP, PRECEDENCE)               \
+#define MAKE_OPER(NAME, OPER, PRECEDENCE)                \
     class NAME                                           \
     {                                                    \
-        std::string separator{SEP};                      \
+        std::string oper{OPER};                          \
                                                          \
     public:                                              \
         int const               precedence = PRECEDENCE; \
@@ -185,7 +196,7 @@ public:
             s += "(" + vrender(args[0]) + ")";   \
         else                                     \
             s += vrender(args[0]);               \
-        s += separator;                          \
+        s += oper;                               \
         if(get_precedence(args[1]) > precedence) \
             s += "(" + vrender(args[1]) + ")";   \
         else                                     \
@@ -193,20 +204,37 @@ public:
         return s;                                \
     }
 
-MAKE_BINARY(Add, " + ", 6);
-MAKE_BINARY(Subtract, " - ", 6);
-MAKE_BINARY(Multiply, " * ", 5);
-MAKE_BINARY(Divide, " / ", 5);
-MAKE_BINARY(Modulus, " % ", 5);
+#define MAKE_UNARY_PREFIX_METHODS(NAME)               \
+    std::string NAME::render() const                  \
+    {                                                 \
+        std::string s = oper;                         \
+        if(get_precedence(args.front()) > precedence) \
+            s += "(" + vrender(args.front()) + ")";   \
+        else                                          \
+            s += vrender(args.front());               \
+        return s;                                     \
+    }
 
-MAKE_BINARY(Less, " < ", 9);
-MAKE_BINARY(LessEqual, " <= ", 9);
-MAKE_BINARY(Greater, " > ", 9);
-MAKE_BINARY(GreaterEqual, " >= ", 9);
-MAKE_BINARY(ShiftLeft, " << ", 7);
-MAKE_BINARY(ShiftRight, " >> ", 7);
-MAKE_BINARY(And, " && ", 14);
-MAKE_BINARY(Or, " || ", 15);
+MAKE_OPER(Add, " + ", 6);
+MAKE_OPER(Subtract, " - ", 6);
+MAKE_OPER(Multiply, " * ", 5);
+MAKE_OPER(Divide, " / ", 5);
+MAKE_OPER(Modulus, " % ", 5);
+
+MAKE_OPER(Less, " < ", 9);
+MAKE_OPER(LessEqual, " <= ", 9);
+MAKE_OPER(Greater, " > ", 9);
+MAKE_OPER(GreaterEqual, " >= ", 9);
+MAKE_OPER(Equal, " == ", 10);
+MAKE_OPER(NotEqual, " != ", 10);
+MAKE_OPER(ShiftLeft, " << ", 7);
+MAKE_OPER(ShiftRight, " >> ", 7);
+MAKE_OPER(And, " && ", 14);
+MAKE_OPER(Or, " || ", 15);
+
+MAKE_OPER(UnaryMinus, " -", 3);
+MAKE_OPER(PreIncrement, " ++", 3);
+MAKE_OPER(PreDecrement, " --", 3);
 
 MAKE_BINARY_METHODS(Add);
 MAKE_BINARY_METHODS(Subtract);
@@ -218,10 +246,16 @@ MAKE_BINARY_METHODS(Less);
 MAKE_BINARY_METHODS(LessEqual);
 MAKE_BINARY_METHODS(Greater);
 MAKE_BINARY_METHODS(GreaterEqual);
+MAKE_BINARY_METHODS(Equal);
+MAKE_BINARY_METHODS(NotEqual);
 MAKE_BINARY_METHODS(ShiftLeft);
 MAKE_BINARY_METHODS(ShiftRight);
 MAKE_BINARY_METHODS(And);
 MAKE_BINARY_METHODS(Or);
+
+MAKE_UNARY_PREFIX_METHODS(UnaryMinus);
+MAKE_UNARY_PREFIX_METHODS(PreIncrement);
+MAKE_UNARY_PREFIX_METHODS(PreDecrement);
 
 std::string ScalarVariable::render() const
 {
@@ -341,6 +375,16 @@ GreaterEqual operator>=(const Expression& a, const Expression& b)
     return GreaterEqual{a, b};
 }
 
+Equal operator==(const Expression& a, const Expression& b)
+{
+    return Equal{a, b};
+}
+
+NotEqual operator!=(const Expression& a, const Expression& b)
+{
+    return NotEqual{a, b};
+}
+
 ShiftLeft operator<<(const Expression& a, const Expression& b)
 {
     return ShiftLeft{a, b};
@@ -359,6 +403,21 @@ And operator&&(const Expression& a, const Expression& b)
 Or operator||(const Expression& a, const Expression& b)
 {
     return Or{a, b};
+}
+
+UnaryMinus operator-(const Expression& a)
+{
+    return UnaryMinus{a};
+}
+
+PreIncrement operator++(const Expression& a)
+{
+    return PreIncrement{a};
+}
+
+PreDecrement operator--(const Expression& a)
+{
+    return PreDecrement{a};
 }
 
 OptionalExpression::operator bool() const
@@ -712,6 +771,7 @@ MAKE_TRIVIAL_VISIT(Expression, Add)
 MAKE_TRIVIAL_VISIT(Expression, And)
 MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
 MAKE_TRIVIAL_VISIT(Expression, Divide)
+MAKE_TRIVIAL_VISIT(Expression, Equal)
 MAKE_TRIVIAL_VISIT(Expression, Greater)
 MAKE_TRIVIAL_VISIT(Expression, GreaterEqual)
 MAKE_TRIVIAL_VISIT(Expression, Less)
@@ -719,11 +779,16 @@ MAKE_TRIVIAL_VISIT(Expression, LessEqual)
 MAKE_TRIVIAL_VISIT(Expression, Literal)
 MAKE_TRIVIAL_VISIT(Expression, Modulus)
 MAKE_TRIVIAL_VISIT(Expression, Multiply)
+MAKE_TRIVIAL_VISIT(Expression, NotEqual)
 MAKE_TRIVIAL_VISIT(Expression, Or)
 MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
 MAKE_TRIVIAL_VISIT(Expression, ShiftLeft)
 MAKE_TRIVIAL_VISIT(Expression, ShiftRight)
 MAKE_TRIVIAL_VISIT(Expression, Subtract)
+
+MAKE_TRIVIAL_VISIT(Expression, UnaryMinus)
+MAKE_TRIVIAL_VISIT(Expression, PreIncrement)
+MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
 
 MAKE_TRIVIAL_VISIT(Statement, CommentLines)
 MAKE_TRIVIAL_VISIT(Statement, Declaration)
@@ -818,6 +883,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, And)
     MAKE_VISITOR(Expression, ComplexLiteral)
     MAKE_VISITOR(Expression, Divide)
+    MAKE_VISITOR(Expression, Equal)
     MAKE_VISITOR(Expression, Greater)
     MAKE_VISITOR(Expression, GreaterEqual)
     MAKE_VISITOR(Expression, Less)
@@ -825,11 +891,15 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, Literal)
     MAKE_VISITOR(Expression, Modulus)
     MAKE_VISITOR(Expression, Multiply)
+    MAKE_VISITOR(Expression, NotEqual)
     MAKE_VISITOR(Expression, Or)
+    MAKE_VISITOR(Expression, PreDecrement)
+    MAKE_VISITOR(Expression, PreIncrement)
     MAKE_VISITOR(Expression, ScalarVariable)
     MAKE_VISITOR(Expression, ShiftLeft)
     MAKE_VISITOR(Expression, ShiftRight)
     MAKE_VISITOR(Expression, Subtract)
+    MAKE_VISITOR(Expression, UnaryMinus)
     MAKE_VISITOR(Expression, Variable)
 
     MAKE_VISITOR(Statement, Call)
