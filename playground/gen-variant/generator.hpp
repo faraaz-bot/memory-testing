@@ -150,7 +150,7 @@ public:
     std::string render() const;
 };
 
-#define MAKE_ARITH(NAME, SEP, PRECEDENCE)                \
+#define MAKE_BINARY(NAME, SEP, PRECEDENCE)               \
     class NAME                                           \
     {                                                    \
         std::string separator{SEP};                      \
@@ -165,7 +165,7 @@ public:
         std::string render() const;                      \
     };
 
-#define MAKE_ARITH_METHODS(NAME)                 \
+#define MAKE_BINARY_METHODS(NAME)                \
     std::string NAME::render() const             \
     {                                            \
         std::string s;                           \
@@ -181,23 +181,23 @@ public:
         return s;                                \
     }
 
-MAKE_ARITH(Add, " + ", 50);
-MAKE_ARITH(Multiply, " * ", 100);
-MAKE_ARITH(Subtract, " - ", 50);
-MAKE_ARITH(Divide, " / ", 100);
-MAKE_ARITH(Modulus, " % ", 100);
+MAKE_BINARY(Add, " + ", 50);
+MAKE_BINARY(Multiply, " * ", 100);
+MAKE_BINARY(Subtract, " - ", 50);
+MAKE_BINARY(Divide, " / ", 100);
+MAKE_BINARY(Modulus, " % ", 100);
 
-MAKE_ARITH(And, " && ", 100);
-MAKE_ARITH(Less, " < ", 100);
+MAKE_BINARY(And, " && ", 100);
+MAKE_BINARY(Less, " < ", 100);
 
-MAKE_ARITH_METHODS(Add);
-MAKE_ARITH_METHODS(Multiply);
-MAKE_ARITH_METHODS(Subtract);
-MAKE_ARITH_METHODS(Divide);
-MAKE_ARITH_METHODS(Modulus);
+MAKE_BINARY_METHODS(Add);
+MAKE_BINARY_METHODS(Multiply);
+MAKE_BINARY_METHODS(Subtract);
+MAKE_BINARY_METHODS(Divide);
+MAKE_BINARY_METHODS(Modulus);
 
-MAKE_ARITH_METHODS(And);
-MAKE_ARITH_METHODS(Less);
+MAKE_BINARY_METHODS(And);
+MAKE_BINARY_METHODS(Less);
 
 std::string ScalarVariable::render() const
 {
