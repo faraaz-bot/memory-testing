@@ -69,7 +69,7 @@ class Literal
     std::string value;
 
 public:
-    int const precedence = 100;
+    int const precedence = 0;
 
     template <typename T>
     Literal(T l)
@@ -88,7 +88,7 @@ class ComplexLiteral
     std::string xvalue, yvalue;
 
 public:
-    int const precedence = 100;
+    int const precedence = 0;
 
     template <typename T>
     ComplexLiteral(T l, T r)
@@ -111,7 +111,7 @@ public:
 
 struct ScalarVariable
 {
-    int const   precedence = 100;
+    int const   precedence = 0;
     std::string name, type;
     ScalarVariable(std::string name, std::string type)
         : name(name)
@@ -122,7 +122,7 @@ struct ScalarVariable
 class Variable
 {
 public:
-    int const          precedence = 100;
+    int const          precedence = 0;
     std::string        name, type;
     bool               pointer, restrict;
     ScalarVariable     x, y;
@@ -169,35 +169,35 @@ public:
     std::string NAME::render() const             \
     {                                            \
         std::string s;                           \
-        if(get_precedence(args[0]) < precedence) \
+        if(get_precedence(args[0]) > precedence) \
             s += "(" + vrender(args[0]) + ")";   \
         else                                     \
             s += vrender(args[0]);               \
         s += separator;                          \
-        if(get_precedence(args[1]) < precedence) \
+        if(get_precedence(args[1]) > precedence) \
             s += "(" + vrender(args[1]) + ")";   \
         else                                     \
             s += vrender(args[1]);               \
         return s;                                \
     }
 
-MAKE_BINARY(Add, " + ", 50);
-MAKE_BINARY(Multiply, " * ", 100);
-MAKE_BINARY(Subtract, " - ", 50);
-MAKE_BINARY(Divide, " / ", 100);
-MAKE_BINARY(Modulus, " % ", 100);
+MAKE_BINARY(Add, " + ", 6);
+MAKE_BINARY(Subtract, " - ", 6);
+MAKE_BINARY(Multiply, " * ", 5);
+MAKE_BINARY(Divide, " / ", 5);
+MAKE_BINARY(Modulus, " % ", 5);
 
-MAKE_BINARY(And, " && ", 100);
-MAKE_BINARY(Less, " < ", 100);
+MAKE_BINARY(Less, " < ", 9);
+MAKE_BINARY(And, " && ", 14);
 
 MAKE_BINARY_METHODS(Add);
-MAKE_BINARY_METHODS(Multiply);
 MAKE_BINARY_METHODS(Subtract);
+MAKE_BINARY_METHODS(Multiply);
 MAKE_BINARY_METHODS(Divide);
 MAKE_BINARY_METHODS(Modulus);
 
-MAKE_BINARY_METHODS(And);
 MAKE_BINARY_METHODS(Less);
+MAKE_BINARY_METHODS(And);
 
 std::string ScalarVariable::render() const
 {
