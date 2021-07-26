@@ -38,8 +38,14 @@ class Multiply;
 class Divide;
 class Modulus;
 
+class ShiftLeft;
+class ShiftRight;
 class And;
+class Or;
 class Less;
+class LessEqual;
+class Greater;
+class GreaterEqual;
 
 using Expression = std::variant<ScalarVariable,
                                 Variable,
@@ -50,8 +56,14 @@ using Expression = std::variant<ScalarVariable,
                                 Multiply,
                                 Divide,
                                 Modulus,
+                                ShiftLeft,
+                                ShiftRight,
                                 And,
-                                Less>;
+                                Or,
+                                Less,
+                                LessEqual,
+                                Greater,
+                                GreaterEqual>;
 
 class OptionalExpression
 {
@@ -188,7 +200,13 @@ MAKE_BINARY(Divide, " / ", 5);
 MAKE_BINARY(Modulus, " % ", 5);
 
 MAKE_BINARY(Less, " < ", 9);
+MAKE_BINARY(LessEqual, " <= ", 9);
+MAKE_BINARY(Greater, " > ", 9);
+MAKE_BINARY(GreaterEqual, " >= ", 9);
+MAKE_BINARY(ShiftLeft, " << ", 7);
+MAKE_BINARY(ShiftRight, " >> ", 7);
 MAKE_BINARY(And, " && ", 14);
+MAKE_BINARY(Or, " || ", 15);
 
 MAKE_BINARY_METHODS(Add);
 MAKE_BINARY_METHODS(Subtract);
@@ -197,7 +215,13 @@ MAKE_BINARY_METHODS(Divide);
 MAKE_BINARY_METHODS(Modulus);
 
 MAKE_BINARY_METHODS(Less);
+MAKE_BINARY_METHODS(LessEqual);
+MAKE_BINARY_METHODS(Greater);
+MAKE_BINARY_METHODS(GreaterEqual);
+MAKE_BINARY_METHODS(ShiftLeft);
+MAKE_BINARY_METHODS(ShiftRight);
 MAKE_BINARY_METHODS(And);
+MAKE_BINARY_METHODS(Or);
 
 std::string ScalarVariable::render() const
 {
@@ -302,9 +326,39 @@ Less operator<(const Expression& a, const Expression& b)
     return Less{a, b};
 }
 
+LessEqual operator<=(const Expression& a, const Expression& b)
+{
+    return LessEqual{a, b};
+}
+
+Greater operator>(const Expression& a, const Expression& b)
+{
+    return Greater{a, b};
+}
+
+GreaterEqual operator>=(const Expression& a, const Expression& b)
+{
+    return GreaterEqual{a, b};
+}
+
+ShiftLeft operator<<(const Expression& a, const Expression& b)
+{
+    return ShiftLeft{a, b};
+}
+
+ShiftRight operator>>(const Expression& a, const Expression& b)
+{
+    return ShiftRight{a, b};
+}
+
 And operator&&(const Expression& a, const Expression& b)
 {
     return And{a, b};
+}
+
+Or operator||(const Expression& a, const Expression& b)
+{
+    return Or{a, b};
 }
 
 OptionalExpression::operator bool() const
@@ -658,11 +712,17 @@ MAKE_TRIVIAL_VISIT(Expression, Add)
 MAKE_TRIVIAL_VISIT(Expression, And)
 MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
 MAKE_TRIVIAL_VISIT(Expression, Divide)
+MAKE_TRIVIAL_VISIT(Expression, Greater)
+MAKE_TRIVIAL_VISIT(Expression, GreaterEqual)
 MAKE_TRIVIAL_VISIT(Expression, Less)
+MAKE_TRIVIAL_VISIT(Expression, LessEqual)
 MAKE_TRIVIAL_VISIT(Expression, Literal)
 MAKE_TRIVIAL_VISIT(Expression, Modulus)
 MAKE_TRIVIAL_VISIT(Expression, Multiply)
+MAKE_TRIVIAL_VISIT(Expression, Or)
 MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
+MAKE_TRIVIAL_VISIT(Expression, ShiftLeft)
+MAKE_TRIVIAL_VISIT(Expression, ShiftRight)
 MAKE_TRIVIAL_VISIT(Expression, Subtract)
 
 MAKE_TRIVIAL_VISIT(Statement, CommentLines)
@@ -758,11 +818,17 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, And)
     MAKE_VISITOR(Expression, ComplexLiteral)
     MAKE_VISITOR(Expression, Divide)
+    MAKE_VISITOR(Expression, Greater)
+    MAKE_VISITOR(Expression, GreaterEqual)
     MAKE_VISITOR(Expression, Less)
+    MAKE_VISITOR(Expression, LessEqual)
     MAKE_VISITOR(Expression, Literal)
     MAKE_VISITOR(Expression, Modulus)
     MAKE_VISITOR(Expression, Multiply)
+    MAKE_VISITOR(Expression, Or)
     MAKE_VISITOR(Expression, ScalarVariable)
+    MAKE_VISITOR(Expression, ShiftLeft)
+    MAKE_VISITOR(Expression, ShiftRight)
     MAKE_VISITOR(Expression, Subtract)
     MAKE_VISITOR(Expression, Variable)
 
