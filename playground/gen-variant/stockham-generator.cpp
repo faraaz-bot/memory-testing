@@ -148,10 +148,10 @@ struct StockhamGenerator
 
     StatementList butterfly(uint h)
     {
-        StatementList stmts;
-        auto          args = ArgumentList();
+        StatementList           stmts;
+        std::vector<Expression> args;
         for(uint w = 0; w < width; ++w)
-            args.append(R[h * width + w].address());
+            args.push_back(R + (h * width + w));
         stmts += Call("FwdRad" + std::to_string(width), args);
         return stmts;
     }

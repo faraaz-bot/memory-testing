@@ -613,10 +613,10 @@ std::string Declaration::render() const
 class Call
 {
 public:
-    std::string  name;
-    ArgumentList arguments;
+    std::string             name;
+    std::vector<Expression> arguments;
 
-    Call(std::string name, ArgumentList arguments)
+    Call(std::string name, std::vector<Expression> arguments)
         : name(name)
         , arguments(arguments){};
 
@@ -626,7 +626,16 @@ public:
 std::string Call::render() const
 {
     std::string f;
-    f += name + "(" + arguments.render() + ");";
+    f += name + "(";
+    const char* separator = nullptr;
+    for(const auto& arg : arguments)
+    {
+        if(separator)
+            f += separator;
+        f += vrender(arg);
+        separator = ",";
+    }
+    f += ");";
     return f;
 }
 
@@ -831,8 +840,10 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
 template <class Visitor>
 Statement visit(Visitor&& vis, const Call& x)
 {
-    auto y      = Call(x);
-    y.arguments = visit(vis, x.arguments);
+    auto y = Call(x);
+    y.arguments.reserve(x.arguments.size());
+    for(const auto& arg : x.arguments)
+        y.arguments.push_back(visit(vis, arg));
     return y;
 }
 
