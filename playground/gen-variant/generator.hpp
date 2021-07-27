@@ -444,6 +444,7 @@ class Call;
 class Declaration;
 class For;
 class If;
+class Else;
 class StatementList;
 
 struct LineBreak
@@ -492,6 +493,7 @@ using Statement = std::variant<Assign,
                                Declaration,
                                For,
                                If,
+                               Else,
                                LineBreak,
                                Return,
                                SyncThreads,
@@ -700,6 +702,15 @@ public:
     std::string render() const;
 };
 
+class Else
+{
+public:
+    StatementList body;
+    Else(StatementList body)
+        : body(body){};
+    std::string render() const;
+};
+
 std::string StatementList::render() const
 {
     std::string r;
@@ -743,6 +754,15 @@ std::string If::render() const
     s += "if(";
     s += vrender(condition);
     s += ") {\n";
+    s += body.render();
+    s += "\n}\n";
+    return s;
+}
+
+std::string Else::render() const
+{
+    std::string s;
+    s += "else {\n";
     s += body.render();
     s += "\n}\n";
     return s;
@@ -890,6 +910,13 @@ Statement visit(Visitor&& vis, const If& x)
 }
 
 template <class Visitor>
+Statement visit(Visitor&& vis, const Else& x)
+{
+    auto body = std::get<StatementList>(visit(vis, x.body));
+    return Else(body);
+}
+
+template <class Visitor>
 Function visit(Visitor&& vis, const Function& x)
 {
     auto y      = Function(x.name);
@@ -941,6 +968,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, Declaration)
     MAKE_VISITOR(Statement, For)
     MAKE_VISITOR(Statement, If)
+    MAKE_VISITOR(Statement, Else)
     MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
