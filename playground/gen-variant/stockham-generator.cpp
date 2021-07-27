@@ -280,6 +280,10 @@ struct StockhamGenerator
         forloop.body += Assign{accumulator, Add{accumulator, var}};
         kdevice.body += forloop;
 
+        // test a function call with template parameters
+        Call c{"myfunc", TemplateList{{{"foo", "int"}, {"bar", "char"}}}, {Literal{1}, Literal{2}}};
+        kdevice.body += c;
+
         return kdevice;
     }
 };

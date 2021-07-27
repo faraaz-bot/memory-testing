@@ -614,10 +614,15 @@ class Call
 {
 public:
     std::string             name;
+    TemplateList            templates;
     std::vector<Expression> arguments;
 
     Call(std::string name, std::vector<Expression> arguments)
         : name(name)
+        , arguments(arguments){};
+    Call(std::string name, TemplateList templates, std::vector<Expression> arguments)
+        : name(name)
+        , templates(templates)
         , arguments(arguments){};
 
     std::string render() const;
@@ -626,14 +631,30 @@ public:
 std::string Call::render() const
 {
     std::string f;
-    f += name + "(";
+    f += name;
     const char* separator = nullptr;
+    const char* comma     = ",";
+    if(!templates.arguments.empty())
+    {
+        f += "<";
+        // template args just have the names, not types
+        for(const auto& arg : templates.arguments)
+        {
+            if(separator)
+                f += separator;
+            f += arg.name;
+            separator = comma;
+        }
+        f += ">";
+    }
+    f += "(";
+    separator = nullptr;
     for(const auto& arg : arguments)
     {
         if(separator)
             f += separator;
         f += vrender(arg);
-        separator = ",";
+        separator = comma;
     }
     f += ");";
     return f;
@@ -840,7 +861,9 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
 template <class Visitor>
 Statement visit(Visitor&& vis, const Call& x)
 {
-    auto y = Call(x);
+    auto y      = Call(x);
+    y.templates = visit(vis, x.templates);
+    y.arguments.clear();
     y.arguments.reserve(x.arguments.size());
     for(const auto& arg : x.arguments)
         y.arguments.push_back(visit(vis, arg));
