@@ -149,11 +149,13 @@ void solution_0(int* d_data, bool coop_launch)
     {
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-        hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        GPU_ERR_CHECK(
+            hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
         b_stride = LEN * LEN;
         c_stride = LEN * LEN;
 
-        hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        GPU_ERR_CHECK(
+            hipLaunchCooperativeKernel(plus_one, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
     }
 }
 
@@ -183,8 +185,8 @@ void solution_1(int* d_data, bool coop_launch)
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-    hipLaunchCooperativeKernel(
-        plus_one_twice_hip_coop, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+    GPU_ERR_CHECK(hipLaunchCooperativeKernel(
+        plus_one_twice_hip_coop, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
 }
 
 //-----------------------------------------------------------------------------
@@ -231,8 +233,8 @@ void solution_2(int* d_data, bool coop_launch)
         int   c_stride     = LEN;
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-        hipLaunchCooperativeKernel(
-            plus_one_twice_sync_all_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        GPU_ERR_CHECK(hipLaunchCooperativeKernel(
+            plus_one_twice_sync_all_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
     }
 }
 
@@ -303,8 +305,8 @@ void solution_3(int* d_data, bool coop_launch)
         int   c_stride     = LEN;
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-        hipLaunchCooperativeKernel(
-            plus_one_twice_sync_partion_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        GPU_ERR_CHECK(hipLaunchCooperativeKernel(
+            plus_one_twice_sync_partion_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
     }
 }
 
@@ -372,8 +374,8 @@ void solution_4(int* d_data, bool coop_launch)
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-    hipLaunchCooperativeKernel(
-        plus_one_twice_sync_all_no_atomic, dim3(LEN * LEN), dim3(LEN * LEN), kernelArgs, 0, 0);
+    GPU_ERR_CHECK(hipLaunchCooperativeKernel(
+        plus_one_twice_sync_all_no_atomic, dim3(LEN * LEN), dim3(LEN * LEN), kernelArgs, 0, 0));
 
     //plus_one_twice_sync_all_no_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
 }
@@ -494,8 +496,8 @@ void solution_5(int* d_data, bool coop_launch)
         int   c_stride     = LEN;
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-        hipLaunchCooperativeKernel(
-            plus_one_twice_sync_tasks_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
+        GPU_ERR_CHECK(hipLaunchCooperativeKernel(
+            plus_one_twice_sync_tasks_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0));
     }
 }
 
