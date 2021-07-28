@@ -514,7 +514,6 @@ int main()
 
     for(auto i = 0; i < total_size; i++)
         h_in[i] = i;
-    GPU_ERR_CHECK(hipMalloc(&d_data, total_bytes));
 
     TestCall solution[SOLUTION_NUM];
     solution[0] = solution_0;
@@ -529,6 +528,8 @@ int main()
         std::cout << "-- coop_launch " << coop_launch << std::endl;
         for(auto i = 0; i < SOLUTION_NUM; i++)
         {
+            GPU_ERR_CHECK(hipDeviceReset());
+            GPU_ERR_CHECK(hipMalloc(&d_data, total_bytes));
             GPU_ERR_CHECK(hipMemcpy(d_data, h_in, total_bytes, hipMemcpyHostToDevice));
             hipEvent_t start, stop;
             GPU_ERR_CHECK(hipEventCreate(&start));
@@ -546,12 +547,15 @@ int main()
 
             GPU_ERR_CHECK(hipEventRecord(stop));
             GPU_ERR_CHECK(hipEventSynchronize(stop));
+            GPU_ERR_CHECK(hipDeviceSynchronize());
             float gpu_time;
             GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, start, stop));
             std::cout << "solution_" << i << ": " << gpu_time << " ms\n";
 
             GPU_ERR_CHECK(
                 hipMemcpy(&h_out[i * total_size], d_data, total_bytes, hipMemcpyDeviceToHost));
+
+            GPU_ERR_CHECK(hipFree(d_data));
         }
     }
 
@@ -572,7 +576,6 @@ int main()
     // for(auto i = 0; i < total_size; i++)
     //     std::cout << "a[" << i << "]" << h_out[i] << ", " << std::endl;
 
-    GPU_ERR_CHECK(hipFree(d_data));
     delete[] h_in;
     delete[] h_out;
     return 0;
