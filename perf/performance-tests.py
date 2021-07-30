@@ -233,10 +233,10 @@ def all():
 def clients():
     """Only 'client' tests."""
 
-    # batched, complex forward, double, inplace
+    # batched, complex forward, double, out-of-place
     transform = NS(label='complex_forward')
     dtype     = NS(label='double', dtype=np.float64)
-    placement = NS(label='inplace')
+    placement = NS(label='outplace')
     for suite in [cholla1d]:
         label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
         yield dict(label=label,
@@ -246,10 +246,10 @@ def clients():
                    dtype=dtype,
                    placement=placement)
 
-    # one, complex forward, double, inplace
+    # one, complex forward, double, out-of-place
     transform = NS(label='complex_forward')
     dtype     = NS(label='double', dtype=np.float64)
-    placement = NS(label='inplace')
+    placement = NS(label='outplace')
     for suite in [vasp3d]:
         label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
         yield dict(label=label,
@@ -272,10 +272,10 @@ def clients():
                    dtype=dtype,
                    placement=placement)
 
-    # one, real forward/backward, single, inplace
+    # one, real forward/backward, single, out-of-place
     transforms = [NS(label='real_forward'), NS(label='real_backward')]
     dtype      = NS(label='single', dtype=np.float32)
-    placement  = NS(label='inplace')
+    placement  = NS(label='outplace')
     for transform in transforms:
         for suite in [gromacs3d, amber3d, namd3d, cp2k]:
             label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
