@@ -43,13 +43,13 @@ struct StockhamGenerator
         ;
     // clang-format on
 
-    std::vector<int> factors;
+    std::vector<uint> factors;
 
     uint   length, width, nheight, threads_per_transform;
     double height;
     bool   half_lds;
 
-    StockhamGenerator(std::vector<int> factors, uint threads_per_transform, bool half_lds = false)
+    StockhamGenerator(std::vector<uint> factors, uint threads_per_transform, bool half_lds = false)
         : factors(factors)
         , threads_per_transform(threads_per_transform)
         , half_lds(half_lds)
@@ -326,7 +326,7 @@ void format_and_write(std::string fname, std::string code)
 
 int main(int argc, char* argv[])
 {
-    std::vector<int> factors;
+    std::vector<uint> factors;
 
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));

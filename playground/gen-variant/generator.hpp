@@ -18,7 +18,7 @@ std::string vrender(const T& x)
 }
 
 template <typename T>
-int get_precedence(const T& x)
+unsigned int get_precedence(const T& x)
 {
     return std::visit([](const auto a) { return a.precedence; }, x);
 }
@@ -53,6 +53,13 @@ class UnaryMinus;
 class PreIncrement;
 class PreDecrement;
 
+class TernaryCondition;
+
+// We have a potential circular dependency here - Expression is
+// defined using forward-declared classes, but classes might like to
+// have Expression members.  We can work around that by storing
+// Expression members in std::vectors, which tolerate the Expression
+// type not being fully specified.
 using Expression = std::variant<ScalarVariable,
                                 Variable,
                                 Literal,
@@ -74,7 +81,8 @@ using Expression = std::variant<ScalarVariable,
                                 NotEqual,
                                 UnaryMinus,
                                 PreIncrement,
-                                PreDecrement>;
+                                PreDecrement,
+                                TernaryCondition>;
 
 class OptionalExpression
 {
@@ -92,12 +100,16 @@ class Literal
     std::string value;
 
 public:
-    int const precedence = 0;
+    const unsigned int precedence = 0;
 
     template <typename T>
     Literal(T l)
     {
         value = std::to_string(l);
+    }
+    Literal(const char* val)
+        : value(val)
+    {
     }
 
     std::string render() const
@@ -111,7 +123,7 @@ class ComplexLiteral
     std::string xvalue, yvalue;
 
 public:
-    int const precedence = 0;
+    const unsigned int precedence = 0;
 
     template <typename T>
     ComplexLiteral(T l, T r)
@@ -134,8 +146,8 @@ public:
 
 struct ScalarVariable
 {
-    int const   precedence = 0;
-    std::string name, type;
+    const unsigned int precedence = 0;
+    std::string        name, type;
     ScalarVariable(std::string name, std::string type)
         : name(name)
         , type(type){};
@@ -145,7 +157,7 @@ struct ScalarVariable
 class Variable
 {
 public:
-    int const          precedence = 0;
+    const unsigned int precedence = 0;
     std::string        name, type;
     bool               pointer, restrict;
     ScalarVariable     x, y;
@@ -156,7 +168,7 @@ public:
              std::string _type,
              bool        pointer = false,
              bool restrict       = false,
-             int size            = 0);
+             unsigned int size   = 0);
 
     Variable(const ScalarVariable& v)
         : name(v.name)
@@ -173,13 +185,24 @@ public:
     std::string render() const;
 };
 
+class TernaryCondition
+{
+public:
+    const unsigned int precedence = 16;
+    TernaryCondition(Expression cond, Expression true_result, Expression false_result);
+    std::string render() const;
+
+private:
+    std::vector<Expression> exprs;
+};
+
 #define MAKE_OPER(NAME, OPER, PRECEDENCE)                \
     class NAME                                           \
     {                                                    \
         std::string oper{OPER};                          \
                                                          \
     public:                                              \
-        int const               precedence = PRECEDENCE; \
+        const unsigned int      precedence = PRECEDENCE; \
         std::vector<Expression> args;                    \
         NAME(std::initializer_list<Expression> il)       \
             : args(il){};                                \
@@ -257,12 +280,22 @@ MAKE_UNARY_PREFIX_METHODS(UnaryMinus);
 MAKE_UNARY_PREFIX_METHODS(PreIncrement);
 MAKE_UNARY_PREFIX_METHODS(PreDecrement);
 
+TernaryCondition::TernaryCondition(Expression cond, Expression true_result, Expression false_result)
+    : exprs{cond, true_result, false_result}
+{
+}
+std::string TernaryCondition::render() const
+{
+    return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]) + ";";
+}
+
 std::string ScalarVariable::render() const
 {
     return name;
 }
 
-Variable::Variable(std::string _name, std::string _type, bool pointer, bool restrict, int size)
+Variable::Variable(
+    std::string _name, std::string _type, bool pointer, bool restrict, unsigned int size)
     : name(_name)
     , type(_type)
     , pointer(pointer)
@@ -441,7 +474,9 @@ OptionalExpression::OptionalExpression(const Expression& expr)
 
 class Assign;
 class Call;
+class CallbackDeclaration;
 class Declaration;
+class LDSDeclaration;
 class For;
 class If;
 class Else;
@@ -489,8 +524,10 @@ struct CommentLines
 
 using Statement = std::variant<Assign,
                                Call,
+                               CallbackDeclaration,
                                CommentLines,
                                Declaration,
+                               LDSDeclaration,
                                For,
                                If,
                                Else,
@@ -611,6 +648,36 @@ std::string Declaration::render() const
     s += ";";
     return s;
 }
+
+class LDSDeclaration
+{
+public:
+    LDSDeclaration(std::string scalar_type)
+        : scalar_type(scalar_type){};
+    std::string scalar_type;
+    std::string render() const
+    {
+        return "extern __shared__ unsigned char __align__(sizeof(" + scalar_type
+               + ")) lds_uchar[];\n" + scalar_type + "* __restrict__ lds = reinterpret_cast<"
+               + scalar_type + "*>(lds_uchar);\n";
+    }
+};
+
+class CallbackDeclaration
+{
+public:
+    CallbackDeclaration(std::string scalar_type, std::string cbtype)
+        : scalar_type(scalar_type)
+        , cbtype(cbtype){};
+    std::string scalar_type;
+    std::string cbtype;
+    std::string render() const
+    {
+        return "auto load_cb = get_load_cb<" + scalar_type + ", " + cbtype + ">(load_cb_fn);\n"
+               + "auto store_cb = get_store_cb<" + scalar_type + ", " + cbtype
+               + ">(store_cb_fn);\n";
+    }
+};
 
 class Call
 {
@@ -840,8 +907,12 @@ MAKE_TRIVIAL_VISIT(Expression, UnaryMinus)
 MAKE_TRIVIAL_VISIT(Expression, PreIncrement)
 MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
 
+MAKE_TRIVIAL_VISIT(Expression, TernaryCondition)
+
+MAKE_TRIVIAL_VISIT(Statement, CallbackDeclaration)
 MAKE_TRIVIAL_VISIT(Statement, CommentLines)
 MAKE_TRIVIAL_VISIT(Statement, Declaration)
+MAKE_TRIVIAL_VISIT(Statement, LDSDeclaration)
 MAKE_TRIVIAL_VISIT(Statement, LineBreak)
 MAKE_TRIVIAL_VISIT(Statement, Return)
 MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
@@ -960,12 +1031,15 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, ShiftLeft)
     MAKE_VISITOR(Expression, ShiftRight)
     MAKE_VISITOR(Expression, Subtract)
+    MAKE_VISITOR(Expression, TernaryCondition)
     MAKE_VISITOR(Expression, UnaryMinus)
     MAKE_VISITOR(Expression, Variable)
 
     MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, CallbackDeclaration)
     MAKE_VISITOR(Statement, CommentLines)
     MAKE_VISITOR(Statement, Declaration)
+    MAKE_VISITOR(Statement, LDSDeclaration)
     MAKE_VISITOR(Statement, For)
     MAKE_VISITOR(Statement, If)
     MAKE_VISITOR(Statement, Else)
