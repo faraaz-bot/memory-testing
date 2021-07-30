@@ -18,7 +18,7 @@ std::string vrender(const T& x)
 }
 
 template <typename T>
-int get_precedence(const T& x)
+unsigned int get_precedence(const T& x)
 {
     return std::visit([](const auto a) { return a.precedence; }, x);
 }
@@ -92,7 +92,7 @@ class Literal
     std::string value;
 
 public:
-    int const precedence = 0;
+    const unsigned int precedence = 0;
 
     template <typename T>
     Literal(T l)
@@ -111,7 +111,7 @@ class ComplexLiteral
     std::string xvalue, yvalue;
 
 public:
-    int const precedence = 0;
+    const unsigned int precedence = 0;
 
     template <typename T>
     ComplexLiteral(T l, T r)
@@ -134,8 +134,8 @@ public:
 
 struct ScalarVariable
 {
-    int const   precedence = 0;
-    std::string name, type;
+    const unsigned int precedence = 0;
+    std::string        name, type;
     ScalarVariable(std::string name, std::string type)
         : name(name)
         , type(type){};
@@ -145,7 +145,7 @@ struct ScalarVariable
 class Variable
 {
 public:
-    int const          precedence = 0;
+    const unsigned int precedence = 0;
     std::string        name, type;
     bool               pointer, restrict;
     ScalarVariable     x, y;
@@ -156,7 +156,7 @@ public:
              std::string _type,
              bool        pointer = false,
              bool restrict       = false,
-             int size            = 0);
+             unsigned int size   = 0);
 
     Variable(const ScalarVariable& v)
         : name(v.name)
@@ -179,7 +179,7 @@ public:
         std::string oper{OPER};                          \
                                                          \
     public:                                              \
-        int const               precedence = PRECEDENCE; \
+        const unsigned int      precedence = PRECEDENCE; \
         std::vector<Expression> args;                    \
         NAME(std::initializer_list<Expression> il)       \
             : args(il){};                                \
@@ -262,7 +262,8 @@ std::string ScalarVariable::render() const
     return name;
 }
 
-Variable::Variable(std::string _name, std::string _type, bool pointer, bool restrict, int size)
+Variable::Variable(
+    std::string _name, std::string _type, bool pointer, bool restrict, unsigned int size)
     : name(_name)
     , type(_type)
     , pointer(pointer)
