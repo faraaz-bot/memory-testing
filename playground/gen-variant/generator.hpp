@@ -99,6 +99,10 @@ public:
     {
         value = std::to_string(l);
     }
+    Literal(const char* val)
+        : value(val)
+    {
+    }
 
     std::string render() const
     {
