@@ -286,7 +286,7 @@ TernaryCondition::TernaryCondition(Expression cond, Expression true_result, Expr
 }
 std::string TernaryCondition::render() const
 {
-    return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]) + ";";
+    return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]);
 }
 
 std::string ScalarVariable::render() const
