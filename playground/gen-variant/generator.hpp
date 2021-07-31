@@ -846,6 +846,8 @@ public:
     StatementList body;
     ArgumentList  arguments;
     TemplateList  templates;
+    std::string   qualifier;
+    unsigned int  launch_bounds;
 
     Function(std::string name)
         : name(name){};
@@ -860,6 +862,9 @@ std::string Function::render() const
     {
         f += "template<" + templates.render_decl() + ">";
     }
+    f += qualifier + " ";
+    if(launch_bounds)
+        f += "__launch_bounds__(" + std::to_string(launch_bounds) + ") ";
     f += "void " + name;
     f += "(" + arguments.render_decl() + ") {\n";
     f += body.render();
@@ -990,9 +995,12 @@ Statement visit(Visitor&& vis, const Else& x)
 template <class Visitor>
 Function visit(Visitor&& vis, const Function& x)
 {
-    auto y      = Function(x.name);
-    y.arguments = visit(vis, x.arguments);
-    y.body      = std::get<StatementList>(visit(vis, x.body));
+    auto y          = Function(x.name);
+    y.body          = std::get<StatementList>(visit(vis, x.body));
+    y.arguments     = visit(vis, x.arguments);
+    y.templates     = visit(vis, x.templates);
+    y.qualifier     = x.qualifier;
+    y.launch_bounds = x.launch_bounds;
     return y;
 }
 
@@ -1108,9 +1116,12 @@ struct MakePlanarVisitor
 
     Function operator()(const Function& x)
     {
-        auto y      = Function(x.name);
-        y.arguments = (*this)(x.arguments);
-        y.body      = std::get<StatementList>(visit(*this, x.body));
+        auto y          = Function(x.name);
+        y.body          = std::get<StatementList>(visit(*this, x.body));
+        y.arguments     = (*this)(x.arguments);
+        y.templates     = (*this)(x.templates);
+        y.qualifier     = x.qualifier;
+        y.launch_bounds = x.launch_bounds;
         return y;
     }
 };
