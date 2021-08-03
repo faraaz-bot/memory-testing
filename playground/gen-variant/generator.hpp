@@ -585,24 +585,20 @@ std::string ArgumentList::render() const
 std::string ArgumentList::render_decl() const
 {
     std::string f;
-    if(!arguments.empty())
+    const char* separator = "";
+    const char* comma     = ",";
+    for(const auto& arg : arguments)
     {
-        f = arguments[0].type;
-        if(arguments[0].pointer)
+        f += separator;
+        f += arg.type;
+        if(arg.pointer)
             f += "*";
-        f += " " + arguments[0].name;
-        if(arguments[0].size)
+        if(arg.restrict)
+            f += " __restrict__";
+        f += " " + arg.name;
+        if(arg.size)
             f += "[]";
-        for(uint i = 1; i < arguments.size(); ++i)
-        {
-            f += ",";
-            f += arguments[i].type;
-            if(arguments[i].pointer)
-                f += "*";
-            f += " " + arguments[i].name;
-            if(arguments[i].size)
-                f += "[]";
-        }
+        separator = comma;
     }
     return f;
 }
