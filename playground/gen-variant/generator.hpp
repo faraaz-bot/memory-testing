@@ -55,6 +55,8 @@ class PreDecrement;
 
 class TernaryCondition;
 
+class LoadGlobal;
+
 // We have a potential circular dependency here - Expression is
 // defined using forward-declared classes, but classes might like to
 // have Expression members.  We can work around that by storing
@@ -82,7 +84,8 @@ using Expression = std::variant<ScalarVariable,
                                 UnaryMinus,
                                 PreIncrement,
                                 PreDecrement,
-                                TernaryCondition>;
+                                TernaryCondition,
+                                LoadGlobal>;
 
 class OptionalExpression
 {
@@ -196,6 +199,17 @@ private:
     std::vector<Expression> exprs;
 };
 
+class LoadGlobal
+{
+public:
+    const unsigned int precedence = 18;
+    LoadGlobal(Expression ptr, Expression index);
+    std::string render() const;
+
+private:
+    std::vector<Expression> exprs;
+};
+
 #define MAKE_OPER(NAME, OPER, PRECEDENCE)                \
     class NAME                                           \
     {                                                    \
@@ -287,6 +301,15 @@ TernaryCondition::TernaryCondition(Expression cond, Expression true_result, Expr
 std::string TernaryCondition::render() const
 {
     return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]);
+}
+
+LoadGlobal::LoadGlobal(Expression ptr, Expression index)
+    : exprs{ptr, index}
+{
+}
+std::string LoadGlobal::render() const
+{
+    return "load_cb(" + vrender(exprs[0]) + "," + vrender(exprs[1]) + ", load_cb_data, nullptr)";
 }
 
 std::string ScalarVariable::render() const
@@ -910,6 +933,8 @@ MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
 
 MAKE_TRIVIAL_VISIT(Expression, TernaryCondition)
 
+MAKE_TRIVIAL_VISIT(Expression, LoadGlobal)
+
 MAKE_TRIVIAL_VISIT(Statement, CallbackDeclaration)
 MAKE_TRIVIAL_VISIT(Statement, CommentLines)
 MAKE_TRIVIAL_VISIT(Statement, Declaration)
@@ -1025,6 +1050,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, Less)
     MAKE_VISITOR(Expression, LessEqual)
     MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, LoadGlobal)
     MAKE_VISITOR(Expression, Modulus)
     MAKE_VISITOR(Expression, Multiply)
     MAKE_VISITOR(Expression, NotEqual)
