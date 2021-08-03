@@ -503,6 +503,7 @@ class LDSDeclaration;
 class For;
 class If;
 class Else;
+class StoreGlobal;
 class StatementList;
 
 struct LineBreak
@@ -554,6 +555,7 @@ using Statement = std::variant<Assign,
                                For,
                                If,
                                Else,
+                               StoreGlobal,
                                LineBreak,
                                Return,
                                SyncThreads,
@@ -797,6 +799,26 @@ public:
     std::string render() const;
 };
 
+class StoreGlobal
+{
+public:
+    StoreGlobal(Expression ptr, Expression index, Expression value)
+        : ptr{ptr}
+        , index{index}
+        , value{value}
+    {
+    }
+    std::string render() const
+    {
+        return "store_cb(" + vrender(ptr) + "," + vrender(index) + "," + vrender(value)
+               + ", store_cb_data, nullptr)";
+    }
+
+    Expression ptr;
+    Expression index;
+    Expression value;
+};
+
 std::string StatementList::render() const
 {
     std::string r;
@@ -1014,6 +1036,15 @@ Statement visit(Visitor&& vis, const Else& x)
 }
 
 template <class Visitor>
+Statement visit(Visitor&& vis, const StoreGlobal& x)
+{
+    auto ptr   = std::visit(vis, x.ptr);
+    auto index = std::visit(vis, x.index);
+    auto value = std::visit(vis, x.value);
+    return StoreGlobal(ptr, index, value);
+}
+
+template <class Visitor>
 Function visit(Visitor&& vis, const Function& x)
 {
     auto y          = Function(x.name);
@@ -1076,6 +1107,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
+    MAKE_VISITOR(Statement, StoreGlobal)
     MAKE_VISITOR(Statement, SyncThreads)
 
     ArgumentList operator()(const ArgumentList& x)
