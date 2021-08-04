@@ -200,13 +200,16 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
     plus_one_device(a, blockIdx.x, bs, cs);
 
+    //__syncthreads();
     __threadfence();
 
+    // the leading thread in each workgroup sets its bit in g_counter,
+    // and then wait for all workgroups sync.
     if(threadIdx.x == 0)
     {
-        //printf("blockIdx.x %3d, g_counter %x\n", (int)blockIdx.x, g_counter);
-        atomicAdd(&g_counter, 1);
-        while(hip_atomic_load<int>(&g_counter) < LEN * LEN)
+        atomicOr(&g_counter, 0x1 << blockIdx.x);
+
+        while(atomicOr(&g_counter, 0x1 << blockIdx.x) != 0xFFFF)
         {
         }
     }
@@ -215,10 +218,9 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
     cs = LEN * LEN;
     plus_one_device(a, blockIdx.x, bs, cs);
 
-    if(threadIdx.x == 0)
-    {
-        atomicAdd(&g_counter, -1);
-    }
+    // clean up g_counter with leading thread in the 1st workgroup only
+    if(threadIdx.x == 0 && blockIdx.x == 0)
+        atomicExch(&g_counter, 0);
 }
 
 void solution_2(int* d_data, bool coop_launch)
@@ -516,12 +518,12 @@ int main()
         h_in[i] = i;
 
     TestCall solution[SOLUTION_NUM];
-    solution[0] = solution_0;
-    solution[1] = solution_1;
-    solution[2] = solution_2;
-    solution[3] = solution_3;
-    solution[4] = solution_4;
-    solution[5] = solution_5;
+    solution[0] = &solution_0;
+    solution[1] = &solution_1;
+    solution[2] = &solution_2;
+    solution[3] = &solution_3;
+    solution[4] = &solution_4;
+    solution[5] = &solution_5;
 
     for(int coop_launch = 0; coop_launch <= 1; coop_launch++)
     {
