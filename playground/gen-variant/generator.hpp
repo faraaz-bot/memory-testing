@@ -755,6 +755,8 @@ class StatementList
 public:
     std::vector<Statement> statements;
     StatementList(){};
+    StatementList(std::initializer_list<Statement> il)
+        : statements(il){};
     std::string render() const;
 };
 
