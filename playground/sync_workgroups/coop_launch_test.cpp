@@ -4,7 +4,9 @@
 // with simple device kernel.
 //
 // The device kernel is doing simple "plus one" on an int array[128] with grid(2), blocks(64).
-// The test collects total elapsed time from hipEvent with incremental trial sizes.
+// The test collects total elapsed time from hipEvent with incremental trial sizes. And
+// no devicesynchronize between each trial run. And the first run of each collection is
+// ignored.
 //
 // Build:
 //    with hipcc:
@@ -67,8 +69,6 @@ inline void gpu_assert(hipError_t e, const char* file, int line, bool abort = tr
 //-----------------------------------------------------------------------------
 // Device function
 
-__device__ int g_counter = 0;
-
 #define LEN 64
 #define BATCH 2
 
@@ -94,12 +94,6 @@ int main()
     int* h_out = new int[total_size];
     int* d_data;
 
-    int zero = 0;
-#ifdef CUDA
-    GPU_ERR_CHECK(cudaMemcpyToSymbol(g_counter, &zero, sizeof(int), 0));
-#else
-    GPU_ERR_CHECK(hipMemcpyToSymbol(g_counter, &zero, sizeof(int), 0));
-#endif
     for(auto i = 0; i < total_size; i++)
         h_in[i] = i;
 
@@ -159,13 +153,12 @@ int main()
         /// launch the kernel with the hipLaunchCooperativeKernel, and check the elapsed time
 
         // warm up once
-        void* kernelArgs[] = {reinterpret_cast<void*>(&d_data)};
+        void* kernelArgs[] = {(void*)&d_data};
 #ifdef CUDA
         GPU_ERR_CHECK(
             cudaLaunchCooperativeKernel((void*)plus_one, dim3(BATCH), dim3(LEN), kernelArgs, 0, 0));
 #else
-        GPU_ERR_CHECK(hipLaunchCooperativeKernel(
-            reinterpret_cast<void*>(plus_one), BATCH, LEN, kernelArgs, 0, 0));
+        GPU_ERR_CHECK(hipLaunchCooperativeKernel(plus_one, BATCH, LEN, kernelArgs, 0, 0));
 #endif
 
 #ifdef CUDA
