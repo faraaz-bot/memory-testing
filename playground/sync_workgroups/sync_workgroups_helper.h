@@ -1,5 +1,5 @@
 //
-// The helper functions to build
+// The helper functions to build on AMD and NV platforms
 //
 
 #ifdef CUDA
@@ -19,7 +19,7 @@ using cooperative_groups::thread_group;
 namespace cg = cooperative_groups;
 
 //-----------------------------------------------------------------------------
-// Helper functions
+// Error check
 
 #define GPU_ERR_CHECK(expr)                     \
     {                                           \
@@ -51,6 +51,18 @@ inline void gpu_assert(hipError_t e, const char* file, int line, bool abort = tr
     }
 }
 #endif
+
+//-----------------------------------------------------------------------------
+// API wrappers
+
+inline void device_reset()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaDeviceReset());
+#else
+    GPU_ERR_CHECK(hipDeviceReset());
+#endif
+}
 
 inline void device_synchronize()
 {
@@ -106,3 +118,50 @@ inline void
     GPU_ERR_CHECK(hipLaunchCooperativeKernel(func, gridDim, blockDim, args, sharedMem, 0));
 #endif
 }
+
+//-----------------------------------------------------------------------------
+// OpenCL atomic load/store code for experiment only. HIP will have its own implementations.
+
+#ifndef CUDA
+enum class MemoryOrder : int
+{
+    RELAXED = __ATOMIC_RELAXED,
+    ACQUIRE = __ATOMIC_ACQUIRE,
+    RELEASE = __ATOMIC_RELEASE,
+    ACQ_REL = __ATOMIC_ACQ_REL,
+    SEQ_CST = __ATOMIC_SEQ_CST,
+};
+
+enum class MemoryScope : int
+{
+    WORK_ITEM       = __OPENCL_MEMORY_SCOPE_WORK_ITEM,
+    WORK_GROUP      = __OPENCL_MEMORY_SCOPE_WORK_GROUP,
+    DEVICE          = __OPENCL_MEMORY_SCOPE_DEVICE,
+    ALL_SVM_DEVICES = __OPENCL_MEMORY_SCOPE_ALL_SVM_DEVICES,
+#if defined(cl_intel_subgroups) || defined(cl_khr_subgroups)
+    SUB_GROUP = __OPENCL_MEMORY_SCOPE_SUB_GROUP
+#endif
+};
+
+template <typename T>
+__device__ inline T hip_atomic_load(volatile T* object,
+                                    MemoryOrder order = MemoryOrder::SEQ_CST,
+                                    MemoryScope scope = MemoryScope::DEVICE)
+{
+    assert(order != MemoryOrder::RELEASE);
+    assert(order != MemoryOrder::ACQ_REL);
+    return __opencl_atomic_load((_Atomic T*)object, int(order), int(scope));
+}
+
+template <typename T>
+__device__ inline void hip_atomic_store(volatile T* object,
+                                        T           desired,
+                                        MemoryOrder order = MemoryOrder::RELAXED,
+                                        MemoryScope scope = MemoryScope::DEVICE)
+{
+    assert(order != MemoryOrder::ACQUIRE);
+    assert(order != MemoryOrder::ACQ_REL);
+    __opencl_atomic_store((_Atomic T*)object, desired, int(order), int(scope));
+}
+
+#endif
