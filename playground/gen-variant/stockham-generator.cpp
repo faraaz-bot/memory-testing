@@ -178,9 +178,19 @@ struct StockhamGenerator : public Params
     }
 
     // virtual methods for tiling
-    virtual std::string   tiling_name() const                            = 0;
-    virtual StatementList load_global(uint h, uint width)                = 0;
-    virtual StatementList store_global(uint h, uint width, uint nheight) = 0;
+    virtual std::string tiling_name() const = 0;
+    enum GlobalLoadDestination
+    {
+        TO_REGISTERS,
+        TO_LDS,
+    };
+    enum GlobalStoreSource
+    {
+        FROM_REGISTERS,
+        FROM_LDS,
+    };
+    virtual StatementList load_global(uint h, uint width, GlobalLoadDestination dest)           = 0;
+    virtual StatementList store_global(uint h, uint width, uint nheight, GlobalStoreSource src) = 0;
 
     StatementList add_work(std::function<StatementList(uint)> generator,
                            uint                               width,
@@ -324,7 +334,10 @@ struct StockhamGenerator : public Params
 
             if(pass == 0 && half_lds)
                 kdevice.body
-                    += add_work([=](uint h) { return load_global(h, width); }, width, height, true);
+                    += add_work([=](uint h) { return load_global(h, width, TO_REGISTERS); },
+                                width,
+                                height,
+                                true);
 
             if(!half_lds)
                 kdevice.body
@@ -362,11 +375,11 @@ struct StockhamGenerator : public Params
                 }
                 else
                 {
-                    kdevice.body
-                        += add_work([=](uint h) { return store_global(h, width, nheight); },
-                                    width,
-                                    height,
-                                    true);
+                    kdevice.body += add_work(
+                        [=](uint h) { return store_global(h, width, nheight, FROM_REGISTERS); },
+                        width,
+                        height,
+                        true);
                 }
             }
             else
@@ -444,12 +457,27 @@ struct StockhamGenerator : public Params
 
         kglobal.body += LineBreak();
 
-        StatementList batch_if_body;
-        batch_if_body.statements.push_back(Return{});
-        kglobal.body += If{GreaterEqual{batch, nbatch}, batch_if_body};
+        kglobal.body += If{GreaterEqual{batch, nbatch}, {Return()}};
 
+        // FIXME: this should be pushed down to the RR-specific class?
         kglobal.body += CommentLines{std::string{"load global"}};
         kglobal.body += Assign{thread, thread_id % Literal{threads_per_transform}};
+        kglobal.body += add_work(
+            [=](uint h) { return load_global(h, threads_per_transform, TO_LDS); }, 1, 1);
+
+        kglobal.body += LineBreak();
+        kglobal.body
+            += CommentLines{std::string("append extra global loading for C2Real pre-process only")};
+        StatementList c2real_pre;
+        c2real_pre += CommentLines{
+            "use the last thread of each transform to load one more element per row"};
+        auto width  = threads_per_transform;
+        auto height = length / width;
+        c2real_pre += If{
+            thread == Literal{threads_per_transform - 1},
+            {Assign{lds[offset_lds + thread + (height - 1) * width + 1],
+                    LoadGlobal{buf, offset + (thread + (height - 1) * width + 1) * stride0}}}};
+        kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::C2Real_PRE"}}, c2real_pre};
 
         return kglobal;
     }
@@ -476,19 +504,23 @@ struct StockhamGeneratorSBRR : public StockhamGenerator
         return "SBRR";
     }
 
-    StatementList load_global(uint h, uint width) override
+    StatementList load_global(uint h, uint width, GlobalLoadDestination dest) override
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
             auto idx = offset + (tid + w * (length / width)) * stride0;
-            stmts += Assign(R[h * width + w], buf[idx]);
+            if(dest == TO_REGISTERS)
+                stmts += Assign(R[h * width + w], LoadGlobal(buf, idx));
+            else
+                stmts
+                    += Assign(lds[offset_lds + thread + Literal{w * width}], LoadGlobal(buf, idx));
         }
         return stmts;
     }
 
-    StatementList store_global(uint h, uint width, uint nheight) override
+    StatementList store_global(uint h, uint width, uint nheight, GlobalStoreSource src) override
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
@@ -497,7 +529,10 @@ struct StockhamGeneratorSBRR : public StockhamGenerator
             auto idx
                 = offset
                   + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * stride0;
-            stmts += Assign(buf[idx], R[h * width + w]);
+            if(src == FROM_REGISTERS)
+                stmts += StoreGlobal(buf, idx, R[h * width + w]);
+            else
+                stmts += StoreGlobal(buf, idx, lds[offset_lds + thread + Literal{w * width}]);
         }
         return stmts;
     }
