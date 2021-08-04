@@ -1,6 +1,8 @@
 //
 // The helper functions to build on AMD and NV platforms
 //
+#ifndef SYNC_WORKGROUPS_HELPER_H
+#define SYNC_WORKGROUPS_HELPER_H
 
 #ifdef CUDA
 #include <cooperative_groups.h>
@@ -119,6 +121,72 @@ inline void
 #endif
 }
 
+#ifdef CUDA
+static cudaEvent_t g_timer_start, g_timer_stop;
+#else
+static hipEvent_t g_timer_start, g_timer_stop;
+#endif
+
+inline void device_event_create()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventCreate(&g_timer_start));
+    GPU_ERR_CHECK(cudaEventCreate(&g_timer_stop));
+#else
+    GPU_ERR_CHECK(hipEventCreate(&g_timer_start));
+    GPU_ERR_CHECK(hipEventCreate(&g_timer_stop));
+#endif
+}
+
+inline void device_event_destroy()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventDestroy(g_timer_start));
+    GPU_ERR_CHECK(cudaEventDestroy(g_timer_stop));
+#else
+    GPU_ERR_CHECK(hipEventDestroy(g_timer_start));
+    GPU_ERR_CHECK(hipEventDestroy(g_timer_stop));
+#endif
+}
+
+inline void device_event_record_start()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventRecord(g_timer_start));
+#else
+    GPU_ERR_CHECK(hipEventRecord(g_timer_start));
+#endif
+}
+
+inline void device_event_record_stop()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventRecord(g_timer_stop));
+#else
+    GPU_ERR_CHECK(hipEventRecord(g_timer_stop));
+#endif
+}
+
+inline void device_event_synchronize_stop()
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventSynchronize(g_timer_stop));
+#else
+    GPU_ERR_CHECK(hipEventSynchronize(g_timer_stop));
+#endif
+}
+
+inline float device_event_elapsed_time()
+{
+    float gpu_time;
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaEventElapsedTime(&gpu_time, g_timer_start, g_timer_stop));
+#else
+    GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, g_timer_start, g_timer_stop));
+#endif
+    return gpu_time;
+}
+
 //-----------------------------------------------------------------------------
 // OpenCL atomic load/store code for experiment only. HIP will have its own implementations.
 
@@ -163,5 +231,7 @@ __device__ inline void hip_atomic_store(volatile T* object,
     assert(order != MemoryOrder::ACQ_REL);
     __opencl_atomic_store((_Atomic T*)object, desired, int(order), int(scope));
 }
+
+#endif
 
 #endif

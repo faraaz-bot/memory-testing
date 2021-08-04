@@ -13,6 +13,7 @@
 
 #include "sync_workgroups_helper.h"
 
+// FIXME: use coop_launch in helper.h
 void coop_launch_(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem)
 {
 #ifdef CUDA
@@ -460,29 +461,26 @@ int main()
             device_malloc((void**)&d_data, total_bytes);
             device_memcpy_h2d(d_data, h_in, total_bytes);
 
-            hipEvent_t start, stop;
-            GPU_ERR_CHECK(hipEventCreate(&start));
-            GPU_ERR_CHECK(hipEventCreate(&stop));
+            device_event_create();
 
             // warm up once
             solution[i](d_data, coop_launch);
 
-            GPU_ERR_CHECK(hipEventRecord(start));
+            device_event_record_start();
 
             for(int j = 0; j < 100; j++)
             {
                 solution[i](d_data, coop_launch);
             }
 
-            GPU_ERR_CHECK(hipEventRecord(stop));
-            GPU_ERR_CHECK(hipEventSynchronize(stop));
-            GPU_ERR_CHECK(hipDeviceSynchronize());
-            float gpu_time;
-            GPU_ERR_CHECK(hipEventElapsedTime(&gpu_time, start, stop));
-            std::cout << "solution_" << i << ": " << gpu_time << " ms\n";
+            device_event_record_stop();
+            device_event_synchronize_stop();
+            device_synchronize();
+            std::cout << "solution_" << i << ": " << device_event_elapsed_time() << " ms\n";
 
             device_memcpy_d2h(&h_out[i * total_size], d_data, total_bytes);
             device_free(d_data);
+            device_event_destroy();
         }
     }
 
