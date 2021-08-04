@@ -42,7 +42,6 @@ void __global__ plus_one_twice_atomic_atomicOr(int* a)
     plus_one_device(a);
 
     //__syncthreads();
-    __threadfence();
 
     // the leading thread in each workgroup sets its bit in g_counter,
     // and then wait for all workgroups sync.
@@ -54,6 +53,7 @@ void __global__ plus_one_twice_atomic_atomicOr(int* a)
         {
         }
     }
+    __threadfence();
 
     // do the 2nd round task
     plus_one_device(a);
@@ -63,12 +63,12 @@ void __global__ plus_one_twice_atomic_atomicOr(int* a)
         atomicExch(&g_counter, 0);
 }
 
+// Bad example with race condition!!!
 // Do the same as plus_one_twice_atomic_atomicOr but with __threadfence wait
 void __global__ plus_one_twice_atomic_memfence(int* a)
 {
     plus_one_device(a);
     //__syncthreads();
-    __threadfence();
 
     if(threadIdx.x == 0)
     {
@@ -79,6 +79,8 @@ void __global__ plus_one_twice_atomic_memfence(int* a)
         {
         }
     }
+
+    __threadfence();
 
     plus_one_device(a);
 
