@@ -322,7 +322,7 @@ struct StockhamGenerator : public Params
         kdevice.body += Declaration(W);
         kdevice.body += Declaration(t);
         kdevice.body += Declaration(
-            lstride, TernaryCondition(stride_type == Literal{"SB_UNIT"}, Literal{1}, stride_lds));
+            lstride, Ternary(stride_type == Literal{"SB_UNIT"}, Literal{1}, stride_lds));
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
@@ -437,8 +437,7 @@ struct StockhamGenerator : public Params
         kglobal.body += Declaration(thread);
         kglobal.body += Declaration(write);
         kglobal.body += Declaration(
-            stride0,
-            TernaryCondition{stride_type == Literal{"SB_UNIT"}, Literal{1}, stride[Literal{0}]});
+            stride0, Ternary{stride_type == Literal{"SB_UNIT"}, Literal{1}, stride[Literal{0}]});
         kglobal.body += CallbackDeclaration(scalar_type.name, callback_type.name);
 
         kglobal.body += LineBreak();

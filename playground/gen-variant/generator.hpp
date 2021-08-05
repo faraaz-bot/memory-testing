@@ -53,7 +53,7 @@ class UnaryMinus;
 class PreIncrement;
 class PreDecrement;
 
-class TernaryCondition;
+class Ternary;
 
 class LoadGlobal;
 
@@ -84,7 +84,7 @@ using Expression = std::variant<ScalarVariable,
                                 UnaryMinus,
                                 PreIncrement,
                                 PreDecrement,
-                                TernaryCondition,
+                                Ternary,
                                 LoadGlobal>;
 
 class OptionalExpression
@@ -188,11 +188,11 @@ public:
     std::string render() const;
 };
 
-class TernaryCondition
+class Ternary
 {
 public:
     const unsigned int precedence = 16;
-    TernaryCondition(Expression cond, Expression true_result, Expression false_result);
+    Ternary(Expression cond, Expression true_result, Expression false_result);
     std::string render() const;
 
 private:
@@ -294,11 +294,11 @@ MAKE_UNARY_PREFIX_METHODS(UnaryMinus);
 MAKE_UNARY_PREFIX_METHODS(PreIncrement);
 MAKE_UNARY_PREFIX_METHODS(PreDecrement);
 
-TernaryCondition::TernaryCondition(Expression cond, Expression true_result, Expression false_result)
+Ternary::Ternary(Expression cond, Expression true_result, Expression false_result)
     : exprs{cond, true_result, false_result}
 {
 }
-std::string TernaryCondition::render() const
+std::string Ternary::render() const
 {
     return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]);
 }
@@ -955,7 +955,7 @@ MAKE_TRIVIAL_VISIT(Expression, UnaryMinus)
 MAKE_TRIVIAL_VISIT(Expression, PreIncrement)
 MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
 
-MAKE_TRIVIAL_VISIT(Expression, TernaryCondition)
+MAKE_TRIVIAL_VISIT(Expression, Ternary)
 
 MAKE_TRIVIAL_VISIT(Expression, LoadGlobal)
 
@@ -1094,7 +1094,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, ShiftLeft)
     MAKE_VISITOR(Expression, ShiftRight)
     MAKE_VISITOR(Expression, Subtract)
-    MAKE_VISITOR(Expression, TernaryCondition)
+    MAKE_VISITOR(Expression, Ternary)
     MAKE_VISITOR(Expression, UnaryMinus)
     MAKE_VISITOR(Expression, Variable)
 
