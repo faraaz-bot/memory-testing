@@ -53,7 +53,9 @@ class UnaryMinus;
 class PreIncrement;
 class PreDecrement;
 
-class TernaryCondition;
+class Ternary;
+
+class LoadGlobal;
 
 // We have a potential circular dependency here - Expression is
 // defined using forward-declared classes, but classes might like to
@@ -82,7 +84,8 @@ using Expression = std::variant<ScalarVariable,
                                 UnaryMinus,
                                 PreIncrement,
                                 PreDecrement,
-                                TernaryCondition>;
+                                Ternary,
+                                LoadGlobal>;
 
 class OptionalExpression
 {
@@ -185,11 +188,22 @@ public:
     std::string render() const;
 };
 
-class TernaryCondition
+class Ternary
 {
 public:
     const unsigned int precedence = 16;
-    TernaryCondition(Expression cond, Expression true_result, Expression false_result);
+    Ternary(Expression cond, Expression true_result, Expression false_result);
+    std::string render() const;
+
+private:
+    std::vector<Expression> exprs;
+};
+
+class LoadGlobal
+{
+public:
+    const unsigned int precedence = 18;
+    LoadGlobal(Expression ptr, Expression index);
     std::string render() const;
 
 private:
@@ -280,13 +294,22 @@ MAKE_UNARY_PREFIX_METHODS(UnaryMinus);
 MAKE_UNARY_PREFIX_METHODS(PreIncrement);
 MAKE_UNARY_PREFIX_METHODS(PreDecrement);
 
-TernaryCondition::TernaryCondition(Expression cond, Expression true_result, Expression false_result)
+Ternary::Ternary(Expression cond, Expression true_result, Expression false_result)
     : exprs{cond, true_result, false_result}
 {
 }
-std::string TernaryCondition::render() const
+std::string Ternary::render() const
 {
     return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]);
+}
+
+LoadGlobal::LoadGlobal(Expression ptr, Expression index)
+    : exprs{ptr, index}
+{
+}
+std::string LoadGlobal::render() const
+{
+    return "load_cb(" + vrender(exprs[0]) + "," + vrender(exprs[1]) + ", load_cb_data, nullptr)";
 }
 
 std::string ScalarVariable::render() const
@@ -480,6 +503,7 @@ class LDSDeclaration;
 class For;
 class If;
 class Else;
+class StoreGlobal;
 class StatementList;
 
 struct LineBreak
@@ -531,6 +555,7 @@ using Statement = std::variant<Assign,
                                For,
                                If,
                                Else,
+                               StoreGlobal,
                                LineBreak,
                                Return,
                                SyncThreads,
@@ -730,6 +755,8 @@ class StatementList
 public:
     std::vector<Statement> statements;
     StatementList(){};
+    StatementList(std::initializer_list<Statement> il)
+        : statements(il){};
     std::string render() const;
 };
 
@@ -772,6 +799,26 @@ public:
     Else(StatementList body)
         : body(body){};
     std::string render() const;
+};
+
+class StoreGlobal
+{
+public:
+    StoreGlobal(Expression ptr, Expression index, Expression value)
+        : ptr{ptr}
+        , index{index}
+        , value{value}
+    {
+    }
+    std::string render() const
+    {
+        return "store_cb(" + vrender(ptr) + "," + vrender(index) + "," + vrender(value)
+               + ", store_cb_data, nullptr)";
+    }
+
+    Expression ptr;
+    Expression index;
+    Expression value;
 };
 
 std::string StatementList::render() const
@@ -908,7 +955,9 @@ MAKE_TRIVIAL_VISIT(Expression, UnaryMinus)
 MAKE_TRIVIAL_VISIT(Expression, PreIncrement)
 MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
 
-MAKE_TRIVIAL_VISIT(Expression, TernaryCondition)
+MAKE_TRIVIAL_VISIT(Expression, Ternary)
+
+MAKE_TRIVIAL_VISIT(Expression, LoadGlobal)
 
 MAKE_TRIVIAL_VISIT(Statement, CallbackDeclaration)
 MAKE_TRIVIAL_VISIT(Statement, CommentLines)
@@ -989,6 +1038,15 @@ Statement visit(Visitor&& vis, const Else& x)
 }
 
 template <class Visitor>
+Statement visit(Visitor&& vis, const StoreGlobal& x)
+{
+    auto ptr   = std::visit(vis, x.ptr);
+    auto index = std::visit(vis, x.index);
+    auto value = std::visit(vis, x.value);
+    return StoreGlobal(ptr, index, value);
+}
+
+template <class Visitor>
 Function visit(Visitor&& vis, const Function& x)
 {
     auto y          = Function(x.name);
@@ -1025,6 +1083,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, Less)
     MAKE_VISITOR(Expression, LessEqual)
     MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, LoadGlobal)
     MAKE_VISITOR(Expression, Modulus)
     MAKE_VISITOR(Expression, Multiply)
     MAKE_VISITOR(Expression, NotEqual)
@@ -1035,7 +1094,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, ShiftLeft)
     MAKE_VISITOR(Expression, ShiftRight)
     MAKE_VISITOR(Expression, Subtract)
-    MAKE_VISITOR(Expression, TernaryCondition)
+    MAKE_VISITOR(Expression, Ternary)
     MAKE_VISITOR(Expression, UnaryMinus)
     MAKE_VISITOR(Expression, Variable)
 
@@ -1050,6 +1109,7 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
+    MAKE_VISITOR(Statement, StoreGlobal)
     MAKE_VISITOR(Statement, SyncThreads)
 
     ArgumentList operator()(const ArgumentList& x)

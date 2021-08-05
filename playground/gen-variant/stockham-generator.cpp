@@ -13,58 +13,184 @@
 //
 
 template <typename T>
-T product(std::vector<T> x, int last = -1)
+T product(std::vector<T> x)
 {
-    if(last == 0)
-        return 1;
-    if(last > 0)
-        return std::accumulate(x.cbegin(), x.cbegin() + last, T(1), std::multiplies<T>());
     return std::accumulate(x.cbegin(), x.cend(), T(1), std::multiplies<T>());
 }
 
-struct StockhamGenerator
+template <typename Titer>
+typename Titer::value_type product(Titer begin, Titer end)
 {
-    // clang-format off
-    Variable
-          scalar_type{"scalar_type", "typename"}
-        , write{"write", "bool"}
-        , thread{"thread", "uint"}
-        , thread_id{"thread_id", "void"}
-        , lds{"lds", "scalar_type", .pointer=true, .restrict=true}
-        , stride_lds{"stride_lds", "uint"}
-        , offset_lds{"offset_lds", "uint"}
-        , buf{"buf", "scalar_type", .pointer=true, .restrict=true}
-        , stride_buf{"stride_buf", "size_t"}
-        , offset_buf{"offset_buf", "size_t"}
-        , twiddles{"twiddles", "scalar_type"}
-        , R{"R", "scalar_type"}
-        , W{"W", "scalar_type"}
-        , t{"t", "scalar_type"}
-        ;
-    // clang-format on
+    return std::accumulate(
+        begin, end, typename Titer::value_type(1), std::multiplies<typename Titer::value_type>());
+}
 
+// extra optional parameters for the generator
+struct Params
+{
+    bool        half_lds              = false;
+    uint        threads_per_transform = 0;
+    std::string scheme{"CS_KERNEL_STOCKHAM"};
+
+    bool use_3steps_large_twd_sp = false;
+    bool use_3steps_large_twd_dp = false;
+};
+
+struct StockhamGenerator : public Params
+{
     std::vector<uint> factors;
 
-    uint   length, width, nheight, threads_per_transform;
-    double height;
-    bool   half_lds;
+    unsigned int length;
+    unsigned int threads_per_block;
+    unsigned int threads_per_transform;
+    unsigned int batches_per_block;
+    unsigned int nregisters;
 
-    StockhamGenerator(std::vector<uint> factors, uint threads_per_transform, bool half_lds = false)
-        : factors(factors)
-        , threads_per_transform(threads_per_transform)
-        , half_lds(half_lds)
+    //
+    // templates
+    //
+    Variable scalar_type{"scalar_type", "typename"};
+    Variable callback_type{"cbtype", "CallbackType"};
+    Variable stride_type{"sb", "StrideBin"};
+    Variable embedded_type{"ebtype", "EmbeddedType"};
+
+    //
+    // arguments
+    //
+    // global input/ouput buffer
+    Variable buf{"buf", "scalar_type", true, true};
+
+    // global twiddle table (stacked)
+    Variable twiddles{"twiddles", "const scalar_type", true, true};
+
+    // rank/dimension of transform
+    Variable dim{"dim", "const size_t"};
+
+    // transform lengths
+    Variable lengths{"lengths", "const size_t", true, true};
+
+    // input/output array strides
+    Variable stride{"stride", "const size_t", true, true};
+
+    // number of transforms/batches
+    Variable nbatch{"nbatch", "const size_t"};
+
+    // the number of padding at the end of each row in lds
+    Variable lds_padding{"lds_padding", "const unsigned int"};
+
+    // should the device function write to lds?
+    Variable write{"write", "bool"};
+
+    //
+    // locals
+    //
+    // lds storage buffer
+    Variable lds{"lds", "scalar_type", true, true};
+
+    // hip thread block id
+    Variable block_id{"blockIdx.x", "unsigned int"};
+
+    // hip thread id
+    Variable thread_id{"threadIdx.x", "unsigned int"};
+
+    // thread within transform
+    Variable thread{"thread", "size_t"};
+
+    // global input/output buffer offset to current transform
+    Variable offset{"offset", "size_t"};
+
+    // lds buffer offset to current transform
+    Variable offset_lds{"offset_lds", "unsigned int"};
+
+    // current batch
+    Variable batch{"batch", "size_t"};
+
+    // current transform
+    Variable transform{"transform", "size_t"};
+
+    // stride between consecutive indexes
+    Variable stride0{"stride0", "const size_t"};
+
+    // stride between consecutive indexes in lds
+    Variable stride_lds{"stride_lds", "size_t"};
+
+    // usually in device: const size_t lstride = (sb == SB_UNIT) ? 1 : stride_lds;
+    // with this definition, the compiler knows that "index * lstride" is trivial under SB_UNIT
+    Variable lstride{"lstride", "const size_t"};
+
+    // twiddle value during twiddle application
+    Variable W{"W", "scalar_type"};
+
+    // temporary register during twiddle application
+    Variable t{"t", "scalar_type"};
+
+    // butterfly registers
+    Variable R{"R", "scalar_type", false, false};
+
+    static const unsigned int LDS_BYTE_LIMIT    = 32 * 1024;
+    static const unsigned int BYTES_PER_ELEMENT = 16;
+    StockhamGenerator(std::vector<uint> factors, uint _threads_per_block, const Params params)
+        : Params(params)
+        , factors(factors)
+        , length(product(factors))
+        , threads_per_block(_threads_per_block)
     {
-        length = product(factors);
+        auto bytes_per_batch = length * BYTES_PER_ELEMENT;
 
-        uint nregisters = 0;
+        if(threads_per_transform == 0)
+        {
+            threads_per_transform = 1;
+            for(uint t = 2; t < length; ++t)
+            {
+                if(t > threads_per_block)
+                    continue;
+                if(length % t == 0)
+                {
+                    if(std::all_of(factors.begin(), factors.end(), [=](uint f) {
+                           return (length / t) % f == 0;
+                       }))
+                        threads_per_transform = t;
+                }
+            }
+        }
+
+        batches_per_block = LDS_BYTE_LIMIT / bytes_per_batch;
+        while(threads_per_transform * batches_per_block > threads_per_block)
+            --batches_per_block;
+        threads_per_block = threads_per_transform * batches_per_block;
+
+        nregisters = compute_nregisters(length, factors, threads_per_transform);
+        R.size     = Expression{nregisters};
+    }
+
+    static unsigned int compute_nregisters(unsigned int              length,
+                                           std::vector<unsigned int> factors,
+                                           unsigned int              threads_per_transform)
+    {
+        uint max_registers = 0;
         for(auto width : factors)
         {
             uint n = ceil(double(length) / width / threads_per_transform) * width;
-            if(n > nregisters)
-                nregisters = n;
+            if(n > max_registers)
+                max_registers = n;
         }
-        R.size = OptionalExpression(Literal{nregisters});
+        return max_registers;
+    }
+
+    // virtual methods for tiling
+    virtual std::string tiling_name() const = 0;
+    enum GlobalLoadDestination
+    {
+        TO_REGISTERS,
+        TO_LDS,
     };
+    enum GlobalStoreSource
+    {
+        FROM_REGISTERS,
+        FROM_LDS,
+    };
+    virtual StatementList load_global(uint h, uint width, GlobalLoadDestination dest)           = 0;
+    virtual StatementList store_global(uint h, uint width, uint nheight, GlobalStoreSource src) = 0;
 
     StatementList add_work(std::function<StatementList(uint)> generator,
                            uint                               width,
@@ -101,36 +227,30 @@ struct StockhamGenerator
         return stmts;
     }
 
-    StatementList load_lds(uint h, uint width, int component)
+    enum class Component
+    {
+        REAL,
+        IMAG,
+        BOTH,
+    };
+    StatementList load_lds(uint h, uint width, Component component)
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
-            auto idx = offset_lds + tid + w * (length / width);
-            if(component < 0)
+            auto idx = offset_lds + (tid + w * (length / width)) * lstride;
+            if(component == Component::BOTH)
                 stmts += Assign(R[h * width + w], lds[idx]);
-            else if(component == 0)
+            else if(component == Component::REAL)
                 stmts += Assign(R[h * width + w].x, lds[idx].x);
-            else if(component == 1)
+            else if(component == Component::IMAG)
                 stmts += Assign(R[h * width + w].y, lds[idx].y);
         }
         return stmts;
     }
 
-    StatementList load_global(uint h)
-    {
-        StatementList stmts;
-        for(uint w = 0; w < width; ++w)
-        {
-            auto tid = thread + h * threads_per_transform;
-            auto idx = offset_buf + (tid + w * (length / width)) * stride_buf;
-            stmts += Assign(R[h * width + w], buf[idx]);
-        }
-        return stmts;
-    }
-
-    StatementList apply_twiddle(uint h)
+    StatementList apply_twiddle(uint h, uint width, uint nheight)
     {
         StatementList stmts;
         for(uint w = 1; w < width; ++w)
@@ -146,63 +266,54 @@ struct StockhamGenerator
         return stmts;
     }
 
-    StatementList butterfly(uint h)
+    StatementList butterfly(uint h, uint width)
     {
         StatementList           stmts;
         std::vector<Expression> args;
         for(uint w = 0; w < width; ++w)
             args.push_back(R + (h * width + w));
-        stmts += Call("FwdRad" + std::to_string(width), args);
+        stmts += Call("FwdRad" + std::to_string(width) + "B1", args);
         return stmts;
     }
 
-    StatementList store_lds(uint h, uint width, int component)
+    StatementList store_lds(uint h, uint width, Component component, uint nheight)
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
-            auto idx = offset_lds
-                       + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight)
-                             * stride_lds;
-            if(component < 0)
+            auto idx
+                = offset_lds
+                  + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * lstride;
+            if(component == Component::BOTH)
                 stmts += Assign(lds[idx], R[h * width + w]);
-            else if(component == 0)
+            else if(component == Component::REAL)
                 stmts += Assign(lds[idx].x, R[h * width + w].x);
-            else if(component == 1)
+            else if(component == Component::IMAG)
                 stmts += Assign(lds[idx].y, R[h * width + w].y);
-        }
-        return stmts;
-    }
-
-    StatementList store_global(uint h)
-    {
-        StatementList stmts;
-        for(uint w = 0; w < width; ++w)
-        {
-            auto tid = thread + h * threads_per_transform;
-            auto idx = offset_buf
-                       + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight)
-                             * stride_buf;
-            stmts += Assign(buf[idx], R[h * width + w]);
         }
         return stmts;
     }
 
     Function make_device()
     {
-        auto kdevice = Function("forward_length" + std::to_string(length));
+        Function kdevice("forward_length" + std::to_string(length) + "_" + tiling_name()
+                         + "_device");
+
+        kdevice.qualifier = "__device__";
 
         kdevice.templates.append(scalar_type);
+        kdevice.templates.append(stride_type);
 
         kdevice.arguments.append(lds);
+        kdevice.arguments.append(twiddles);
         kdevice.arguments.append(stride_lds);
         kdevice.arguments.append(offset_lds);
         if(half_lds)
         {
             kdevice.arguments.append(buf);
-            kdevice.arguments.append(stride_buf);
-            kdevice.arguments.append(offset_buf);
+            kdevice.arguments.append(stride0);
+            kdevice.arguments.append(offset);
         }
         kdevice.arguments.append(write);
 
@@ -210,40 +321,51 @@ struct StockhamGenerator
         kdevice.body += Declaration(R);
         kdevice.body += Declaration(W);
         kdevice.body += Declaration(t);
+        kdevice.body += Declaration(
+            lstride, Ternary(stride_type == Literal{"SB_UNIT"}, Literal{1}, stride_lds));
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
-            width   = factors[pass];
-            height  = double(length) / width / threads_per_transform;
-            nheight = product(factors, pass);
+            auto width   = factors[pass];
+            auto height  = double(length) / width / threads_per_transform;
+            auto nheight = product(factors.begin(), factors.begin() + pass);
 
             kdevice.body += LineBreak();
             kdevice.body += CommentLines{
                 "pass " + std::to_string(pass) + ", width " + std::to_string(width),
                 "using " + std::to_string(threads_per_transform) + " threads we need to do "
                     + std::to_string(length / width) + " butterflies",
-                "therefore each threads will do " + std::to_string(height) + " butterflies"};
+                "therefore each thread will do " + std::to_string(height) + " butterflies"};
             kdevice.body += SyncThreads();
 
             if(pass == 0 && half_lds)
                 kdevice.body
-                    += add_work([this](uint h) { return load_global(h); }, width, height, true);
+                    += add_work([=](uint h) { return load_global(h, width, TO_REGISTERS); },
+                                width,
+                                height,
+                                true);
 
             if(!half_lds)
-                kdevice.body
-                    += add_work([this](uint h) { return load_lds(h, width, -1); }, width, height);
+                kdevice.body += add_work(
+                    [=](uint h) { return load_lds(h, width, Component::BOTH); }, width, height);
 
-            kdevice.body += add_work([this](uint h) { return apply_twiddle(h); }, width, height);
-            kdevice.body += add_work([this](uint h) { return butterfly(h); }, width, height);
+            if(pass > 0)
+            {
+                kdevice.body += add_work(
+                    [=](uint h) { return apply_twiddle(h, width, nheight); }, width, height);
+            }
+            kdevice.body += add_work([=](uint h) { return butterfly(h, width); }, width, height);
 
             if(half_lds)
             {
                 if(pass < factors.size() - 1)
                 {
-                    for(uint component = 0; component < 2; ++component)
+                    for(auto component : {Component::REAL, Component::IMAG})
                     {
                         kdevice.body += add_work(
-                            [&, this](uint h) { return store_lds(h, factors[pass], component); },
+                            [&, this](uint h) {
+                                return store_lds(h, factors[pass], component, nheight);
+                            },
                             factors[pass],
                             double(length) / factors[pass] / threads_per_transform,
                             true);
@@ -260,31 +382,167 @@ struct StockhamGenerator
                 else
                 {
                     kdevice.body += add_work(
-                        [this](uint h) { return store_global(h); }, width, height, true);
+                        [=](uint h) { return store_global(h, width, nheight, FROM_REGISTERS); },
+                        width,
+                        height,
+                        true);
                 }
             }
             else
             {
                 kdevice.body += SyncThreads();
                 kdevice.body += add_work(
-                    [this](uint h) { return store_lds(h, width, -1); }, width, height, true);
+                    [=](uint h) { return store_lds(h, width, Component::BOTH, nheight); },
+                    width,
+                    height,
+                    true);
             }
         }
-
-        // add for loop to test how that works
-        Variable accumulator{"accumulator", "int"};
-        Variable var{"myvar", "int"};
-
-        kdevice.body += Declaration(accumulator, Literal{0});
-        For forloop(Variable{"myvar", "int"}, Literal{0}, Less{var, Literal{1}}, Literal{1});
-        forloop.body += Assign{accumulator, Add{accumulator, var}};
-        kdevice.body += forloop;
-
-        // test a function call with template parameters
-        Call c{"myfunc", TemplateList{{{"foo", "int"}, {"bar", "char"}}}, {Literal{1}, Literal{2}}};
-        kdevice.body += c;
-
         return kdevice;
+    }
+
+    Function make_global()
+    {
+        Function kglobal("forward_length" + std::to_string(length) + "_" + tiling_name());
+        kglobal.qualifier     = "__global__";
+        kglobal.launch_bounds = threads_per_block;
+
+        kglobal.templates.append(scalar_type);
+        kglobal.templates.append(stride_type);
+        kglobal.templates.append(embedded_type);
+        kglobal.templates.append(callback_type);
+
+        kglobal.arguments.append(twiddles);
+        kglobal.arguments.append(dim);
+        kglobal.arguments.append(lengths);
+        kglobal.arguments.append(stride);
+        kglobal.arguments.append(nbatch);
+        kglobal.arguments.append(lds_padding);
+        add_callback_arguments(kglobal.arguments);
+        kglobal.arguments.append(buf);
+
+        kglobal.body += CommentLines{
+            std::string("this kernel:"),
+            "  uses " + std::to_string(threads_per_transform) + " threads per transform",
+            "  does " + std::to_string(batches_per_block) + " transforms per thread block",
+            "therefore it should be called with " + std::to_string(threads_per_block)
+                + " threads per thread block"};
+
+        kglobal.body += LDSDeclaration(scalar_type.name);
+        kglobal.body += Declaration(offset, Literal{0});
+        kglobal.body += Declaration(offset_lds);
+        kglobal.body += Declaration(stride_lds);
+        kglobal.body += Declaration(batch);
+        kglobal.body += Declaration(transform);
+        kglobal.body += Declaration(thread);
+        kglobal.body += Declaration(write);
+        kglobal.body += Declaration(
+            stride0, Ternary{stride_type == Literal{"SB_UNIT"}, Literal{1}, stride[Literal{0}]});
+        kglobal.body += CallbackDeclaration(scalar_type.name, callback_type.name);
+
+        kglobal.body += LineBreak();
+
+        kglobal.body += CommentLines{std::string{"offsets"}};
+
+        Variable remaining{"remaining", "size_t"};
+        Variable index_along_d{"index_along_d", "size_t"};
+        kglobal.body += Declaration{remaining};
+        kglobal.body += Declaration{index_along_d};
+        kglobal.body += Assign{
+            transform, block_id * Literal{batches_per_block} + thread_id / threads_per_transform};
+        kglobal.body += Assign{remaining, transform};
+        Variable d{"d", "int"};
+        For      offset_for{d, Literal{1}, Less{d, dim}, Literal{1}};
+        offset_for.body += Assign{index_along_d, remaining % lengths[d]};
+        offset_for.body += Assign{remaining, remaining / lengths[d]};
+        offset_for.body += Assign{offset, offset + index_along_d * stride[d]};
+        kglobal.body += offset_for;
+
+        kglobal.body += Assign{batch, remaining};
+        kglobal.body += Assign{offset, offset + batch * stride[dim]};
+        kglobal.body += Assign{
+            offset_lds, (Literal{length} + lds_padding) * (transform % Literal{batches_per_block})};
+
+        kglobal.body += LineBreak();
+
+        kglobal.body += If{GreaterEqual{batch, nbatch}, {Return()}};
+
+        // FIXME: this should be pushed down to the RR-specific class?
+        kglobal.body += CommentLines{std::string{"load global"}};
+        kglobal.body += Assign{thread, thread_id % Literal{threads_per_transform}};
+        kglobal.body += add_work(
+            [=](uint h) { return load_global(h, threads_per_transform, TO_LDS); }, 1, 1);
+
+        kglobal.body += LineBreak();
+        kglobal.body
+            += CommentLines{std::string("append extra global loading for C2Real pre-process only")};
+        StatementList c2real_pre;
+        c2real_pre += CommentLines{
+            "use the last thread of each transform to load one more element per row"};
+        auto width  = threads_per_transform;
+        auto height = length / width;
+        c2real_pre += If{
+            thread == Literal{threads_per_transform - 1},
+            {Assign{lds[offset_lds + thread + (height - 1) * width + 1],
+                    LoadGlobal{buf, offset + (thread + (height - 1) * width + 1) * stride0}}}};
+        kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::C2Real_PRE"}}, c2real_pre};
+
+        return kglobal;
+    }
+
+    void add_callback_arguments(ArgumentList& args)
+    {
+        args.append(Variable{"load_cb_fn", "void", true, true});
+        args.append(Variable{"load_cb_data", "void", true, true});
+        args.append(Variable{"load_cb_lds_bytes", "uint32_t"});
+        args.append(Variable{"store_cb_fn", "void", true, true});
+        args.append(Variable{"store_cb_data", "void", true, true});
+    }
+};
+
+struct StockhamGeneratorSBRR : public StockhamGenerator
+{
+    StockhamGeneratorSBRR(std::vector<uint> factors, uint threads_per_block, const Params params)
+        : StockhamGenerator(factors, threads_per_block, params)
+    {
+    }
+
+    std::string tiling_name() const override
+    {
+        return "SBRR";
+    }
+
+    StatementList load_global(uint h, uint width, GlobalLoadDestination dest) override
+    {
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx = offset + (tid + w * (length / width)) * stride0;
+            if(dest == TO_REGISTERS)
+                stmts += Assign(R[h * width + w], LoadGlobal(buf, idx));
+            else
+                stmts
+                    += Assign(lds[offset_lds + thread + Literal{w * width}], LoadGlobal(buf, idx));
+        }
+        return stmts;
+    }
+
+    StatementList store_global(uint h, uint width, uint nheight, GlobalStoreSource src) override
+    {
+        StatementList stmts;
+        for(uint w = 0; w < width; ++w)
+        {
+            auto tid = thread + h * threads_per_transform;
+            auto idx
+                = offset
+                  + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * stride0;
+            if(src == FROM_REGISTERS)
+                stmts += StoreGlobal(buf, idx, R[h * width + w]);
+            else
+                stmts += StoreGlobal(buf, idx, lds[offset_lds + thread + Literal{w * width}]);
+        }
+        return stmts;
     }
 };
 
@@ -331,9 +589,14 @@ int main(int argc, char* argv[])
     for(int i = 1; i < argc; ++i)
         factors.push_back(std::stoi(argv[i]));
 
-    auto stockham = StockhamGenerator(factors, 7, false);
+    auto stockham = StockhamGeneratorSBRR(factors, 256, {});
     auto device   = stockham.make_device();
-    auto planar   = make_planar(device, "buf");
+    auto global   = stockham.make_global();
 
-    format_and_write("stockham_generated_kernel.h", planar.render());
+    auto planar_device = make_planar(device, "buf");
+    auto planar_global = make_planar(global, "buf");
+
+    format_and_write("stockham_generated_kernel.h",
+                     device.render() + global.render() + planar_device.render()
+                         + planar_global.render());
 }
