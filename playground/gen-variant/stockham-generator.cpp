@@ -227,18 +227,24 @@ struct StockhamGenerator : public Params
         return stmts;
     }
 
-    StatementList load_lds(uint h, uint width, int component)
+    enum class Component
+    {
+        REAL,
+        IMAG,
+        BOTH,
+    };
+    StatementList load_lds(uint h, uint width, Component component)
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
         {
             auto tid = thread + h * threads_per_transform;
             auto idx = offset_lds + (tid + w * (length / width)) * lstride;
-            if(component < 0)
+            if(component == Component::BOTH)
                 stmts += Assign(R[h * width + w], lds[idx]);
-            else if(component == 0)
+            else if(component == Component::REAL)
                 stmts += Assign(R[h * width + w].x, lds[idx].x);
-            else if(component == 1)
+            else if(component == Component::IMAG)
                 stmts += Assign(R[h * width + w].y, lds[idx].y);
         }
         return stmts;
@@ -270,7 +276,7 @@ struct StockhamGenerator : public Params
         return stmts;
     }
 
-    StatementList store_lds(uint h, uint width, int component, uint nheight)
+    StatementList store_lds(uint h, uint width, Component component, uint nheight)
     {
         StatementList stmts;
         for(uint w = 0; w < width; ++w)
@@ -279,11 +285,11 @@ struct StockhamGenerator : public Params
             auto idx
                 = offset_lds
                   + ((tid / nheight) * (width * nheight) + tid % nheight + w * nheight) * lstride;
-            if(component < 0)
+            if(component == Component::BOTH)
                 stmts += Assign(lds[idx], R[h * width + w]);
-            else if(component == 0)
+            else if(component == Component::REAL)
                 stmts += Assign(lds[idx].x, R[h * width + w].x);
-            else if(component == 1)
+            else if(component == Component::IMAG)
                 stmts += Assign(lds[idx].y, R[h * width + w].y);
         }
         return stmts;
@@ -340,8 +346,8 @@ struct StockhamGenerator : public Params
                                 true);
 
             if(!half_lds)
-                kdevice.body
-                    += add_work([=](uint h) { return load_lds(h, width, -1); }, width, height);
+                kdevice.body += add_work(
+                    [=](uint h) { return load_lds(h, width, Component::BOTH); }, width, height);
 
             if(pass > 0)
             {
@@ -354,7 +360,7 @@ struct StockhamGenerator : public Params
             {
                 if(pass < factors.size() - 1)
                 {
-                    for(uint component = 0; component < 2; ++component)
+                    for(auto component : {Component::REAL, Component::IMAG})
                     {
                         kdevice.body += add_work(
                             [&, this](uint h) {
@@ -386,7 +392,10 @@ struct StockhamGenerator : public Params
             {
                 kdevice.body += SyncThreads();
                 kdevice.body += add_work(
-                    [=](uint h) { return store_lds(h, width, -1, nheight); }, width, height, true);
+                    [=](uint h) { return store_lds(h, width, Component::BOTH, nheight); },
+                    width,
+                    height,
+                    true);
             }
         }
         return kdevice;
