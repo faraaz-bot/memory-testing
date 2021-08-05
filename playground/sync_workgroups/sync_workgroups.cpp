@@ -124,8 +124,7 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
     plus_one_device(a, blockIdx.x, bs, cs);
 
-    //__syncthreads();
-    __threadfence();
+    __syncthreads();
 
     // the leading thread in each workgroup sets its bit in g_counter,
     // and then wait for all workgroups sync.
@@ -137,6 +136,8 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
         {
         }
     }
+
+    __threadfence();
 
     bs = LEN * LEN;
     cs = LEN * LEN;
@@ -250,15 +251,14 @@ __device__ void grid_sync(int val)
 {
     if(threadIdx.x == 0)
     {
-        //g_in[blockIdx.x] = val;
-        hip_atomic_store<int>(&g_in[blockIdx.x], val);
+        atomicExch(&g_in[blockIdx.x], val);
     }
 
     if(blockIdx.x == 0) // assume work group 0 has enough threads to cover gridDim.x
     {
         if(threadIdx.x < gridDim.x)
         {
-            while(hip_atomic_load<int>(&g_in[threadIdx.x]) != val)
+            while(atomicAdd(&g_in[threadIdx.x], 0) != val)
             {
             }
         }
@@ -266,14 +266,13 @@ __device__ void grid_sync(int val)
 
         if(threadIdx.x < gridDim.x)
         {
-            //g_out[threadIdx.x] = val;
-            hip_atomic_store<int>(&g_out[threadIdx.x], val);
+            atomicExch(&g_out[blockIdx.x], val);
         }
     }
 
     if(threadIdx.x == 0)
     {
-        while(hip_atomic_load<int>(&g_out[blockIdx.x]) != val)
+        while(atomicAdd(&g_out[blockIdx.x], 0) != val)
         {
         }
     }
@@ -353,7 +352,7 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
                 if(threadIdx.x == 0)
                 {
                     //printf("--- block %d triggers next pass\n", (int)blockIdx.x);
-                    hip_atomic_store(&g_counter_pass1, 0);
+                    atomicExch(&g_counter_pass1, 0);
                 }
 
                 done = 1;
@@ -371,7 +370,8 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
     // barrier for next pass
     if(threadIdx.x == 0)
     {
-        while(hip_atomic_load(&g_counter_pass1) < 0)
+        //while(hip_atomic_load(&g_counter_pass1) < 0)
+        while(atomicAdd(&g_counter_pass1, 0) < 0)
         {
         }
     }
@@ -407,8 +407,8 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
             done = 1;
             if(threadIdx.x == 0)
             {
-                hip_atomic_store(&g_counter_pass0, 0);
-                hip_atomic_store(&g_counter_pass1, -1);
+                atomicExch(&g_counter_pass0, 0);
+                atomicExch(&g_counter_pass1, -1);
             }
         }
     }
@@ -426,6 +426,10 @@ void solution_5(int* d_data, bool coop_launch)
         int   c_stride     = LEN;
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
+        int zerro     = 0;
+        int minus_one = -1;
+        // hipMemcpyToSymbol(g_counter_pass0, &zerro, sizeof(int));
+        // hipMemcpyToSymbol(g_counter_pass1, &minus_one, sizeof(int));
         coop_launch_((void*)plus_one_twice_sync_tasks_atomic, (LEN * LEN), LEN, kernelArgs, 0);
     }
 }
@@ -457,46 +461,58 @@ int main()
         std::cout << "-- coop_launch " << coop_launch << std::endl;
         for(auto i = 0; i < SOLUTION_NUM; i++)
         {
-            device_reset();
-            device_malloc((void**)&d_data, total_bytes);
-            device_memcpy_h2d(d_data, h_in, total_bytes);
-
-            device_event_create();
-
-            // warm up once
-            solution[i](d_data, coop_launch);
-
-            device_event_record_start();
-
-            for(int j = 0; j < 100; j++)
+            if(i == 0 || i == 1 || i == 2 || i == 5)
             {
+                device_reset();
+                device_malloc((void**)&d_data, total_bytes);
+                device_memcpy_h2d(d_data, h_in, total_bytes);
+
+                device_event_create();
+
+                // warm up once
                 solution[i](d_data, coop_launch);
+
+                device_event_record_start();
+
+                for(int j = 0; j < 100; j++)
+                {
+                    solution[i](d_data, coop_launch);
+                }
+
+                device_event_record_stop();
+                device_event_synchronize_stop();
+                device_synchronize();
+                std::cout << "solution_" << i << ": " << device_event_elapsed_time() << " ms\n";
+
+                device_memcpy_d2h(&h_out[i * total_size], d_data, total_bytes);
+                device_free(d_data);
+                device_event_destroy();
             }
-
-            device_event_record_stop();
-            device_event_synchronize_stop();
-            device_synchronize();
-            std::cout << "solution_" << i << ": " << device_event_elapsed_time() << " ms\n";
-
-            device_memcpy_d2h(&h_out[i * total_size], d_data, total_bytes);
-            device_free(d_data);
-            device_event_destroy();
         }
     }
 
     // take the 1st run as reference to verify the output of each solution
     std::cout << "verify...\n";
     for(auto i = 1; i < SOLUTION_NUM; i++)
-        for(auto j = 0; j < total_size; j++)
+    {
+        if(i == 0 || i == 1 || i == 2 || i == 5)
         {
-            if(h_out[i * total_size + j] != h_out[j])
+            for(auto j = 0; j < total_size; j++)
             {
-                std::cout << "solution_" << i << ": failed at " << j << ", ref " << h_out[j]
-                          << " vs " << h_out[i * total_size + j] << std::endl;
-                break;
+                if(h_out[i * total_size + j] != h_out[j])
+                {
+                    std::cout << "solution_" << i << ": failed at " << j << ", ref " << h_out[j]
+                              << " vs " << h_out[i * total_size + j] << std::endl;
+                    break;
+                }
             }
+            std::cout << "solution_" << i << ": done\n";
         }
-    std::cout << "done.\n";
+        else
+        {
+            std::cout << "solution_" << i << ": bypass\n";
+        }
+    }
 
     // for(auto i = 1; i < SOLUTION_NUM; i++)
     // {
