@@ -17,8 +17,10 @@
 //
 //
 // Build:
-//    /opt/rocm/bin/hipcc sync_workgroups.cpp  sync_workgroups_helper.h -o sync_workgroups
-//
+//    with hipcc:
+//      /opt/rocm/bin/hipcc sync_workgroups.cpp  sync_workgroups_helper.h -o sync_workgroups
+//    with nvcc:
+//      nvcc -x cu --std=c++11 -D CUDA sync_workgroups.cpp -o sync_workgroups_cuda
 //
 
 #include "sync_workgroups_helper.h"
@@ -457,7 +459,7 @@ int main()
 
                 device_event_record_start();
 
-                //for(int j = 0; j < 1000; j++)
+                for(int j = 0; j < 1000; j++)
                 {
                     solution[i](d_data, coop_launch);
                 }
