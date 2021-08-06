@@ -1,9 +1,19 @@
 //
+//
 // The code mocks 2 inplace rocFFT SBCC kernels behavior(access pattern) with
 // simple plus_one() operation. In the 1st pass, we expect to handle the data
 // along the second dim with column tiles. In the 2nd pass, we expect to handle
 // the data along the slowest dim with column tiles. Here we are trying various
 // solutions to do the sync between 2 passes.
+//
+//
+// solution_0: do it with 2 kernel launch.
+// solution_1: do it in 1 kernel launch with HIP cooperative_groups grid.sync().
+// solution_2: do it in 1 kernel launch with atomic sync.
+// solution_3: do it in 1 kernel launch with atomic sync, but for partitioned workgroups.
+// solution_4: do it in 1 kernel launch without atomic. The idea is from section 5.3
+//             in http://eprints.cs.vt.edu/archive/00001087/01/TR_GPU_synchronization.pdf.
+// solution_5: do it in 1 kernel launch but sync tasks with atomic.
 //
 //
 // Build:
@@ -326,6 +336,9 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
 
     __shared__ int l_task_id;
 
+    if(threadIdx.x == 0 && blockIdx.x == 0)
+        atomicExch(&g_counter_pass1, -1);
+
     while(done != 1)
     {
         if(threadIdx.x == 0) // only the leading thread in workgroup acquires task_id with atomic
@@ -370,11 +383,12 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
     // barrier for next pass
     if(threadIdx.x == 0)
     {
-        //while(hip_atomic_load(&g_counter_pass1) < 0)
         while(atomicAdd(&g_counter_pass1, 0) < 0)
         {
         }
     }
+
+    //__threadfence();
 
     bs = LEN * LEN;
     cs = LEN * LEN;
@@ -408,7 +422,6 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
             if(threadIdx.x == 0)
             {
                 atomicExch(&g_counter_pass0, 0);
-                atomicExch(&g_counter_pass1, -1);
             }
         }
     }
@@ -426,13 +439,10 @@ void solution_5(int* d_data, bool coop_launch)
         int   c_stride     = LEN;
         void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
-        int zerro     = 0;
-        int minus_one = -1;
-        // hipMemcpyToSymbol(g_counter_pass0, &zerro, sizeof(int));
-        // hipMemcpyToSymbol(g_counter_pass1, &minus_one, sizeof(int));
         coop_launch_((void*)plus_one_twice_sync_tasks_atomic, (LEN * LEN), LEN, kernelArgs, 0);
     }
 }
+
 
 //-----------------------------------------------------------------------------
 
@@ -461,7 +471,7 @@ int main()
         std::cout << "-- coop_launch " << coop_launch << std::endl;
         for(auto i = 0; i < SOLUTION_NUM; i++)
         {
-            if(i == 0 || i == 1 || i == 2 || i == 5)
+            if(i != 3 && i != 4)
             {
                 device_reset();
                 device_malloc((void**)&d_data, total_bytes);
@@ -474,7 +484,7 @@ int main()
 
                 device_event_record_start();
 
-                for(int j = 0; j < 100; j++)
+                for(int j = 0; j < 1000; j++)
                 {
                     solution[i](d_data, coop_launch);
                 }
@@ -495,9 +505,10 @@ int main()
     std::cout << "verify...\n";
     for(auto i = 1; i < SOLUTION_NUM; i++)
     {
-        if(i == 0 || i == 1 || i == 2 || i == 5)
+        if(i != 3 && i != 4)
         {
-            for(auto j = 0; j < total_size; j++)
+            int j = 0;
+            for(; j < total_size; j++)
             {
                 if(h_out[i * total_size + j] != h_out[j])
                 {
@@ -506,7 +517,8 @@ int main()
                     break;
                 }
             }
-            std::cout << "solution_" << i << ": done\n";
+            if(j == total_size)
+                std::cout << "solution_" << i << ": done\n";
         }
         else
         {
