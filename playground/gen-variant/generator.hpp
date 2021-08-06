@@ -206,7 +206,6 @@ public:
     LoadGlobal(Expression ptr, Expression index);
     std::string render() const;
 
-private:
     std::vector<Expression> exprs;
 };
 
@@ -581,6 +580,8 @@ class ArgumentList
 {
 public:
     ArgumentList(){};
+    ArgumentList(std::initializer_list<Variable> il)
+        : arguments(il){};
     ArgumentList(std::vector<Variable> arguments)
         : arguments(arguments){};
     std::vector<Variable> arguments;
@@ -813,7 +814,7 @@ public:
     std::string render() const
     {
         return "store_cb(" + vrender(ptr) + "," + vrender(index) + "," + vrender(value)
-               + ", store_cb_data, nullptr)";
+               + ", store_cb_data, nullptr);";
     }
 
     Expression ptr;
@@ -1109,7 +1110,6 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
-    MAKE_VISITOR(Statement, StoreGlobal)
     MAKE_VISITOR(Statement, SyncThreads)
 
     ArgumentList operator()(const ArgumentList& x)
@@ -1166,7 +1166,51 @@ struct MakePlanarVisitor
             im.name  = imname;
             return Assign(x.lhs, ComplexLiteral(re.render(), im.render()));
         }
+        // callbacks don't support planar, so loads are just direct
+        // memory accesses
+        else if(std::holds_alternative<LoadGlobal>(x.rhs))
+        {
+            auto load = std::get<LoadGlobal>(x.rhs);
+            auto ptr  = std::get<Variable>(load.exprs[0]);
+            if(ptr.name == varname)
+            {
+                auto& idx = load.exprs[1];
 
+                StatementList stmts;
+
+                auto re = ptr;
+                re.name = rename;
+                auto im = ptr;
+                im.name = imname;
+
+                stmts += Assign(x.lhs.x, re[idx].x);
+                stmts += Assign(x.lhs.y, im[idx].y);
+                return stmts;
+            }
+        }
+
+        return x;
+    }
+
+    Statement operator()(const StoreGlobal& x)
+    {
+        // callbacks don't support planar, so stores are just direct
+        // memory accesses
+        auto var   = std::get<Variable>(x.ptr);
+        auto value = std::get<Variable>(x.value);
+
+        if(var.name == varname)
+        {
+            auto re = var;
+            re.name = rename;
+            auto im = var;
+            im.name = imname;
+
+            StatementList stmts;
+            stmts += Assign(re[x.index], value.x);
+            stmts += Assign(im[x.index], value.y);
+            return stmts;
+        }
         return x;
     }
 

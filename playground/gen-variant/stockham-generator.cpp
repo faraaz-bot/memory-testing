@@ -487,6 +487,33 @@ struct StockhamGenerator : public Params
                     LoadGlobal{buf, offset + (thread + (height - 1) * width + 1) * stride0}}}};
         kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::C2Real_PRE"}}, c2real_pre};
 
+        kglobal.body += CommentLines{std::string{"transform"}};
+        kglobal.body += Assign{write, Literal{"true"}};
+        kglobal.body += Call{kglobal.name + "_device",
+                             {scalar_type, Variable{"SB_UNIT", "StrideBin"}},
+                             {lds, twiddles, stride_lds, offset_lds, write}};
+
+        kglobal.body += LineBreak();
+        kglobal.body += CommentLines{
+            std::string("handle even-length complex to real post-process in lds after transform")};
+        StatementList real2c_post;
+        real2c_post += SyncThreads();
+        // FIXME: loop if necessary, compute all the numbers and Ndiv4 properly
+        real2c_post += Call{"real_post_process_kernel_inplace",
+                            {scalar_type, Variable{"false", "bool"}},
+                            {thread % Literal{5} + Literal{0},
+                             Literal{9} - thread % Literal{5} - Literal{0},
+                             Literal{5},
+                             lds + offset_lds,
+                             Literal{0},
+                             twiddles + Literal{9}}};
+        kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::Real2C_POST"}}, real2c_post};
+
+        kglobal.body += CommentLines{std::string{"store global"}};
+        kglobal.body += SyncThreads();
+        kglobal.body += add_work(
+            [=](uint h) { return store_global(h, threads_per_transform, 1, FROM_LDS); }, 1, 1);
+
         return kglobal;
     }
 
@@ -593,10 +620,8 @@ int main(int argc, char* argv[])
     auto device   = stockham.make_device();
     auto global   = stockham.make_global();
 
-    auto planar_device = make_planar(device, "buf");
     auto planar_global = make_planar(global, "buf");
 
     format_and_write("stockham_generated_kernel.h",
-                     device.render() + global.render() + planar_device.render()
-                         + planar_global.render());
+                     device.render() + global.render() + planar_global.render());
 }
