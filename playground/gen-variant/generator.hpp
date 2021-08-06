@@ -580,6 +580,8 @@ class ArgumentList
 {
 public:
     ArgumentList(){};
+    ArgumentList(std::initializer_list<Variable> il)
+        : arguments(il){};
     ArgumentList(std::vector<Variable> arguments)
         : arguments(arguments){};
     std::vector<Variable> arguments;
