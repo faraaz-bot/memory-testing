@@ -185,24 +185,18 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
     plus_one_device(a, blockIdx.x, bs, cs);
 
-    __threadfence();
-
     int counterIdx = blockIdx.x % LEN;
     if(threadIdx.x == 0)
     {
         //printf("blockIdx.x %3d, counterIdx %x\n", (int)blockIdx.x, counterIdx);
         atomicAdd(&g_partitioned_counters[counterIdx], 1);
-#ifdef CUDA
-        __threadfence();
-        while(g_partitioned_counters[counterIdx] != LEN)
+
+        while(atomicAdd(&g_partitioned_counters[counterIdx], 0) != LEN)
         {
         }
-#else
-        while(hip_atomic_load<int>(&g_partitioned_counters[counterIdx]) < LEN)
-        {
-        }
-#endif
     }
+
+    __threadfence();
 
     bs = LEN * LEN;
     cs = LEN * LEN;
@@ -216,27 +210,7 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
 void solution_3(int* d_data, bool coop_launch)
 {
-    // int   b_stride     = LEN;
-    // int   c_stride     = LEN;
-    // void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
-    //hipLaunchCooperativeKernel(
-    //    plus_one_twice_sync_partion_atomic, dim3(LEN * LEN), dim3(LEN), kernelArgs, 0, 0);
-
-    // int max_blocks_per_sm, max_blocks_per_grid;
-    // hipOccupancyMaxActiveBlocksPerMultiprocessor(
-    //     &max_blocks_per_sm, plus_one_twice_sync_partion_atomic, LEN, 0);
-
-    // hipDeviceProp_t device_properties;
-    // hipGetDeviceProperties(&device_properties, 0);
-    // max_blocks_per_grid = device_properties.multiProcessorCount * max_blocks_per_sm;
-    // std::cout << "max_blocks_per_sm " << max_blocks_per_sm << ", max_blocks_per_grid "
-    //           << max_blocks_per_grid << std::endl;
-
-    // if(LEN * LEN > max_blocks_per_grid)
-    // {
-    //     printf("Please reduce gridsize from %d to %d\n", LEN * LEN, max_blocks_per_grid);
-    //     exit(-1);
-    // }
+    //check_occupancy((void*)plus_one_twice_sync_partion_atomic, LEN * LEN, LEN, 0);
 
     if(!coop_launch)
     {
@@ -443,7 +417,6 @@ void solution_5(int* d_data, bool coop_launch)
     }
 }
 
-
 //-----------------------------------------------------------------------------
 
 int main()
@@ -471,7 +444,7 @@ int main()
         std::cout << "-- coop_launch " << coop_launch << std::endl;
         for(auto i = 0; i < SOLUTION_NUM; i++)
         {
-            if(i != 3 && i != 4)
+            if(i != 4)
             {
                 device_reset();
                 device_malloc((void**)&d_data, total_bytes);
@@ -484,7 +457,7 @@ int main()
 
                 device_event_record_start();
 
-                for(int j = 0; j < 1000; j++)
+                //for(int j = 0; j < 1000; j++)
                 {
                     solution[i](d_data, coop_launch);
                 }
@@ -505,7 +478,7 @@ int main()
     std::cout << "verify...\n";
     for(auto i = 1; i < SOLUTION_NUM; i++)
     {
-        if(i != 3 && i != 4)
+        if(i != 4)
         {
             int j = 0;
             for(; j < total_size; j++)

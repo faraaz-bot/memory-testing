@@ -187,7 +187,8 @@ inline float device_event_elapsed_time()
     return gpu_time;
 }
 
-bool check_occupancy(
+// The grid size of coop launched has upper bound
+static bool check_occupancy(
     void* func, int grid_size, int workgroup_size, size_t dynamic_lds_size, int device_id = 0)
 {
     int max_blocks_per_sm, max_blocks_per_grid;
