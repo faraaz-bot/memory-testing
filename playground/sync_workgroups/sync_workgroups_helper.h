@@ -187,6 +187,36 @@ inline float device_event_elapsed_time()
     return gpu_time;
 }
 
+bool check_occupancy(
+    void* func, int grid_size, int workgroup_size, size_t dynamic_lds_size, int device_id = 0)
+{
+    int max_blocks_per_sm, max_blocks_per_grid;
+#ifdef CUDA
+    cudaDeviceProp device_properties;
+    cudaGetDeviceProperties(&device_properties, device_id);
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &max_blocks_per_sm, func, workgroup_size, dynamic_lds_size);
+#else
+    hipDeviceProp_t device_properties;
+    hipGetDeviceProperties(&device_properties, 0);
+    hipOccupancyMaxActiveBlocksPerMultiprocessor(
+        &max_blocks_per_sm, func, workgroup_size, dynamic_lds_size);
+#endif
+
+    max_blocks_per_grid = device_properties.multiProcessorCount * max_blocks_per_sm;
+    std::cout << "max_blocks_per_sm " << max_blocks_per_sm << ", max_blocks_per_grid "
+              << max_blocks_per_grid << std::endl;
+
+    if(grid_size > max_blocks_per_grid)
+    {
+        std::cout << "Please reduce gridsize from " << grid_size << " to " << max_blocks_per_grid
+                  << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 //-----------------------------------------------------------------------------
 // OpenCL atomic load/store code for experiment only. HIP will have its own implementations.
 
