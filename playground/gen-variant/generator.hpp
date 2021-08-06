@@ -812,7 +812,7 @@ public:
     std::string render() const
     {
         return "store_cb(" + vrender(ptr) + "," + vrender(index) + "," + vrender(value)
-               + ", store_cb_data, nullptr)";
+               + ", store_cb_data, nullptr);";
     }
 
     Expression ptr;
@@ -1108,7 +1108,6 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, LineBreak)
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
-    MAKE_VISITOR(Statement, StoreGlobal)
     MAKE_VISITOR(Statement, SyncThreads)
 
     ArgumentList operator()(const ArgumentList& x)
@@ -1188,6 +1187,28 @@ struct MakePlanarVisitor
             }
         }
 
+        return x;
+    }
+
+    Statement operator()(const StoreGlobal& x)
+    {
+        // callbacks don't support planar, so stores are just direct
+        // memory accesses
+        auto var   = std::get<Variable>(x.ptr);
+        auto value = std::get<Variable>(x.value);
+
+        if(var.name == varname)
+        {
+            auto re = var;
+            re.name = rename;
+            auto im = var;
+            im.name = imname;
+
+            StatementList stmts;
+            stmts += Assign(re[x.index], value.x);
+            stmts += Assign(im[x.index], value.y);
+            return stmts;
+        }
         return x;
     }
 
