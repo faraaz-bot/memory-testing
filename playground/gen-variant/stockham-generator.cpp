@@ -593,10 +593,8 @@ int main(int argc, char* argv[])
     auto device   = stockham.make_device();
     auto global   = stockham.make_global();
 
-    auto planar_device = make_planar(device, "buf");
     auto planar_global = make_planar(global, "buf");
 
     format_and_write("stockham_generated_kernel.h",
-                     device.render() + global.render() + planar_device.render()
-                         + planar_global.render());
+                     device.render() + global.render() + planar_global.render());
 }

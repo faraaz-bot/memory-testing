@@ -206,7 +206,6 @@ public:
     LoadGlobal(Expression ptr, Expression index);
     std::string render() const;
 
-private:
     std::vector<Expression> exprs;
 };
 
@@ -1165,6 +1164,28 @@ struct MakePlanarVisitor
             auto im  = Variable(rhs);
             im.name  = imname;
             return Assign(x.lhs, ComplexLiteral(re.render(), im.render()));
+        }
+        // callbacks don't support planar, so loads are just direct
+        // memory accesses
+        else if(std::holds_alternative<LoadGlobal>(x.rhs))
+        {
+            auto load = std::get<LoadGlobal>(x.rhs);
+            auto ptr  = std::get<Variable>(load.exprs[0]);
+            if(ptr.name == varname)
+            {
+                auto& idx = load.exprs[1];
+
+                StatementList stmts;
+
+                auto re = ptr;
+                re.name = rename;
+                auto im = ptr;
+                im.name = imname;
+
+                stmts += Assign(x.lhs.x, re[idx].x);
+                stmts += Assign(x.lhs.y, im[idx].y);
+                return stmts;
+            }
         }
 
         return x;
