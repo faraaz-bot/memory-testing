@@ -1025,6 +1025,14 @@ ArgumentList visit(Visitor&& vis, const ArgumentList& x)
 }
 
 template <class Visitor>
+Statement visit(Visitor&& vis, const Assign& x)
+{
+    auto lhs = std::get<Variable>(visit(vis, x.lhs));
+    auto rhs = visit(vis, x.rhs);
+    return Assign{lhs, rhs};
+}
+
+template <class Visitor>
 Statement visit(Visitor&& vis, const Call& x)
 {
     auto y      = Call(x);
@@ -1034,6 +1042,17 @@ Statement visit(Visitor&& vis, const Call& x)
     for(const auto& arg : x.arguments)
         y.arguments.push_back(visit(vis, arg));
     return y;
+}
+
+template <class Visitor>
+Statement visit(Visitor&& vis, const Declaration& x)
+{
+    auto var = std::get<Variable>(visit(vis, x.var));
+    if(x.value)
+    {
+        return Declaration(var, visit(vis, *x.value));
+    }
+    return Declaration(var);
 }
 
 template <class Visitor>
