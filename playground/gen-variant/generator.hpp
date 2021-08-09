@@ -194,10 +194,13 @@ class Ternary
 public:
     const unsigned int precedence = 16;
     Ternary(Expression cond, Expression true_result, Expression false_result);
+    Ternary(const std::vector<Expression>& args)
+        : args(args)
+    {
+    }
     std::string render() const;
 
-private:
-    std::vector<Expression> exprs;
+    std::vector<Expression> args;
 };
 
 class LoadGlobal
@@ -205,9 +208,14 @@ class LoadGlobal
 public:
     const unsigned int precedence = 18;
     LoadGlobal(Expression ptr, Expression index);
+    LoadGlobal(const std::vector<Expression>& args)
+        : args(args)
+    {
+    }
+
     std::string render() const;
 
-    std::vector<Expression> exprs;
+    std::vector<Expression> args;
 };
 
 #define MAKE_OPER(NAME, OPER, PRECEDENCE)                \
@@ -295,21 +303,21 @@ MAKE_UNARY_PREFIX_METHODS(PreIncrement);
 MAKE_UNARY_PREFIX_METHODS(PreDecrement);
 
 Ternary::Ternary(Expression cond, Expression true_result, Expression false_result)
-    : exprs{cond, true_result, false_result}
+    : args{cond, true_result, false_result}
 {
 }
 std::string Ternary::render() const
 {
-    return vrender(exprs[0]) + " ? " + vrender(exprs[1]) + " : " + vrender(exprs[2]);
+    return vrender(args[0]) + " ? " + vrender(args[1]) + " : " + vrender(args[2]);
 }
 
 LoadGlobal::LoadGlobal(Expression ptr, Expression index)
-    : exprs{ptr, index}
+    : args{ptr, index}
 {
 }
 std::string LoadGlobal::render() const
 {
-    return "load_cb(" + vrender(exprs[0]) + "," + vrender(exprs[1]) + ", load_cb_data, nullptr)";
+    return "load_cb(" + vrender(args[0]) + "," + vrender(args[1]) + ", load_cb_data, nullptr)";
 }
 
 std::string ScalarVariable::render() const
@@ -939,37 +947,47 @@ std::string Function::render() const
         return x;                          \
     }
 
-MAKE_TRIVIAL_VISIT(Expression, Add)
-MAKE_TRIVIAL_VISIT(Expression, And)
-MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
-MAKE_TRIVIAL_VISIT(Expression, Divide)
-MAKE_TRIVIAL_VISIT(Expression, Equal)
-MAKE_TRIVIAL_VISIT(Expression, Greater)
-MAKE_TRIVIAL_VISIT(Expression, GreaterEqual)
-MAKE_TRIVIAL_VISIT(Expression, Less)
-MAKE_TRIVIAL_VISIT(Expression, LessEqual)
-MAKE_TRIVIAL_VISIT(Expression, Literal)
-MAKE_TRIVIAL_VISIT(Expression, Modulus)
-MAKE_TRIVIAL_VISIT(Expression, Multiply)
-MAKE_TRIVIAL_VISIT(Expression, NotEqual)
-MAKE_TRIVIAL_VISIT(Expression, Or)
+#define MAKE_EXPR_VISIT(RET, CLS)            \
+    template <class Visitor>                 \
+    RET visit(Visitor&& vis, const CLS& x)   \
+    {                                        \
+        std::vector<Expression> args;        \
+        for(const auto& arg : x.args)        \
+            args.push_back(visit(vis, arg)); \
+        return CLS{args};                    \
+    }
+
+MAKE_EXPR_VISIT(Expression, Add)
+MAKE_EXPR_VISIT(Expression, And)
+MAKE_EXPR_VISIT(Expression, Divide)
+MAKE_EXPR_VISIT(Expression, Equal)
+MAKE_EXPR_VISIT(Expression, Greater)
+MAKE_EXPR_VISIT(Expression, GreaterEqual)
+MAKE_EXPR_VISIT(Expression, Less)
+MAKE_EXPR_VISIT(Expression, LessEqual)
+MAKE_EXPR_VISIT(Expression, Modulus)
+MAKE_EXPR_VISIT(Expression, Multiply)
+MAKE_EXPR_VISIT(Expression, NotEqual)
+MAKE_EXPR_VISIT(Expression, Or)
+MAKE_EXPR_VISIT(Expression, ShiftLeft)
+MAKE_EXPR_VISIT(Expression, ShiftRight)
+MAKE_EXPR_VISIT(Expression, Subtract)
+
+MAKE_EXPR_VISIT(Expression, UnaryMinus)
+MAKE_EXPR_VISIT(Expression, PreIncrement)
+MAKE_EXPR_VISIT(Expression, PreDecrement)
+
+MAKE_EXPR_VISIT(Expression, LoadGlobal)
+
+MAKE_EXPR_VISIT(Expression, Ternary)
+
 MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
-MAKE_TRIVIAL_VISIT(Expression, ShiftLeft)
-MAKE_TRIVIAL_VISIT(Expression, ShiftRight)
-MAKE_TRIVIAL_VISIT(Expression, Subtract)
-
-MAKE_TRIVIAL_VISIT(Expression, UnaryMinus)
-MAKE_TRIVIAL_VISIT(Expression, PreIncrement)
-MAKE_TRIVIAL_VISIT(Expression, PreDecrement)
-
-MAKE_TRIVIAL_VISIT(Expression, Ternary)
-
-MAKE_TRIVIAL_VISIT(Expression, LoadGlobal)
-
 MAKE_TRIVIAL_VISIT(Statement, CallbackDeclaration)
-MAKE_TRIVIAL_VISIT(Statement, CommentLines)
-MAKE_TRIVIAL_VISIT(Statement, Declaration)
 MAKE_TRIVIAL_VISIT(Statement, LDSDeclaration)
+
+MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
+MAKE_TRIVIAL_VISIT(Expression, Literal)
+MAKE_TRIVIAL_VISIT(Statement, CommentLines)
 MAKE_TRIVIAL_VISIT(Statement, LineBreak)
 MAKE_TRIVIAL_VISIT(Statement, Return)
 MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
@@ -1177,10 +1195,10 @@ struct MakePlanarVisitor
         else if(std::holds_alternative<LoadGlobal>(x.rhs))
         {
             auto load = std::get<LoadGlobal>(x.rhs);
-            auto ptr  = std::get<Variable>(load.exprs[0]);
+            auto ptr  = std::get<Variable>(load.args[0]);
             if(ptr.name == varname)
             {
-                auto& idx = load.exprs[1];
+                auto& idx = load.args[1];
 
                 StatementList stmts;
 
