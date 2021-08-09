@@ -995,11 +995,7 @@ MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
 template <class Visitor>
 Expression visit(Visitor&& vis, const Variable& x)
 {
-    auto y = Variable(x);
-    // y.x = std::get<ScalarVariable>(vis(y.x));
-    // y.y = std::get<ScalarVariable>(vis(y.y));
-    // if (y.index) y.index = vis(*y.index);
-    return y;
+    return vis(x);
 }
 
 template <class Visitor>
@@ -1140,7 +1136,6 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Expression, Subtract)
     MAKE_VISITOR(Expression, Ternary)
     MAKE_VISITOR(Expression, UnaryMinus)
-    MAKE_VISITOR(Expression, Variable)
 
     MAKE_VISITOR(Statement, Call)
     MAKE_VISITOR(Statement, CallbackDeclaration)
@@ -1154,6 +1149,11 @@ struct MakePlanarVisitor
     MAKE_VISITOR(Statement, Return)
     MAKE_VISITOR(Statement, StatementList)
     MAKE_VISITOR(Statement, SyncThreads)
+
+    Expression operator()(const Variable& x)
+    {
+        return x;
+    }
 
     ArgumentList operator()(const ArgumentList& x)
     {
