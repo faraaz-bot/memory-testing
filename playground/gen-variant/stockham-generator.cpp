@@ -622,6 +622,9 @@ int main(int argc, char* argv[])
 
     auto planar_global = make_planar(global, "buf");
 
+    auto op_global = make_outofplace(global);
+
     format_and_write("stockham_generated_kernel.h",
-                     device.render() + global.render() + planar_global.render());
+                     device.render() + global.render() + planar_global.render()
+                         + op_global.render());
 }

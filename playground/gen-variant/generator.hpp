@@ -1274,3 +1274,166 @@ Function make_planar(const Function& f, std::string varname)
     auto visitor = MakePlanarVisitor(varname);
     return visitor(f);
 }
+
+//
+// Make out of place
+//
+
+struct MakeOutOfPlaceVisitor
+{
+    const std::vector<std::string> op_names;
+    MakeOutOfPlaceVisitor(std::vector<std::string>&& op_names)
+        : op_names(op_names)
+    {
+    }
+
+    bool op_name_match(const std::string& s)
+    {
+        return std::find(op_names.begin(), op_names.end(), s) != op_names.end();
+    }
+
+    MAKE_VISITOR(Expression, Add)
+    MAKE_VISITOR(Expression, And)
+    MAKE_VISITOR(Expression, ComplexLiteral)
+    MAKE_VISITOR(Expression, Divide)
+    MAKE_VISITOR(Expression, Equal)
+    MAKE_VISITOR(Expression, Greater)
+    MAKE_VISITOR(Expression, GreaterEqual)
+    MAKE_VISITOR(Expression, Less)
+    MAKE_VISITOR(Expression, LessEqual)
+    MAKE_VISITOR(Expression, Literal)
+    MAKE_VISITOR(Expression, Modulus)
+    MAKE_VISITOR(Expression, Multiply)
+    MAKE_VISITOR(Expression, NotEqual)
+    MAKE_VISITOR(Expression, Or)
+    MAKE_VISITOR(Expression, PreDecrement)
+    MAKE_VISITOR(Expression, PreIncrement)
+    MAKE_VISITOR(Expression, ScalarVariable)
+    MAKE_VISITOR(Expression, ShiftLeft)
+    MAKE_VISITOR(Expression, ShiftRight)
+    MAKE_VISITOR(Expression, Subtract)
+    MAKE_VISITOR(Expression, Ternary)
+    MAKE_VISITOR(Expression, UnaryMinus)
+
+    MAKE_VISITOR(Statement, Call)
+    MAKE_VISITOR(Statement, CallbackDeclaration)
+    MAKE_VISITOR(Statement, CommentLines)
+    MAKE_VISITOR(Statement, LDSDeclaration)
+    MAKE_VISITOR(Statement, For)
+    MAKE_VISITOR(Statement, If)
+    MAKE_VISITOR(Statement, Else)
+    MAKE_VISITOR(Statement, LineBreak)
+    MAKE_VISITOR(Statement, Return)
+    MAKE_VISITOR(Statement, StatementList)
+    MAKE_VISITOR(Statement, SyncThreads)
+
+    enum class ExpressionVisitMode
+    {
+        INPUT,
+        OUTPUT,
+    };
+    ExpressionVisitMode mode = ExpressionVisitMode::INPUT;
+
+    Expression operator()(const LoadGlobal& x)
+    {
+        mode = ExpressionVisitMode::INPUT;
+        std::vector<Expression> args;
+        for(const auto& arg : x.args)
+            args.push_back(visit(*this, arg));
+        return LoadGlobal{args};
+    }
+    Statement operator()(const StoreGlobal& x)
+    {
+        mode       = ExpressionVisitMode::OUTPUT;
+        auto ptr   = visit(*this, x.ptr);
+        auto index = visit(*this, x.index);
+        auto value = visit(*this, x.value);
+        return StoreGlobal{ptr, index, value};
+    }
+
+    Statement operator()(const Assign& x)
+    {
+        if(!op_name_match(x.lhs.name))
+            return Assign{std::get<Variable>(visit(*this, x.lhs)), visit(*this, x.rhs)};
+        mode         = ExpressionVisitMode::INPUT;
+        auto in_lhs  = std::get<Variable>((*this)(x.lhs));
+        auto in_rhs  = visit(*this, x.rhs);
+        mode         = ExpressionVisitMode::OUTPUT;
+        auto out_lhs = std::get<Variable>((*this)(x.lhs));
+        auto out_rhs = visit(*this, x.rhs);
+
+        StatementList ret;
+        ret += Assign{in_lhs, in_rhs};
+        ret += Assign{out_lhs, out_rhs};
+        return ret;
+    }
+
+    ArgumentList operator()(const ArgumentList& x)
+    {
+        ArgumentList ret;
+        for(const auto arg : x.arguments)
+        {
+            if(op_name_match(arg.name))
+            {
+                mode = ExpressionVisitMode::INPUT;
+                ret.arguments.push_back(std::get<Variable>(visit(*this, arg)));
+                mode = ExpressionVisitMode::OUTPUT;
+                ret.arguments.push_back(std::get<Variable>(visit(*this, arg)));
+            }
+            else
+                ret.arguments.push_back(arg);
+        }
+        return ret;
+    }
+
+    Expression operator()(const Variable& x)
+    {
+        if(!op_name_match(x.name))
+            return x;
+
+        Variable y{x};
+        y.name += mode == ExpressionVisitMode::INPUT ? "_in" : "_out";
+        return y;
+    }
+
+    Statement operator()(const Declaration& x)
+    {
+        if(!op_name_match(x.var.name))
+            return x;
+
+        StatementList ret;
+        mode        = ExpressionVisitMode::INPUT;
+        auto in_var = std::get<Variable>(visit(*this, x.var));
+        if(x.value)
+            ret += Declaration{in_var, visit(*this, *x.value)};
+        else
+            ret += Declaration{in_var};
+        mode         = ExpressionVisitMode::OUTPUT;
+        auto out_var = std::get<Variable>(visit(*this, x.var));
+        if(x.value)
+            ret += Declaration{out_var, visit(*this, *x.value)};
+        else
+            ret += Declaration{out_var};
+        return ret;
+    }
+
+    Function operator()(const Function& x)
+    {
+        if(x.qualifier != "__global__")
+            return x;
+        Function y{x.name};
+        y.body          = std::get<StatementList>(visit(*this, x.body));
+        y.arguments     = (*this)(x.arguments);
+        y.templates     = (*this)(x.templates);
+        y.qualifier     = x.qualifier;
+        y.launch_bounds = x.launch_bounds;
+        y.name          = "op_" + y.name;
+        return y;
+    }
+};
+
+Function make_outofplace(const Function& f)
+{
+    auto visitor = MakeOutOfPlaceVisitor({"buf", "stride", "stride0", "offset"});
+    return visitor(f);
+}
