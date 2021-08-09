@@ -94,8 +94,9 @@ class OptionalExpression
 public:
     OptionalExpression(){};
     OptionalExpression(const Expression& expr);
-    Expression operator*() const;
-               operator bool() const;
+    OptionalExpression& operator=(const Expression& in_expr);
+    Expression          operator*() const;
+                        operator bool() const;
 };
 
 class Literal
@@ -488,6 +489,11 @@ Expression OptionalExpression::operator*() const
 OptionalExpression::OptionalExpression(const Expression& expr)
 {
     this->expr = expr;
+}
+OptionalExpression& OptionalExpression::operator=(const Expression& expr)
+{
+    this->expr = expr;
+    return *this;
 }
 
 //
