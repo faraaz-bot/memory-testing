@@ -570,8 +570,7 @@ using Statement = std::variant<Assign,
                                StoreGlobal,
                                LineBreak,
                                Return,
-                               SyncThreads,
-                               StatementList>;
+                               SyncThreads>;
 
 class Assign
 {
@@ -933,175 +932,248 @@ std::string Function::render() const
 // Re-write helpers
 //
 
-#define MAKE_VISITOR(RET, CLS)       \
-    RET operator()(const CLS& x)     \
-    {                                \
-        return RET(visit(*this, x)); \
-    }
-
-#define MAKE_TRIVIAL_VISIT(RET, CLS)       \
-    template <class Visitor>               \
-    RET visit(Visitor&& vis, const CLS& x) \
-    {                                      \
-        return x;                          \
-    }
-
-#define MAKE_EXPR_VISIT(RET, CLS)            \
-    template <class Visitor>                 \
-    RET visit(Visitor&& vis, const CLS& x)   \
-    {                                        \
-        std::vector<Expression> args;        \
-        for(const auto& arg : x.args)        \
-            args.push_back(visit(vis, arg)); \
-        return CLS{args};                    \
-    }
-
-MAKE_EXPR_VISIT(Expression, Add)
-MAKE_EXPR_VISIT(Expression, And)
-MAKE_EXPR_VISIT(Expression, Divide)
-MAKE_EXPR_VISIT(Expression, Equal)
-MAKE_EXPR_VISIT(Expression, Greater)
-MAKE_EXPR_VISIT(Expression, GreaterEqual)
-MAKE_EXPR_VISIT(Expression, Less)
-MAKE_EXPR_VISIT(Expression, LessEqual)
-MAKE_EXPR_VISIT(Expression, Modulus)
-MAKE_EXPR_VISIT(Expression, Multiply)
-MAKE_EXPR_VISIT(Expression, NotEqual)
-MAKE_EXPR_VISIT(Expression, Or)
-MAKE_EXPR_VISIT(Expression, ShiftLeft)
-MAKE_EXPR_VISIT(Expression, ShiftRight)
-MAKE_EXPR_VISIT(Expression, Subtract)
-
-MAKE_EXPR_VISIT(Expression, UnaryMinus)
-MAKE_EXPR_VISIT(Expression, PreIncrement)
-MAKE_EXPR_VISIT(Expression, PreDecrement)
-
-MAKE_EXPR_VISIT(Expression, LoadGlobal)
-
-MAKE_EXPR_VISIT(Expression, Ternary)
-
-MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
-MAKE_TRIVIAL_VISIT(Statement, CallbackDeclaration)
-MAKE_TRIVIAL_VISIT(Statement, LDSDeclaration)
-
-MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
-MAKE_TRIVIAL_VISIT(Expression, Literal)
-MAKE_TRIVIAL_VISIT(Statement, CommentLines)
-MAKE_TRIVIAL_VISIT(Statement, LineBreak)
-MAKE_TRIVIAL_VISIT(Statement, Return)
-MAKE_TRIVIAL_VISIT(Statement, SyncThreads)
-
-template <class Visitor>
-Expression visit(Visitor&& vis, const Variable& x)
+// Base visitor class that actual visitor implementations can inherit
+// from.
+struct BaseVisitor
 {
-    return vis(x);
-}
+    BaseVisitor() = default;
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const StatementList& x)
-{
-    auto y = StatementList();
-    for(auto s : x.statements)
+    // Create operator() for each concrete type, so std::visit on a
+    // variant will work.  "Statement" types all return a
+    // StatementList.  Other types mostly return Expressions.  Each
+    // method dispatches to a virtual visit_* method so we can
+    // subclass just what we want.
+#define MAKE_VISITOR_OPERATOR(RET, CLS) \
+    RET operator()(const CLS& x)        \
+    {                                   \
+        return visit_##CLS(x);          \
+    }
+
+    MAKE_VISITOR_OPERATOR(Expression, ScalarVariable);
+    MAKE_VISITOR_OPERATOR(Expression, Variable);
+    MAKE_VISITOR_OPERATOR(Expression, Literal);
+    MAKE_VISITOR_OPERATOR(Expression, ComplexLiteral);
+    MAKE_VISITOR_OPERATOR(Expression, Add);
+    MAKE_VISITOR_OPERATOR(Expression, Subtract);
+    MAKE_VISITOR_OPERATOR(Expression, Multiply);
+    MAKE_VISITOR_OPERATOR(Expression, Divide);
+    MAKE_VISITOR_OPERATOR(Expression, Modulus);
+    MAKE_VISITOR_OPERATOR(Expression, ShiftLeft);
+    MAKE_VISITOR_OPERATOR(Expression, ShiftRight);
+    MAKE_VISITOR_OPERATOR(Expression, And);
+    MAKE_VISITOR_OPERATOR(Expression, Or);
+    MAKE_VISITOR_OPERATOR(Expression, Less);
+    MAKE_VISITOR_OPERATOR(Expression, LessEqual);
+    MAKE_VISITOR_OPERATOR(Expression, Greater);
+    MAKE_VISITOR_OPERATOR(Expression, GreaterEqual);
+    MAKE_VISITOR_OPERATOR(Expression, Equal);
+    MAKE_VISITOR_OPERATOR(Expression, NotEqual);
+    MAKE_VISITOR_OPERATOR(Expression, UnaryMinus);
+    MAKE_VISITOR_OPERATOR(Expression, PreIncrement);
+    MAKE_VISITOR_OPERATOR(Expression, PreDecrement);
+    MAKE_VISITOR_OPERATOR(Expression, Ternary);
+    MAKE_VISITOR_OPERATOR(Expression, LoadGlobal);
+
+    MAKE_VISITOR_OPERATOR(StatementList, Assign);
+    MAKE_VISITOR_OPERATOR(StatementList, Call);
+    MAKE_VISITOR_OPERATOR(StatementList, CallbackDeclaration);
+    MAKE_VISITOR_OPERATOR(StatementList, CommentLines);
+    MAKE_VISITOR_OPERATOR(StatementList, Declaration);
+    MAKE_VISITOR_OPERATOR(StatementList, LDSDeclaration);
+    MAKE_VISITOR_OPERATOR(StatementList, For);
+    MAKE_VISITOR_OPERATOR(StatementList, If);
+    MAKE_VISITOR_OPERATOR(StatementList, Else);
+    MAKE_VISITOR_OPERATOR(StatementList, StoreGlobal);
+    MAKE_VISITOR_OPERATOR(StatementList, LineBreak);
+    MAKE_VISITOR_OPERATOR(StatementList, Return);
+    MAKE_VISITOR_OPERATOR(StatementList, SyncThreads);
+
+    MAKE_VISITOR_OPERATOR(ArgumentList, ArgumentList);
+
+    MAKE_VISITOR_OPERATOR(Function, Function);
+
+    // operator for StatementList itself is a bit special - need to
+    // visit each statement in the list
+    StatementList operator()(const StatementList& x)
     {
-        y += std::visit(vis, s);
+        StatementList ret;
+        for(const auto& stmt : x.statements)
+        {
+            StatementList new_stmts = std::visit(*this, stmt);
+            std::copy(new_stmts.statements.begin(),
+                      new_stmts.statements.end(),
+                      std::back_inserter(ret.statements));
+        }
+        return ret;
     }
-    return y;
-}
 
-template <class Visitor>
-ArgumentList visit(Visitor&& vis, const ArgumentList& x)
-{
-    auto y = ArgumentList();
-    for(auto s : x.arguments)
+    // "visit" methods know how to visit their children.
+    //
+    // - TRIVIAL visitors are for types that have no children.
+    //
+    // - EXPR visitors are for Expression types whose only children
+    //   are in a vector<Expression> named "exprs".
+    //
+    // - STATEMENT types return a StatementList.
+    //
+    // - Types that have children but don't fit the EXPR mold need
+    //   their own hand-written visit function.
+#define MAKE_TRIVIAL_VISIT(RET, CLS)      \
+    virtual RET visit_##CLS(const CLS& x) \
+    {                                     \
+        return x;                         \
+    }
+
+#define MAKE_TRIVIAL_STATEMENT_VISIT(CLS)           \
+    virtual StatementList visit_##CLS(const CLS& x) \
+    {                                               \
+        StatementList stmts;                        \
+        stmts += Statement{x};                      \
+        return stmts;                               \
+    }
+
+#define MAKE_EXPR_VISIT(CLS)                        \
+    virtual Expression visit_##CLS(const CLS& x)    \
+    {                                               \
+        std::vector<Expression> args;               \
+        for(const auto& arg : x.args)               \
+            args.push_back(std::visit(*this, arg)); \
+        return CLS{args};                           \
+    }
+
+    MAKE_EXPR_VISIT(Add);
+    MAKE_EXPR_VISIT(And);
+    MAKE_EXPR_VISIT(Divide);
+    MAKE_EXPR_VISIT(Equal);
+    MAKE_EXPR_VISIT(Greater);
+    MAKE_EXPR_VISIT(GreaterEqual);
+    MAKE_EXPR_VISIT(Less);
+    MAKE_EXPR_VISIT(LessEqual);
+    MAKE_EXPR_VISIT(Modulus);
+    MAKE_EXPR_VISIT(Multiply);
+    MAKE_EXPR_VISIT(NotEqual);
+    MAKE_EXPR_VISIT(Or);
+    MAKE_EXPR_VISIT(ShiftLeft);
+    MAKE_EXPR_VISIT(ShiftRight);
+    MAKE_EXPR_VISIT(Subtract);
+
+    MAKE_EXPR_VISIT(UnaryMinus);
+    MAKE_EXPR_VISIT(PreIncrement);
+    MAKE_EXPR_VISIT(PreDecrement);
+
+    MAKE_EXPR_VISIT(LoadGlobal);
+
+    MAKE_EXPR_VISIT(Ternary);
+
+    MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
+    MAKE_TRIVIAL_STATEMENT_VISIT(CallbackDeclaration)
+    MAKE_TRIVIAL_STATEMENT_VISIT(LDSDeclaration)
+
+    MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
+    MAKE_TRIVIAL_VISIT(Expression, Literal)
+    MAKE_TRIVIAL_STATEMENT_VISIT(CommentLines)
+    MAKE_TRIVIAL_STATEMENT_VISIT(LineBreak)
+    MAKE_TRIVIAL_STATEMENT_VISIT(Return)
+    MAKE_TRIVIAL_STATEMENT_VISIT(SyncThreads)
+
+    MAKE_TRIVIAL_VISIT(Expression, Variable)
+
+    virtual StatementList visit_StatementList(const StatementList& x)
     {
-        y.append(std::get<Variable>(vis(s)));
+        auto y = StatementList();
+        for(auto s : x.statements)
+        {
+            y += std::visit(*this, s);
+        }
+        return y;
     }
-    return y;
-}
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const Assign& x)
-{
-    auto lhs = std::get<Variable>(visit(vis, x.lhs));
-    auto rhs = visit(vis, x.rhs);
-    return Assign{lhs, rhs};
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const Call& x)
-{
-    auto y      = Call(x);
-    y.templates = visit(vis, x.templates);
-    y.arguments.clear();
-    y.arguments.reserve(x.arguments.size());
-    for(const auto& arg : x.arguments)
-        y.arguments.push_back(visit(vis, arg));
-    return y;
-}
-
-template <class Visitor>
-Statement visit(Visitor&& vis, const Declaration& x)
-{
-    auto var = std::get<Variable>(visit(vis, x.var));
-    if(x.value)
+    virtual ArgumentList visit_ArgumentList(const ArgumentList& x)
     {
-        return Declaration(var, visit(vis, *x.value));
+        auto y = ArgumentList();
+        for(auto s : x.arguments)
+        {
+            y.append(std::get<Variable>(visit_Variable(s)));
+        }
+        return y;
     }
-    return Declaration(var);
-}
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const For& x)
-{
-    auto var       = std::get<Variable>(vis(x.var));
-    auto initial   = std::visit(vis, x.initial);
-    auto condition = std::visit(vis, x.condition);
-    auto increment = std::visit(vis, x.increment);
-    auto body      = std::get<StatementList>(visit(vis, x.body));
-    return For(var, initial, condition, increment, body);
-}
+    virtual StatementList visit_Assign(const Assign& x)
+    {
+        auto lhs = std::get<Variable>(visit_Variable(x.lhs));
+        auto rhs = std::visit(*this, x.rhs);
+        return StatementList{{Assign{lhs, rhs}}};
+    }
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const If& x)
-{
-    auto condition = std::visit(vis, x.condition);
-    auto body      = std::get<StatementList>(visit(vis, x.body));
-    return If(condition, body);
-}
+    virtual StatementList visit_Call(const Call& x)
+    {
+        auto y      = Call(x);
+        y.templates = visit_ArgumentList(x.templates);
+        y.arguments.clear();
+        y.arguments.reserve(x.arguments.size());
+        for(const auto& arg : x.arguments)
+            y.arguments.push_back(std::visit(*this, arg));
+        return StatementList{{y}};
+    }
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const Else& x)
-{
-    auto body = std::get<StatementList>(visit(vis, x.body));
-    return Else(body);
-}
+    virtual StatementList visit_Declaration(const Declaration& x)
+    {
+        auto var = std::get<Variable>(visit_Variable(x.var));
+        if(x.value)
+        {
+            return StatementList{{Declaration(var, std::visit(*this, *x.value))}};
+        }
+        return StatementList{{Declaration(var)}};
+    }
 
-template <class Visitor>
-Statement visit(Visitor&& vis, const StoreGlobal& x)
-{
-    auto ptr   = std::visit(vis, x.ptr);
-    auto index = std::visit(vis, x.index);
-    auto value = std::visit(vis, x.value);
-    return StoreGlobal(ptr, index, value);
-}
+    virtual StatementList visit_For(const For& x)
+    {
+        auto var       = std::get<Variable>(visit_Variable(x.var));
+        auto initial   = std::visit(*this, x.initial);
+        auto condition = std::visit(*this, x.condition);
+        auto increment = std::visit(*this, x.increment);
+        auto body      = visit_StatementList(x.body);
+        return StatementList{{For(var, initial, condition, increment, body)}};
+    }
 
-template <class Visitor>
-Function visit(Visitor&& vis, const Function& x)
-{
-    auto y          = Function(x.name);
-    y.body          = std::get<StatementList>(visit(vis, x.body));
-    y.arguments     = visit(vis, x.arguments);
-    y.templates     = visit(vis, x.templates);
-    y.qualifier     = x.qualifier;
-    y.launch_bounds = x.launch_bounds;
-    return y;
-}
+    virtual StatementList visit_If(const If& x)
+    {
+        auto condition = std::visit(*this, x.condition);
+        auto body      = visit_StatementList(x.body);
+        return StatementList{{If(condition, body)}};
+    }
+
+    virtual StatementList visit_Else(const Else& x)
+    {
+        auto body = visit_StatementList(x.body);
+        return StatementList{{Else(body)}};
+    }
+
+    virtual StatementList visit_StoreGlobal(const StoreGlobal& x)
+    {
+        auto ptr   = std::visit(*this, x.ptr);
+        auto index = std::visit(*this, x.index);
+        auto value = std::visit(*this, x.value);
+        return StatementList{{StoreGlobal(ptr, index, value)}};
+    }
+
+    virtual Function visit_Function(const Function& x)
+    {
+        auto y          = Function(x.name);
+        y.body          = visit_StatementList(x.body);
+        y.arguments     = visit_ArgumentList(x.arguments);
+        y.templates     = visit_ArgumentList(x.templates);
+        y.qualifier     = x.qualifier;
+        y.launch_bounds = x.launch_bounds;
+        return y;
+    }
+};
 
 //
 // Make planar
 //
 
-struct MakePlanarVisitor
+struct MakePlanarVisitor : public BaseVisitor
 {
     std::string varname, rename, imname;
 
@@ -1112,49 +1184,7 @@ struct MakePlanarVisitor
         imname = varname + "im";
     }
 
-    MAKE_VISITOR(Expression, Add)
-    MAKE_VISITOR(Expression, And)
-    MAKE_VISITOR(Expression, ComplexLiteral)
-    MAKE_VISITOR(Expression, Divide)
-    MAKE_VISITOR(Expression, Equal)
-    MAKE_VISITOR(Expression, Greater)
-    MAKE_VISITOR(Expression, GreaterEqual)
-    MAKE_VISITOR(Expression, Less)
-    MAKE_VISITOR(Expression, LessEqual)
-    MAKE_VISITOR(Expression, Literal)
-    MAKE_VISITOR(Expression, LoadGlobal)
-    MAKE_VISITOR(Expression, Modulus)
-    MAKE_VISITOR(Expression, Multiply)
-    MAKE_VISITOR(Expression, NotEqual)
-    MAKE_VISITOR(Expression, Or)
-    MAKE_VISITOR(Expression, PreDecrement)
-    MAKE_VISITOR(Expression, PreIncrement)
-    MAKE_VISITOR(Expression, ScalarVariable)
-    MAKE_VISITOR(Expression, ShiftLeft)
-    MAKE_VISITOR(Expression, ShiftRight)
-    MAKE_VISITOR(Expression, Subtract)
-    MAKE_VISITOR(Expression, Ternary)
-    MAKE_VISITOR(Expression, UnaryMinus)
-
-    MAKE_VISITOR(Statement, Call)
-    MAKE_VISITOR(Statement, CallbackDeclaration)
-    MAKE_VISITOR(Statement, CommentLines)
-    MAKE_VISITOR(Statement, Declaration)
-    MAKE_VISITOR(Statement, LDSDeclaration)
-    MAKE_VISITOR(Statement, For)
-    MAKE_VISITOR(Statement, If)
-    MAKE_VISITOR(Statement, Else)
-    MAKE_VISITOR(Statement, LineBreak)
-    MAKE_VISITOR(Statement, Return)
-    MAKE_VISITOR(Statement, StatementList)
-    MAKE_VISITOR(Statement, SyncThreads)
-
-    Expression operator()(const Variable& x)
-    {
-        return x;
-    }
-
-    ArgumentList operator()(const ArgumentList& x)
+    ArgumentList visit_ArgumentList(const ArgumentList& x) override
     {
         ArgumentList y;
         for(auto a : x.arguments)
@@ -1178,14 +1208,14 @@ struct MakePlanarVisitor
         return y;
     }
 
-    Statement operator()(const Assign& x)
+    StatementList visit_Assign(const Assign& x) override
     {
+        StatementList stmts;
         if(x.lhs.name == varname && std::holds_alternative<Variable>(x.rhs))
         {
             // on lhs, lhs needs to be split; use .x and .y on rhs
 
-            auto rhs   = std::get<Variable>(x.rhs);
-            auto stmts = StatementList();
+            auto rhs = std::get<Variable>(x.rhs);
 
             auto re = Variable(x.lhs);
             re.name = rename;
@@ -1206,7 +1236,8 @@ struct MakePlanarVisitor
             re.name  = rename;
             auto im  = Variable(rhs);
             im.name  = imname;
-            return Assign(x.lhs, ComplexLiteral(re.render(), im.render()));
+            stmts += Assign{x.lhs, ComplexLiteral{re.render(), im.render()}};
+            return stmts;
         }
         // callbacks don't support planar, so loads are just direct
         // memory accesses
@@ -1218,23 +1249,21 @@ struct MakePlanarVisitor
             {
                 auto& idx = load.args[1];
 
-                StatementList stmts;
-
                 auto re = ptr;
                 re.name = rename;
                 auto im = ptr;
                 im.name = imname;
 
-                stmts += Assign(x.lhs.x, re[idx].x);
-                stmts += Assign(x.lhs.y, im[idx].y);
+                stmts += Assign{Variable{x.lhs.x}, re[idx].x};
+                stmts += Assign{Variable{x.lhs.y}, im[idx].y};
                 return stmts;
             }
         }
 
-        return x;
+        return StatementList{{x}};
     }
 
-    Statement operator()(const StoreGlobal& x)
+    StatementList visit_StoreGlobal(const StoreGlobal& x) override
     {
         // callbacks don't support planar, so stores are just direct
         // memory accesses
@@ -1253,18 +1282,7 @@ struct MakePlanarVisitor
             stmts += Assign(im[x.index], value.y);
             return stmts;
         }
-        return x;
-    }
-
-    Function operator()(const Function& x)
-    {
-        auto y          = Function(x.name);
-        y.body          = std::get<StatementList>(visit(*this, x.body));
-        y.arguments     = (*this)(x.arguments);
-        y.templates     = (*this)(x.templates);
-        y.qualifier     = x.qualifier;
-        y.launch_bounds = x.launch_bounds;
-        return y;
+        return StatementList{{x}};
     }
 };
 
@@ -1277,8 +1295,7 @@ Function make_planar(const Function& f, std::string varname)
 //
 // Make out of place
 //
-
-struct MakeOutOfPlaceVisitor
+struct MakeOutOfPlaceVisitor : public BaseVisitor
 {
     const std::vector<std::string> op_names;
     MakeOutOfPlaceVisitor(std::vector<std::string>&& op_names)
@@ -1291,41 +1308,6 @@ struct MakeOutOfPlaceVisitor
         return std::find(op_names.begin(), op_names.end(), s) != op_names.end();
     }
 
-    MAKE_VISITOR(Expression, Add)
-    MAKE_VISITOR(Expression, And)
-    MAKE_VISITOR(Expression, ComplexLiteral)
-    MAKE_VISITOR(Expression, Divide)
-    MAKE_VISITOR(Expression, Equal)
-    MAKE_VISITOR(Expression, Greater)
-    MAKE_VISITOR(Expression, GreaterEqual)
-    MAKE_VISITOR(Expression, Less)
-    MAKE_VISITOR(Expression, LessEqual)
-    MAKE_VISITOR(Expression, Literal)
-    MAKE_VISITOR(Expression, Modulus)
-    MAKE_VISITOR(Expression, Multiply)
-    MAKE_VISITOR(Expression, NotEqual)
-    MAKE_VISITOR(Expression, Or)
-    MAKE_VISITOR(Expression, PreDecrement)
-    MAKE_VISITOR(Expression, PreIncrement)
-    MAKE_VISITOR(Expression, ScalarVariable)
-    MAKE_VISITOR(Expression, ShiftLeft)
-    MAKE_VISITOR(Expression, ShiftRight)
-    MAKE_VISITOR(Expression, Subtract)
-    MAKE_VISITOR(Expression, Ternary)
-    MAKE_VISITOR(Expression, UnaryMinus)
-
-    MAKE_VISITOR(Statement, Call)
-    MAKE_VISITOR(Statement, CallbackDeclaration)
-    MAKE_VISITOR(Statement, CommentLines)
-    MAKE_VISITOR(Statement, LDSDeclaration)
-    MAKE_VISITOR(Statement, For)
-    MAKE_VISITOR(Statement, If)
-    MAKE_VISITOR(Statement, Else)
-    MAKE_VISITOR(Statement, LineBreak)
-    MAKE_VISITOR(Statement, Return)
-    MAKE_VISITOR(Statement, StatementList)
-    MAKE_VISITOR(Statement, SyncThreads)
-
     enum class ExpressionVisitMode
     {
         INPUT,
@@ -1333,33 +1315,35 @@ struct MakeOutOfPlaceVisitor
     };
     ExpressionVisitMode mode = ExpressionVisitMode::INPUT;
 
-    Expression operator()(const LoadGlobal& x)
+    Expression visit_LoadGlobal(const LoadGlobal& x) override
     {
         mode = ExpressionVisitMode::INPUT;
         std::vector<Expression> args;
         for(const auto& arg : x.args)
-            args.push_back(visit(*this, arg));
+            args.push_back(std::visit(*this, arg));
         return LoadGlobal{args};
     }
-    Statement operator()(const StoreGlobal& x)
+    StatementList visit_StoreGlobal(const StoreGlobal& x) override
     {
+        StatementList stmts;
         mode       = ExpressionVisitMode::OUTPUT;
-        auto ptr   = visit(*this, x.ptr);
-        auto index = visit(*this, x.index);
-        auto value = visit(*this, x.value);
-        return StoreGlobal{ptr, index, value};
+        auto ptr   = std::visit(*this, x.ptr);
+        auto index = std::visit(*this, x.index);
+        auto value = std::visit(*this, x.value);
+        stmts += StoreGlobal{ptr, index, value};
+        return stmts;
     }
 
-    Statement operator()(const Assign& x)
+    StatementList visit_Assign(const Assign& x) override
     {
         if(!op_name_match(x.lhs.name))
-            return Assign{std::get<Variable>(visit(*this, x.lhs)), visit(*this, x.rhs)};
+            return BaseVisitor::visit_Assign(x);
         mode         = ExpressionVisitMode::INPUT;
-        auto in_lhs  = std::get<Variable>((*this)(x.lhs));
-        auto in_rhs  = visit(*this, x.rhs);
+        auto in_lhs  = std::get<Variable>(visit_Variable(x.lhs));
+        auto in_rhs  = std::visit(*this, x.rhs);
         mode         = ExpressionVisitMode::OUTPUT;
-        auto out_lhs = std::get<Variable>((*this)(x.lhs));
-        auto out_rhs = visit(*this, x.rhs);
+        auto out_lhs = std::get<Variable>(visit_Variable(x.lhs));
+        auto out_rhs = std::visit(*this, x.rhs);
 
         StatementList ret;
         ret += Assign{in_lhs, in_rhs};
@@ -1367,7 +1351,7 @@ struct MakeOutOfPlaceVisitor
         return ret;
     }
 
-    ArgumentList operator()(const ArgumentList& x)
+    ArgumentList visit_ArgumentList(const ArgumentList& x) override
     {
         ArgumentList ret;
         for(const auto arg : x.arguments)
@@ -1375,17 +1359,17 @@ struct MakeOutOfPlaceVisitor
             if(op_name_match(arg.name))
             {
                 mode = ExpressionVisitMode::INPUT;
-                ret.arguments.push_back(std::get<Variable>(visit(*this, arg)));
+                ret.append(std::get<Variable>(visit_Variable(arg)));
                 mode = ExpressionVisitMode::OUTPUT;
-                ret.arguments.push_back(std::get<Variable>(visit(*this, arg)));
+                ret.append(std::get<Variable>(visit_Variable(arg)));
             }
             else
-                ret.arguments.push_back(arg);
+                ret.append(arg);
         }
         return ret;
     }
 
-    Expression operator()(const Variable& x)
+    Expression visit_Variable(const Variable& x) override
     {
         if(!op_name_match(x.name))
             return x;
@@ -1395,39 +1379,34 @@ struct MakeOutOfPlaceVisitor
         return y;
     }
 
-    Statement operator()(const Declaration& x)
+    StatementList visit_Declaration(const Declaration& x) override
     {
         if(!op_name_match(x.var.name))
-            return x;
+            return BaseVisitor::visit_Declaration(x);
 
         StatementList ret;
         mode        = ExpressionVisitMode::INPUT;
-        auto in_var = std::get<Variable>(visit(*this, x.var));
+        auto in_var = std::get<Variable>(visit_Variable(x.var));
         if(x.value)
-            ret += Declaration{in_var, visit(*this, *x.value)};
+            ret += Declaration{in_var, std::visit(*this, *x.value)};
         else
             ret += Declaration{in_var};
         mode         = ExpressionVisitMode::OUTPUT;
-        auto out_var = std::get<Variable>(visit(*this, x.var));
+        auto out_var = std::get<Variable>(visit_Variable(x.var));
         if(x.value)
-            ret += Declaration{out_var, visit(*this, *x.value)};
+            ret += Declaration{out_var, std::visit(*this, *x.value)};
         else
             ret += Declaration{out_var};
         return ret;
     }
 
-    Function operator()(const Function& x)
+    Function visit_Function(const Function& x) override
     {
         if(x.qualifier != "__global__")
             return x;
-        Function y{x.name};
-        y.body          = std::get<StatementList>(visit(*this, x.body));
-        y.arguments     = (*this)(x.arguments);
-        y.templates     = (*this)(x.templates);
-        y.qualifier     = x.qualifier;
-        y.launch_bounds = x.launch_bounds;
-        y.name          = "op_" + y.name;
-        return y;
+        Function y{x};
+        y.name = "op_" + y.name;
+        return BaseVisitor::visit_Function(y);
     }
 };
 
