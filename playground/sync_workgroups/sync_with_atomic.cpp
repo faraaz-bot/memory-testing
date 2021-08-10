@@ -56,6 +56,7 @@ void __global__ plus_one_twice_atomic_atomicOr(int* a)
         }
     }
 
+    __syncthreads();
     __threadfence();
 
     // do the 2nd round task
