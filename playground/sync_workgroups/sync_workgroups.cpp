@@ -149,6 +149,7 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
         }
     }
 
+    __syncthreads();
     __threadfence();
 
     bs = LEN * LEN;
@@ -187,6 +188,8 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
     plus_one_device(a, blockIdx.x, bs, cs);
 
+    __syncthreads();
+
     int counterIdx = blockIdx.x % LEN;
     if(threadIdx.x == 0)
     {
@@ -198,6 +201,7 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
         }
     }
 
+    __syncthreads();
     __threadfence();
 
     bs = LEN * LEN;
