@@ -93,7 +93,7 @@ class OptionalExpression
 
 public:
     OptionalExpression(){};
-    OptionalExpression(const Expression& expr);
+    explicit OptionalExpression(const Expression& expr);
     OptionalExpression& operator=(const Expression& in_expr);
     Expression          operator*() const;
                         operator bool() const;
@@ -106,12 +106,11 @@ class Literal
 public:
     const unsigned int precedence = 0;
 
-    template <typename T>
-    Literal(T l)
+    Literal(uint num)
     {
-        value = std::to_string(l);
+        value = std::to_string(num);
     }
-    Literal(const char* val)
+    Literal(std::string val)
         : value(val)
     {
     }
@@ -194,7 +193,7 @@ class Ternary
 public:
     const unsigned int precedence = 16;
     Ternary(Expression cond, Expression true_result, Expression false_result);
-    Ternary(const std::vector<Expression>& args)
+    explicit Ternary(const std::vector<Expression>& args)
         : args(args)
     {
     }
@@ -208,7 +207,7 @@ class LoadGlobal
 public:
     const unsigned int precedence = 18;
     LoadGlobal(Expression ptr, Expression index);
-    LoadGlobal(const std::vector<Expression>& args)
+    explicit LoadGlobal(const std::vector<Expression>& args)
         : args(args)
     {
     }
@@ -218,19 +217,19 @@ public:
     std::vector<Expression> args;
 };
 
-#define MAKE_OPER(NAME, OPER, PRECEDENCE)                \
-    class NAME                                           \
-    {                                                    \
-        std::string oper{OPER};                          \
-                                                         \
-    public:                                              \
-        const unsigned int      precedence = PRECEDENCE; \
-        std::vector<Expression> args;                    \
-        NAME(std::initializer_list<Expression> il)       \
-            : args(il){};                                \
-        NAME(std::vector<Expression> il)                 \
-            : args(il){};                                \
-        std::string render() const;                      \
+#define MAKE_OPER(NAME, OPER, PRECEDENCE)                   \
+    class NAME                                              \
+    {                                                       \
+        std::string oper{OPER};                             \
+                                                            \
+    public:                                                 \
+        const unsigned int      precedence = PRECEDENCE;    \
+        std::vector<Expression> args;                       \
+        explicit NAME(std::initializer_list<Expression> il) \
+            : args(il){};                                   \
+        explicit NAME(std::vector<Expression> il)           \
+            : args(il){};                                   \
+        std::string render() const;                         \
     };
 
 #define MAKE_BINARY_METHODS(NAME)                \
@@ -555,7 +554,7 @@ struct CommentLines
         }
         return s;
     }
-    CommentLines(std::initializer_list<std::string> il)
+    explicit CommentLines(std::initializer_list<std::string> il)
         : comments(il){};
 };
 
@@ -662,7 +661,7 @@ class Declaration
 public:
     Variable                  var;
     std::optional<Expression> value;
-    Declaration(Variable v)
+    explicit Declaration(Variable v)
         : var(v){};
     Declaration(Variable v, Expression val)
         : var(v)
@@ -688,7 +687,7 @@ std::string Declaration::render() const
 class LDSDeclaration
 {
 public:
-    LDSDeclaration(std::string scalar_type)
+    explicit LDSDeclaration(std::string scalar_type)
         : scalar_type(scalar_type){};
     std::string scalar_type;
     std::string render() const
@@ -811,7 +810,7 @@ class Else
 {
 public:
     StatementList body;
-    Else(StatementList body)
+    explicit Else(StatementList body)
         : body(body){};
     std::string render() const;
 };
@@ -907,7 +906,7 @@ public:
     std::string   qualifier;
     unsigned int  launch_bounds;
 
-    Function(std::string name)
+    explicit Function(std::string name)
         : name(name){};
 
     std::string render() const;
