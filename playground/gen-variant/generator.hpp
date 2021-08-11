@@ -1247,8 +1247,8 @@ struct MakePlanarVisitor : public BaseVisitor
                 auto im = ptr;
                 im.name = imname;
 
-                stmts += Assign{Variable{x.lhs.x}, re[idx].x};
-                stmts += Assign{Variable{x.lhs.y}, im[idx].y};
+                stmts += Assign{Variable{x.lhs.x}, re[idx]};
+                stmts += Assign{Variable{x.lhs.y}, im[idx]};
                 return stmts;
             }
         }
