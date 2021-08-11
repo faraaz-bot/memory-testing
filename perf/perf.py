@@ -287,13 +287,14 @@ def dyna(build1, build2, ntrials, suite, output):
 
 @cli.command()
 @click.option('--host', type=str, default=None)
+@click.option('--workdir', type=str, default=None)
 @click.option('--reference-branch', type=str, default=None)
 @click.option('--reference-repository', type=str, default=None)
 @click.option('--branch', type=str, default=None)
 @click.option('--repository', type=str, default=None)
 @click.option('--suite', type=str, default=None)
 @click.option('--user', type=str, envvar='PERF_USER')
-def autodyna(host, reference_branch, reference_repository, branch, repository, suite, user):
+def autodyna(host, workdir, reference_branch, reference_repository, branch, repository, suite, user):
     """Compare performance of two builds automagically."""
 
     if host is None:
@@ -316,9 +317,13 @@ def autodyna(host, reference_branch, reference_repository, branch, repository, s
     if suite is None:
         suite = click.prompt('Test suite', default='all', type=str)
 
+    if workdir is None:
+        workdir = click.prompt('Working directory', default='autodyna-' + branch, type=str)
+
     if host != 'localhost':
         cmd = ['ssh', host, 'nohup', 'perf', 'autodyna']
         cmd += ['--host', 'localhost']
+        cmd += ['--workdir', workdir]
         cmd += ['--reference-branch', reference_branch]
         cmd += ['--reference-repository', reference_repository]
         cmd += ['--branch', branch]
@@ -327,9 +332,12 @@ def autodyna(host, reference_branch, reference_repository, branch, repository, s
         local(sjoin(cmd))
         return
 
-    build1  = path(f'build-{reference_branch}').resolve()
-    build2  = path(f'build-{branch}').resolve()
-    output  = path(f'dyna-{branch}').resolve()
+    top = path(workdir).resolve()
+    build1  = top / f'build-{reference_branch}'
+    build2  = top / f'build-{branch}'
+    output  = top / f'dyna-{branch}'
+
+    os.chdir(str(top))
 
     lib1 = build1 / 'lib' / 'librocfft.so'
     lib1.parent.mkdir(parents=True, exist_ok=True)
