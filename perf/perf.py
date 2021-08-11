@@ -410,4 +410,11 @@ if __name__ == '__main__':
     logging.basicConfig(filename='perf.log',
                         format='%(asctime)s %(levelname)s: %(message)s',
                         level=logging.INFO)
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    formatter = logging.Formatter('%(levelname)-8s: %(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+
     cli()
