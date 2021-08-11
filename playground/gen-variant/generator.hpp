@@ -1406,3 +1406,26 @@ Function make_outofplace(const Function& f)
     auto visitor = MakeOutOfPlaceVisitor({"buf", "stride", "stride0", "offset"});
     return visitor(f);
 }
+
+//
+// Make in-place
+//
+struct MakeInPlaceVisitor : public BaseVisitor
+{
+    MakeInPlaceVisitor() = default;
+
+    Function visit_Function(const Function& x) override
+    {
+        if(x.qualifier != "__global__")
+            return x;
+        Function y{x};
+        y.name = "ip_" + y.name;
+        return BaseVisitor::visit_Function(y);
+    }
+};
+
+Function make_inplace(const Function& f)
+{
+    auto visitor = MakeInPlaceVisitor();
+    return visitor(f);
+}
