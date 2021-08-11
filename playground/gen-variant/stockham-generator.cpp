@@ -322,7 +322,7 @@ struct StockhamGenerator : public Params
         kdevice.body += Declaration(W);
         kdevice.body += Declaration(t);
         kdevice.body += Declaration(
-            lstride, Ternary(stride_type == Literal{"SB_UNIT"}, Literal{1}, stride_lds));
+            lstride, Ternary(stride_type == Literal{"SB_UNIT"}, 1, stride_lds));
 
         for(uint pass = 0; pass < factors.size(); ++pass)
         {
@@ -429,7 +429,7 @@ struct StockhamGenerator : public Params
                 + " threads per thread block"};
 
         kglobal.body += LDSDeclaration(scalar_type.name);
-        kglobal.body += Declaration(offset, Literal{0});
+        kglobal.body += Declaration(offset, 0);
         kglobal.body += Declaration(offset_lds);
         kglobal.body += Declaration(stride_lds);
         kglobal.body += Declaration(batch);
@@ -437,7 +437,7 @@ struct StockhamGenerator : public Params
         kglobal.body += Declaration(thread);
         kglobal.body += Declaration(write);
         kglobal.body += Declaration(
-            stride0, Ternary{stride_type == Literal{"SB_UNIT"}, Literal{1}, stride[Literal{0}]});
+            stride0, Ternary{stride_type == Literal{"SB_UNIT"}, 1, stride[0]});
         kglobal.body += CallbackDeclaration(scalar_type.name, callback_type.name);
 
         kglobal.body += LineBreak();
@@ -449,10 +449,10 @@ struct StockhamGenerator : public Params
         kglobal.body += Declaration{remaining};
         kglobal.body += Declaration{index_along_d};
         kglobal.body += Assign{
-            transform, block_id * Literal{batches_per_block} + thread_id / threads_per_transform};
+            transform, block_id * batches_per_block + thread_id / threads_per_transform};
         kglobal.body += Assign{remaining, transform};
         Variable d{"d", "int"};
-        For      offset_for{d, Literal{1}, Less{d, dim}, Literal{1}};
+        For      offset_for{d, 1, d < dim, 1};
         offset_for.body += Assign{index_along_d, remaining % lengths[d]};
         offset_for.body += Assign{remaining, remaining / lengths[d]};
         offset_for.body += Assign{offset, offset + index_along_d * stride[d]};
@@ -461,15 +461,15 @@ struct StockhamGenerator : public Params
         kglobal.body += Assign{batch, remaining};
         kglobal.body += Assign{offset, offset + batch * stride[dim]};
         kglobal.body += Assign{
-            offset_lds, (Literal{length} + lds_padding) * (transform % Literal{batches_per_block})};
+            offset_lds, (length + lds_padding) * (transform % batches_per_block)};
 
         kglobal.body += LineBreak();
 
-        kglobal.body += If{GreaterEqual{batch, nbatch}, {Return()}};
+        kglobal.body += If{batch >= nbatch, {Return()}};
 
         // FIXME: this should be pushed down to the RR-specific class?
         kglobal.body += CommentLines{std::string{"load global"}};
-        kglobal.body += Assign{thread, thread_id % Literal{threads_per_transform}};
+        kglobal.body += Assign{thread, thread_id % threads_per_transform};
         kglobal.body += add_work(
             [=](uint h) { return load_global(h, threads_per_transform, TO_LDS); }, 1, 1);
 
@@ -482,10 +482,10 @@ struct StockhamGenerator : public Params
         auto width  = threads_per_transform;
         auto height = length / width;
         c2real_pre += If{
-            thread == Literal{threads_per_transform - 1},
+            thread == threads_per_transform - 1,
             {Assign{lds[offset_lds + thread + (height - 1) * width + 1],
                     LoadGlobal{buf, offset + (thread + (height - 1) * width + 1) * stride0}}}};
-        kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::C2Real_PRE"}}, c2real_pre};
+        kglobal.body += If{embedded_type == Literal{"EmbeddedType::C2Real_PRE"}, c2real_pre};
 
         kglobal.body += CommentLines{std::string{"transform"}};
         kglobal.body += Assign{write, Literal{"true"}};
@@ -501,13 +501,13 @@ struct StockhamGenerator : public Params
         // FIXME: loop if necessary, compute all the numbers and Ndiv4 properly
         real2c_post += Call{"real_post_process_kernel_inplace",
                             {scalar_type, Variable{"false", "bool"}},
-                            {thread % Literal{5} + Literal{0},
-                             Literal{9} - thread % Literal{5} - Literal{0},
-                             Literal{5},
+                            {thread % 5 + 0,
+                             9 - thread % 5 - 0,
+                             5,
                              lds + offset_lds,
-                             Literal{0},
-                             twiddles + Literal{9}}};
-        kglobal.body += If{Equal{embedded_type, Literal{"EmbeddedType::Real2C_POST"}}, real2c_post};
+                             0,
+                             twiddles + 9}};
+        kglobal.body += If{embedded_type == Literal{"EmbeddedType::Real2C_POST"}, real2c_post};
 
         kglobal.body += CommentLines{std::string{"store global"}};
         kglobal.body += SyncThreads();
@@ -550,7 +550,7 @@ struct StockhamGeneratorSBRR : public StockhamGenerator
                 stmts += Assign(R[h * width + w], LoadGlobal(buf, idx));
             else
                 stmts
-                    += Assign(lds[offset_lds + thread + Literal{w * width}], LoadGlobal(buf, idx));
+                    += Assign(lds[offset_lds + thread + w * width], LoadGlobal(buf, idx));
         }
         return stmts;
     }
@@ -567,7 +567,7 @@ struct StockhamGeneratorSBRR : public StockhamGenerator
             if(src == FROM_REGISTERS)
                 stmts += StoreGlobal(buf, idx, R[h * width + w]);
             else
-                stmts += StoreGlobal(buf, idx, lds[offset_lds + thread + Literal{w * width}]);
+                stmts += StoreGlobal(buf, idx, lds[offset_lds + thread + w * width]);
         }
         return stmts;
     }
