@@ -121,32 +121,6 @@ public:
     }
 };
 
-class ComplexLiteral
-{
-    std::string xvalue, yvalue;
-
-public:
-    const unsigned int precedence = 0;
-
-    template <typename T>
-    ComplexLiteral(T l, T r)
-    {
-        xvalue = std::to_string(l);
-        yvalue = std::to_string(r);
-    }
-
-    ComplexLiteral(std::string l, std::string r)
-    {
-        xvalue = l;
-        yvalue = r;
-    }
-
-    std::string render() const
-    {
-        return "{" + xvalue + ", " + yvalue + "}";
-    }
-};
-
 struct ScalarVariable
 {
     const unsigned int precedence = 0;
@@ -279,6 +253,8 @@ MAKE_OPER(Or, " || ", 15);
 MAKE_OPER(UnaryMinus, " -", 3);
 MAKE_OPER(PreIncrement, " ++", 3);
 MAKE_OPER(PreDecrement, " --", 3);
+
+MAKE_OPER(ComplexLiteral, ",", 17);
 
 MAKE_BINARY_METHODS(Add);
 MAKE_BINARY_METHODS(Subtract);
@@ -501,6 +477,21 @@ OptionalExpression& OptionalExpression::operator=(const Expression& expr)
 {
     this->expr = expr;
     return *this;
+}
+
+std::string ComplexLiteral::render() const
+{
+    std::string ret       = "{";
+    const char* separator = nullptr;
+    for(const auto& arg : args)
+    {
+        if(separator)
+            ret += separator;
+        ret += vrender(arg);
+        separator = oper.c_str();
+    }
+    ret += "}";
+    return ret;
 }
 
 //
@@ -1064,12 +1055,12 @@ struct BaseVisitor
     MAKE_EXPR_VISIT(LoadGlobal);
 
     MAKE_EXPR_VISIT(Ternary);
+    MAKE_EXPR_VISIT(ComplexLiteral)
 
     MAKE_TRIVIAL_VISIT(Expression, ScalarVariable)
     MAKE_TRIVIAL_STATEMENT_VISIT(CallbackDeclaration)
     MAKE_TRIVIAL_STATEMENT_VISIT(LDSDeclaration)
 
-    MAKE_TRIVIAL_VISIT(Expression, ComplexLiteral)
     MAKE_TRIVIAL_VISIT(Expression, Literal)
     MAKE_TRIVIAL_STATEMENT_VISIT(CommentLines)
     MAKE_TRIVIAL_STATEMENT_VISIT(LineBreak)
@@ -1236,7 +1227,7 @@ struct MakePlanarVisitor : public BaseVisitor
             re.name  = rename;
             auto im  = Variable(rhs);
             im.name  = imname;
-            stmts += Assign{x.lhs, ComplexLiteral{re.render(), im.render()}};
+            stmts += Assign{x.lhs, ComplexLiteral{re, im}};
             return stmts;
         }
         // callbacks don't support planar, so loads are just direct
