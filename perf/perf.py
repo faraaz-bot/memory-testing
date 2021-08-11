@@ -337,6 +337,7 @@ def autodyna(host, workdir, reference_branch, reference_repository, branch, repo
     build2  = top / f'build-{branch}'
     output  = top / f'dyna-{branch}'
 
+    top.mkdir(parents=True, exist_ok=True)
     os.chdir(str(top))
 
     lib1 = build1 / 'lib' / 'librocfft.so'
