@@ -55,7 +55,7 @@ class RIDERFFTTestRunner:
         except subprocess.CalledProcessError as e:
             logging.warn('DYNA run failed')
             logging.warn(e)
-
+            return []
 
         results = []
         for i, m in enumerate(re.finditer('Execution gpu time: ([ 0-9.]*) ms', stdout, re.MULTILINE)):
