@@ -624,7 +624,12 @@ int main(int argc, char* argv[])
 
     auto op_global = make_outofplace(global);
 
+    auto ip_global = make_inplace(global);
+
+    auto inverse_global = make_inverse(global);
+    auto inverse_device = make_inverse(device);
+
     format_and_write("stockham_generated_kernel.h",
-                     device.render() + global.render() + planar_global.render()
-                         + op_global.render());
+                     device.render() + planar_global.render() + ip_global.render()
+                         + op_global.render() + inverse_device.render() + inverse_global.render());
 }

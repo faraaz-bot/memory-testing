@@ -1,6 +1,8 @@
 
 #include <algorithm>
 #include <any>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/replace.hpp>
 #include <iostream>
 #include <numeric>
 #include <string>
@@ -1427,5 +1429,63 @@ struct MakeInPlaceVisitor : public BaseVisitor
 Function make_inplace(const Function& f)
 {
     auto visitor = MakeInPlaceVisitor();
+    return visitor(f);
+}
+
+//
+// Make inverse
+//
+
+struct MakeInverseVisitor : public BaseVisitor
+{
+    MakeInverseVisitor()
+        : twiddle_vars{"twiddles", "TW2step"}
+    {
+    }
+    const std::vector<std::string> twiddle_vars;
+
+    virtual StatementList visit_Assign(const Assign& x)
+    {
+        if(std::holds_alternative<Variable>(x.rhs))
+        {
+            Variable rhs = std::get<Variable>(x.rhs);
+            if(std::find(twiddle_vars.begin(), twiddle_vars.end(), rhs.name) != twiddle_vars.end())
+            {
+                return {Assign{x.lhs, ComplexLiteral{rhs.x, UnaryMinus{rhs.y}}}};
+            }
+        }
+        return BaseVisitor::visit_Assign(x);
+    }
+
+    virtual StatementList visit_Call(const Call& x)
+    {
+        if(boost::starts_with(x.name, "forward_"))
+        {
+            Call y{x};
+            boost::replace_all(y.name, "forward_", "inverse_");
+            return StatementList{{y}};
+        }
+        else if(boost::starts_with(x.name, "FwdRad"))
+        {
+            Call y{x};
+            boost::replace_all(y.name, "FwdRad", "InvRad");
+            return StatementList{{y}};
+        }
+        return BaseVisitor::visit_Call(x);
+    }
+
+    Function visit_Function(const Function& x) override
+    {
+        if(!boost::starts_with(x.name, "forward_"))
+            return x;
+        Function y{x};
+        boost::replace_all(y.name, "forward_", "inverse_");
+        return BaseVisitor::visit_Function(y);
+    }
+};
+
+Function make_inverse(const Function& f)
+{
+    auto visitor = MakeInverseVisitor();
     return visitor(f);
 }
