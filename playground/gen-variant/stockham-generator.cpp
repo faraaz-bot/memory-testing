@@ -629,7 +629,14 @@ int main(int argc, char* argv[])
     auto inverse_global = make_inverse(global);
     auto inverse_device = make_inverse(device);
 
+    std::string rtc_typedefs = "typedef float2 scalar_type;"
+                               "static const StrideBin sb = SB_UNIT;"
+                               "static const EmbeddedType ebtype = EmbeddedType::NONE;"
+                               "static const CallbackType cbtype = CallbackType::NONE;";
+    auto ip_rtc = make_rtc(ip_global);
+
     format_and_write("stockham_generated_kernel.h",
                      device.render() + planar_global.render() + ip_global.render()
-                         + op_global.render() + inverse_device.render() + inverse_global.render());
+                         + op_global.render() + inverse_device.render() + inverse_global.render()
+                         + rtc_typedefs + ip_rtc.render());
 }

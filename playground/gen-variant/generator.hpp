@@ -1489,3 +1489,33 @@ Function make_inverse(const Function& f)
     auto visitor = MakeInverseVisitor();
     return visitor(f);
 }
+
+//
+// Make runtime-compileable
+//
+
+struct MakeRTCVisitor : public BaseVisitor
+{
+    MakeRTCVisitor() = default;
+    Function visit_Function(const Function& x) override
+    {
+        if(x.qualifier != "__global__")
+            return x;
+        // give function C linkage so caller doesn't have to do C++ name
+        // mangling
+        Function y{x};
+        y.qualifier = "extern \"C\" __global__";
+        // rocfft library would give us a name for the function
+        y.name = "fft_rtc";
+        // assume some global-scope typedefs + consts have removed
+        // the need for template args.
+        y.templates.arguments.clear();
+        return BaseVisitor::visit_Function(y);
+    }
+};
+
+Function make_rtc(const Function& f)
+{
+    auto visitor = MakeRTCVisitor();
+    return visitor(f);
+}
