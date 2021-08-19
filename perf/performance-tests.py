@@ -234,17 +234,18 @@ def clients():
     """Only 'client' tests."""
 
     # batched, complex forward, double, out-of-place
-    transform = [NS(label='complex_forward'), NS(label='complex_backward')]
-    dtype     = NS(label='double', dtype=np.float64)
-    placement = NS(label='outplace')
-    for suite in [cholla1d]:
-        label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
-        yield dict(label=label,
-                   transform=transform,
-                   lengths=suite.lengths,
-                   nbatch=suite.nbatch,
-                   dtype=dtype,
-                   placement=placement)
+    transforms = [NS(label='complex_forward'), NS(label='complex_backward')]
+    dtype      = NS(label='double', dtype=np.float64)
+    placement  = NS(label='outplace')
+    for transform in transforms:
+        for suite in [cholla1d]:
+            label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
+            yield dict(label=label,
+                       transform=transform,
+                       lengths=suite.lengths,
+                       nbatch=suite.nbatch,
+                       dtype=dtype,
+                       placement=placement)
 
     # one, complex forward, double, out-of-place
     transform = NS(label='complex_forward')
