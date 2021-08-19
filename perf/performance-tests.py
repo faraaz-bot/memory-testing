@@ -234,7 +234,7 @@ def clients():
     """Only 'client' tests."""
 
     # batched, complex forward, double, out-of-place
-    transform = NS(label='complex_forward')
+    transform = [NS(label='complex_forward'), NS(label='complex_backward')]
     dtype     = NS(label='double', dtype=np.float64)
     placement = NS(label='outplace')
     for suite in [cholla1d]:
