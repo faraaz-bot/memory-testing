@@ -14,6 +14,7 @@
 // clang-format on
 #endif
 
+#include <atomic>
 #include <iostream>
 
 using namespace cooperative_groups;
