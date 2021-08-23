@@ -318,6 +318,14 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
 
     if(threadIdx.x == 0 && blockIdx.x == 0)
         atomicExch(&g_counter_pass1, -1);
+    if(threadIdx.x == 0)
+    {
+        while(atomicAdd(&g_counter_pass1, 0) > -1)
+        {
+            printf("1\n");
+        }
+    }
+    __syncthreads();
 
     while(done != 1)
     {
@@ -367,6 +375,7 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
         {
         }
     }
+    __syncthreads();
 
     //__threadfence();
 
@@ -411,7 +420,7 @@ void solution_5(int* d_data, bool coop_launch)
 {
     if(!coop_launch)
     {
-        plus_one_twice_sync_partion_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
+        plus_one_twice_sync_tasks_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN);
     }
     else
     {
