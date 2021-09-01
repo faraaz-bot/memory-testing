@@ -57,6 +57,8 @@ class PreDecrement;
 
 class Ternary;
 
+// FFT expressions
+
 class LoadGlobal;
 class TwiddleMultiply;
 class TwiddleMultiplyConjugate;
@@ -329,8 +331,6 @@ std::string LoadGlobal::render() const
     return "load_cb(" + vrender(args[0]) + "," + vrender(args[1]) + ", load_cb_data, nullptr)";
 }
 
-
-
 std::string ScalarVariable::render() const
 {
     return name;
@@ -561,6 +561,9 @@ class Else;
 class StoreGlobal;
 class StatementList;
 
+// FFT statements
+class Butterfly;
+
 struct LineBreak
 {
     std::string render() const
@@ -613,7 +616,8 @@ using Statement = std::variant<Assign,
                                StoreGlobal,
                                LineBreak,
                                Return,
-                               SyncThreads>;
+                               SyncThreads,
+                               Butterfly>;
 
 class Assign
 {
@@ -805,6 +809,30 @@ std::string Call::render() const
     f += ");";
     return f;
 }
+
+class Butterfly : public Call
+{
+public:
+    bool forward;
+
+    Butterfly(std::vector<Expression> arguments, bool forward = true);
+
+    std::string render() const;
+};
+
+Butterfly::Butterfly(std::vector<Expression> arguments, bool forward)
+    : Call("BUTTERFLY", arguments)
+    , forward(forward)
+{
+    uint radix = arguments.size();
+    name       = (forward ? std::string("FwdRad") : std::string("InvRad")) + std::to_string(radix)
+           + std::string("B1");
+}
+
+std::string Butterfly::render() const
+{
+    return Call::render();
+};
 
 class StatementList
 {
@@ -1033,6 +1061,8 @@ struct BaseVisitor
     MAKE_VISITOR_OPERATOR(StatementList, Return);
     MAKE_VISITOR_OPERATOR(StatementList, SyncThreads);
 
+    MAKE_VISITOR_OPERATOR(StatementList, Butterfly);
+
     MAKE_VISITOR_OPERATOR(ArgumentList, ArgumentList);
 
     MAKE_VISITOR_OPERATOR(Function, Function);
@@ -1156,6 +1186,17 @@ struct BaseVisitor
     virtual StatementList visit_Call(const Call& x)
     {
         auto y      = Call(x);
+        y.templates = visit_ArgumentList(x.templates);
+        y.arguments.clear();
+        y.arguments.reserve(x.arguments.size());
+        for(const auto& arg : x.arguments)
+            y.arguments.push_back(std::visit(*this, arg));
+        return StatementList{{y}};
+    }
+
+    virtual StatementList visit_Butterfly(const Butterfly& x)
+    {
+        auto y      = Butterfly(x);
         y.templates = visit_ArgumentList(x.templates);
         y.arguments.clear();
         y.arguments.reserve(x.arguments.size());
@@ -1507,13 +1548,13 @@ struct MakeInverseVisitor : public BaseVisitor
             boost::replace_all(y.name, "forward_", "inverse_");
             return StatementList{{y}};
         }
-        else if(boost::starts_with(x.name, "FwdRad"))
-        {
-            Call y{x};
-            boost::replace_all(y.name, "FwdRad", "InvRad");
-            return StatementList{{y}};
-        }
         return BaseVisitor::visit_Call(x);
+    }
+
+    virtual StatementList visit_Butterfly(const Butterfly& x)
+    {
+        Butterfly y(x.arguments, /*forward=*/false);
+        return StatementList{{y}};
     }
 
     Function visit_Function(const Function& x) override
