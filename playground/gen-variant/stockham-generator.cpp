@@ -271,7 +271,7 @@ struct StockhamGenerator : public Params
         std::vector<Expression> args;
         for(uint w = 0; w < width; ++w)
             args.push_back(R + (h * width + w));
-        stmts += Call("FwdRad" + std::to_string(width) + "B1", args);
+        stmts += Butterfly(args);
         return stmts;
     }
 
