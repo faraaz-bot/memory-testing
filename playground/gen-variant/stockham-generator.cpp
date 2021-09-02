@@ -259,8 +259,7 @@ struct StockhamGenerator : public Params
             auto tidx = nheight - 1 + w - 1 + (width - 1) * (tid % nheight);
             auto ridx = h * width + w;
             stmts += Assign(W, twiddles[tidx]);
-            stmts += Assign(t.x, W.x * R[ridx].x - W.y * R[ridx].y);
-            stmts += Assign(t.y, W.y * R[ridx].x + W.x * R[ridx].y);
+            stmts += Assign(t, TwiddleMultiply({W, R[ridx]}));
             stmts += Assign(R[ridx], t);
         }
         return stmts;
@@ -272,7 +271,7 @@ struct StockhamGenerator : public Params
         std::vector<Expression> args;
         for(uint w = 0; w < width; ++w)
             args.push_back(R + (h * width + w));
-        stmts += Call("FwdRad" + std::to_string(width) + "B1", args);
+        stmts += Butterfly(args);
         return stmts;
     }
 

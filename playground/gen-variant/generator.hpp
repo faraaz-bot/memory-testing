@@ -57,7 +57,11 @@ class PreDecrement;
 
 class Ternary;
 
+// FFT expressions
+
 class LoadGlobal;
+class TwiddleMultiply;
+class TwiddleMultiplyConjugate;
 
 // We have a potential circular dependency here - Expression is
 // defined using forward-declared classes, but classes might like to
@@ -87,7 +91,9 @@ using Expression = std::variant<ScalarVariable,
                                 PreIncrement,
                                 PreDecrement,
                                 Ternary,
-                                LoadGlobal>;
+                                LoadGlobal,
+                                TwiddleMultiply,
+                                TwiddleMultiplyConjugate>;
 
 class OptionalExpression
 {
@@ -143,11 +149,11 @@ public:
     OptionalExpression index;
     OptionalExpression size;
 
-    Variable(std::string _name,
-             std::string _type,
-             bool        pointer = false,
-             bool restrict       = false,
-             unsigned int size   = 0);
+    Variable(std::string  _name,
+             std::string  _type,
+             bool         pointer  = false,
+             bool         restrict = false,
+             unsigned int size     = 0);
 
     Variable(const ScalarVariable& v)
         : name(v.name)
@@ -184,6 +190,34 @@ public:
     const unsigned int precedence = 18;
     LoadGlobal(Expression ptr, Expression index);
     explicit LoadGlobal(const std::vector<Expression>& args)
+        : args(args)
+    {
+    }
+
+    std::string render() const;
+
+    std::vector<Expression> args;
+};
+
+class TwiddleMultiply
+{
+public:
+    const unsigned int precedence = 5;
+    explicit TwiddleMultiply(const std::vector<Expression>& args)
+        : args(args)
+    {
+    }
+
+    std::string render() const;
+
+    std::vector<Expression> args;
+};
+
+class TwiddleMultiplyConjugate
+{
+public:
+    const unsigned int precedence = 5;
+    explicit TwiddleMultiplyConjugate(const std::vector<Expression>& args)
         : args(args)
     {
     }
@@ -496,6 +530,22 @@ std::string ComplexLiteral::render() const
     return ret;
 }
 
+std::string TwiddleMultiply::render() const
+{
+    auto a = std::get<Variable>(args[0]);
+    auto b = std::get<Variable>(args[1]);
+    auto r = ComplexLiteral{a.x * b.x - a.y * b.y, a.y * b.x + a.x * b.y};
+    return r.render();
+}
+
+std::string TwiddleMultiplyConjugate::render() const
+{
+    auto a = std::get<Variable>(args[0]);
+    auto b = std::get<Variable>(args[1]);
+    auto r = ComplexLiteral{a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y};
+    return r.render();
+}
+
 //
 // Statements
 //
@@ -510,6 +560,9 @@ class If;
 class Else;
 class StoreGlobal;
 class StatementList;
+
+// FFT statements
+class Butterfly;
 
 struct LineBreak
 {
@@ -563,7 +616,8 @@ using Statement = std::variant<Assign,
                                StoreGlobal,
                                LineBreak,
                                Return,
-                               SyncThreads>;
+                               SyncThreads,
+                               Butterfly>;
 
 class Assign
 {
@@ -755,6 +809,30 @@ std::string Call::render() const
     f += ");";
     return f;
 }
+
+class Butterfly : public Call
+{
+public:
+    bool forward;
+
+    Butterfly(std::vector<Expression> arguments, bool forward = true);
+
+    std::string render() const;
+};
+
+Butterfly::Butterfly(std::vector<Expression> arguments, bool forward)
+    : Call("BUTTERFLY", arguments)
+    , forward(forward)
+{
+    uint radix = arguments.size();
+    name       = (forward ? std::string("FwdRad") : std::string("InvRad")) + std::to_string(radix)
+           + std::string("B1");
+}
+
+std::string Butterfly::render() const
+{
+    return Call::render();
+};
 
 class StatementList
 {
@@ -966,6 +1044,8 @@ struct BaseVisitor
     MAKE_VISITOR_OPERATOR(Expression, PreDecrement);
     MAKE_VISITOR_OPERATOR(Expression, Ternary);
     MAKE_VISITOR_OPERATOR(Expression, LoadGlobal);
+    MAKE_VISITOR_OPERATOR(Expression, TwiddleMultiply);
+    MAKE_VISITOR_OPERATOR(Expression, TwiddleMultiplyConjugate);
 
     MAKE_VISITOR_OPERATOR(StatementList, Assign);
     MAKE_VISITOR_OPERATOR(StatementList, Call);
@@ -980,6 +1060,8 @@ struct BaseVisitor
     MAKE_VISITOR_OPERATOR(StatementList, LineBreak);
     MAKE_VISITOR_OPERATOR(StatementList, Return);
     MAKE_VISITOR_OPERATOR(StatementList, SyncThreads);
+
+    MAKE_VISITOR_OPERATOR(StatementList, Butterfly);
 
     MAKE_VISITOR_OPERATOR(ArgumentList, ArgumentList);
 
@@ -1056,6 +1138,9 @@ struct BaseVisitor
 
     MAKE_EXPR_VISIT(LoadGlobal);
 
+    MAKE_EXPR_VISIT(TwiddleMultiply);
+    MAKE_EXPR_VISIT(TwiddleMultiplyConjugate);
+
     MAKE_EXPR_VISIT(Ternary);
     MAKE_EXPR_VISIT(ComplexLiteral)
 
@@ -1101,6 +1186,17 @@ struct BaseVisitor
     virtual StatementList visit_Call(const Call& x)
     {
         auto y      = Call(x);
+        y.templates = visit_ArgumentList(x.templates);
+        y.arguments.clear();
+        y.arguments.reserve(x.arguments.size());
+        for(const auto& arg : x.arguments)
+            y.arguments.push_back(std::visit(*this, arg));
+        return StatementList{{y}};
+    }
+
+    virtual StatementList visit_Butterfly(const Butterfly& x)
+    {
+        auto y      = Butterfly(x);
         y.templates = visit_ArgumentList(x.templates);
         y.arguments.clear();
         y.arguments.reserve(x.arguments.size());
@@ -1438,23 +1534,10 @@ Function make_inplace(const Function& f)
 
 struct MakeInverseVisitor : public BaseVisitor
 {
-    MakeInverseVisitor()
-        : twiddle_vars{"twiddles", "TW2step"}
+    virtual Expression visit_TwiddleMultiply(const TwiddleMultiply& x)
     {
-    }
-    const std::vector<std::string> twiddle_vars;
-
-    virtual StatementList visit_Assign(const Assign& x)
-    {
-        if(std::holds_alternative<Variable>(x.rhs))
-        {
-            Variable rhs = std::get<Variable>(x.rhs);
-            if(std::find(twiddle_vars.begin(), twiddle_vars.end(), rhs.name) != twiddle_vars.end())
-            {
-                return {Assign{x.lhs, ComplexLiteral{rhs.x, UnaryMinus{rhs.y}}}};
-            }
-        }
-        return BaseVisitor::visit_Assign(x);
+        TwiddleMultiplyConjugate y(x.args);
+        return BaseVisitor::visit_TwiddleMultiplyConjugate(y);
     }
 
     virtual StatementList visit_Call(const Call& x)
@@ -1465,13 +1548,13 @@ struct MakeInverseVisitor : public BaseVisitor
             boost::replace_all(y.name, "forward_", "inverse_");
             return StatementList{{y}};
         }
-        else if(boost::starts_with(x.name, "FwdRad"))
-        {
-            Call y{x};
-            boost::replace_all(y.name, "FwdRad", "InvRad");
-            return StatementList{{y}};
-        }
         return BaseVisitor::visit_Call(x);
+    }
+
+    virtual StatementList visit_Butterfly(const Butterfly& x)
+    {
+        Butterfly y(x.arguments, /*forward=*/false);
+        return StatementList{{y}};
     }
 
     Function visit_Function(const Function& x) override
