@@ -322,7 +322,6 @@ void __global__ plus_one_twice_sync_tasks_atomic(int* a, const int b_stride, con
     {
         while(atomicAdd(&g_counter_pass1, 0) > -1)
         {
-            printf("1\n");
         }
     }
     __syncthreads();
@@ -462,7 +461,7 @@ int main()
             if(i != 4)
             {
                 device_reset();
-                device_malloc((void**)&d_data, total_bytes);
+               device_malloc((void**)&d_data, total_bytes);
                 device_memcpy_h2d(d_data, h_in, total_bytes);
 
                 device_event_create();
