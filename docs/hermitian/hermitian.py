@@ -33,11 +33,11 @@ def symmetrize_2d(hdata, nx, ny):
     return hdata
 
 def is_symmetric_1d(hdata, nx):
-    if not np.isclose(hdata[0].image, 0):
+    if not np.isclose(hdata[0].imag, 0):
         return False
     if nx % 2 == 0:
         nxp = nx // 2 + 1
-        if not np.isclose(hdata[nxp - 1].image, 0):
+        if not np.isclose(hdata[nxp - 1].imag, 0):
             return False
     return True
 
@@ -124,8 +124,53 @@ def c2r_2d_decomp(hdata, nx, ny, impose_hermitian=False):
         rdata[i] = c2r_1d(hdata[i], ny, impose_hermitian)
     return rdata
 
+
+
+print()
+print("checking our impose Hermitian code:")
+
+print()
+print("1D")
+x = np.empty([nx])
+for i in range(nx):
+    x[i] = random.random()
+X = np.fft.rfft(x)
+print(X)
+print(is_symmetric_1d(X, nx))
+print(np.allclose(X,  symmetrize_1d(X, nx)))
+
+
+print()
+print("2D")
+
+x = np.empty([nx, ny])
+for i in range(nx):
+    for j in range(ny):
+        x[i][j] = random.random()
+X = np.fft.rfft2(x)
+print(X)
+print(is_symmetric_2d(X, nx, ny))
+print(np.allclose(X,  symmetrize_2d(X, nx, ny)))
+
+        
+Z = np.empty([nx, nyp], dtype=complex)
+for i in range(nx):
+    for j in range(nyp):
+        Z[i,j] = complex(random.random(), random.random())
+
+print(Z)
+Z = symmetrize_2d(Z, nx, ny)
+if is_symmetric_2d(Z, nx, ny):
+    print("Z is symmetric")
+else:
+    print("Z isn't symmetric")
+print(Z)
+
+
+print()
 print("1D:", nx)
 
+print()
 print("direct")
 
 x = np.empty([nx])
@@ -161,6 +206,9 @@ print(np.allclose(xx, xxx0))
 print()
 print("2D:", nx, ny)
 
+print()
+print("direct")
+
 x = np.empty([nx, ny])
 
 for i in range(nx):
@@ -188,6 +236,7 @@ X000 = r2c_2d_decomp(x, nx, ny, True)
 print(X000)
 print(np.allclose(X, X000))
 
+print()
 print("inverse")
 
 print("np.fft.irfft2:")
@@ -206,20 +255,7 @@ print("1D embedded with 1D Hermitian imposed:")
 xx000 = c2r_2d_decomp(X, nx, ny, True)
 print(xx000)
 print(np.allclose(xx, xx000))
-
-
-print()
-
-Z = np.empty([nx, nyp], dtype=complex)
-for i in range(nx):
-    for j in range(nyp):
-        Z[i,j] = complex(random.random(), random.random())
-
-print(Z)
-Z = symmetrize_2d(Z, nx, ny)
-if is_symmetric_2d(Z, nx, ny):
-    print("Z is symmetric")
+if not np.allclose(xx, xx000):
+    print("No, we can't impose 1D Hermitian formatting")
 else:
-    print("Z isn't symmetric")
-print(Z)
-
+    print("Yes, we can impose 1D Hermitian formatting")
