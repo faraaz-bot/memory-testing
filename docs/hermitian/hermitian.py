@@ -62,11 +62,15 @@ def is_symmetric_2d(data, nx, ny):
                 return False
     return True
 
-def r2c_1d(rdata, nx):
+def r2c_1d(rdata, nx, impose_hermitian=False):
     cdata = np.empty([nx], dtype=complex)
     for i in range(nx):
         cdata[i] = rdata[i]
     cdata = np.fft.fft(cdata)
+    if impose_hermitian:
+        cdata[0] = cdata[0].real
+        if nx % 2 == 0:
+            cdata[nx // 2] = cdata[nx // 2].real
     return cdata[0:nx // 2 + 1]
 
 def c2r_1d(hdata, nx):
@@ -86,6 +90,15 @@ def r2c_2d(rdata, nx, ny):
     cdata = np.fft.fft2(cdata)
     return cdata[0:nx,0:ny // 2 + 1]
 
+def r2c_2d_decomp(rdata, nx, ny, impose_hermitian=False):
+    hdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for i in range(nx):
+        hdata[i] = r2c_1d(rdata[i], nx, impose_hermitian)
+    for j in range(ny // 2 + 1):
+        hdata[:,j] = np.fft.fft(hdata[:,j])
+    return hdata
+
+
 def c2r_2d(hdata, nx, ny):
     cdata = np.zeros([nx, ny], dtype=complex)
     for i in range(nx):
@@ -103,22 +116,34 @@ def c2r_2d(hdata, nx, ny):
     return cdata.real
     
 
-print(nx)
+print("1D:", nx)
+
+print("direct")
 
 x = np.empty([nx])
 for i in range(nx):
     x[i] = random.random()
 print(x)
 X = np.fft.rfft(x)
+print("np.fft.rfft:")
 print(X)
-print(r2c_1d(x, nx))
+print("embedded:")
+X0 = r2c_1d(x, nx)
+print(X0)
+print(np.allclose(X, X0))
+print("embedded with imposed symmetry:")
+X00 = r2c_1d(x, nx, True)
+print(X0)
+print(np.allclose(X, X00))
 
+print()
+print("inverse")
 print(np.fft.irfft(X,nx)) 
 print(c2r_1d(X, nx))
 print(x)
 
 print()
-print(nx, ny)
+print("2D:", nx, ny)
 
 x = np.empty([nx, ny])
 
@@ -127,17 +152,27 @@ for i in range(nx):
         x[i][j] = random.random()
 print(x)
 
+print("np.fft.rfft2:")
 X = np.fft.rfft2(x)
-
 print(X)
 if is_symmetric_2d(X, nx, ny):
     print("X is symmetric")
 else:
     print("X isn't symmetric")
-
+print("2D embedded:")
 X0 = r2c_2d(x, nx, ny)
 print(X0)
 print(np.allclose(X, X0))
+print("1D embedded:")
+X00 = r2c_2d_decomp(x, nx, ny)
+print(X00)
+print(np.allclose(X, X00))
+print("1D embedded with 1D Hermitian imposed:")
+X000 = r2c_2d_decomp(x, nx, ny, True)
+print(X000)
+print(np.allclose(X, X000))
+
+print("inverse")
 
 xx = np.fft.irfft2(X, [nx, ny])
 print(xx)
@@ -145,7 +180,7 @@ print(np.allclose(x, xx))
 xx0 = c2r_2d(X, nx, ny)
 print(xx0)
 print(np.allclose(xx, xx0))
-print(np.isclose(xx, xx0))
+
 
 print()
 
