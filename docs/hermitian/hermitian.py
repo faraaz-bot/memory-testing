@@ -9,56 +9,56 @@ nx = 4
 ny = 4
 nyp = ny // 2 + 1
 
-def symmetrize_1d(data, nx):
-    data[0] = data[0].real
+def symmetrize_1d(hdata, nx):
+    hdata[0] = hdata[0].real
     if nx % 2 == 0:
         nxp = nx // 2 + 1
-        data[nxp - 1] = data[nxp - 1].real
-    return data
+        hdata[nxp - 1] = hdata[nxp - 1].real
+    return hdata
 
-def symmetrize_2d(data, nx, ny):
+def symmetrize_2d(hdata, nx, ny):
     nyp = ny // 2 + 1
-    data[0][0] = data[0][0].real
+    hdata[0][0] = hdata[0][0].real
     if ny % 2 == 0:
-        data[0][nyp -1] = data[0][nyp -1].real
+        hdata[0][nyp -1] = hdata[0][nyp -1].real
     if nx % 2 == 0:
-        data[nx // 2][0] = data[nx // 2][0].real
+        hdata[nx // 2][0] = hdata[nx // 2][0].real
         if ny % 2 == 0:
-            data[nx // 2][nyp -1] = data[nx // 2][nyp - 1].real
+            hdata[nx // 2][nyp -1] = hdata[nx // 2][nyp - 1].real
     for i in range(1, nx // 2):
-        data[nx - i][0] = data[i][0].conj()
+        hdata[nx - i][0] = hdata[i][0].conj()
     if ny % 2 == 0:
         for i in range(1, nx // 2):
-            data[nx - i][nyp - 1] = data[i][nyp - 1].conj()
-    return data
+            hdata[nx - i][nyp - 1] = hdata[i][nyp - 1].conj()
+    return hdata
 
-def is_symmetric_1d(data, nx):
-    if not np.isclose(data[0].image, 0):
+def is_symmetric_1d(hdata, nx):
+    if not np.isclose(hdata[0].image, 0):
         return False
     if nx % 2 == 0:
         nxp = nx // 2 + 1
-        if not np.isclose(data[nxp - 1].image, 0):
+        if not np.isclose(hdata[nxp - 1].image, 0):
             return False
     return True
 
-def is_symmetric_2d(data, nx, ny):
-    if not np.isclose(data[0][0].imag, 0):
+def is_symmetric_2d(hdata, nx, ny):
+    if not np.isclose(hdata[0][0].imag, 0):
         return False
     nyp = ny // 2 + 1
     if ny % 2 ==0:
-        if not np.isclose(data[0][nyp-1].imag, 0.0):
+        if not np.isclose(hdata[0][nyp-1].imag, 0.0):
             return False
     for i in range(1, nx // 2):
-        if not np.isclose(data[nx - i][0], data[i][0].conj()):
+        if not np.isclose(hdata[nx - i][0], hdata[i][0].conj()):
             return False
     if nx % 2 == 0:
-        if not np.isclose(data[nx // 2][0].imag, 0.0):
+        if not np.isclose(hdata[nx // 2][0].imag, 0.0):
             return False
         if ny % 2 ==0:
-            if not np.isclose(data[nx // 2][nyp - 1].imag, 0.0):
+            if not np.isclose(hdata[nx // 2][nyp - 1].imag, 0.0):
                 return False
         for i in range(1, nx // 2):
-            if not np.isclose(data[nx - i][nyp - 1], data[i][nyp - 1].conj()):
+            if not np.isclose(hdata[nx - i][nyp - 1], hdata[i][nyp - 1].conj()):
                 return False
     return True
 
@@ -73,7 +73,9 @@ def r2c_1d(rdata, nx, impose_hermitian=False):
             cdata[nx // 2] = cdata[nx // 2].real
     return cdata[0:nx // 2 + 1]
 
-def c2r_1d(hdata, nx):
+def c2r_1d(hdata, nx, impose_hermitian=False):
+    if impose_hermitian:
+        symmetrize_1d(hdata, nx)
     cdata = np.empty([nx], dtype=complex)
     for i in range(nx // 2 + 1):
         cdata[i] = hdata[i]
@@ -93,11 +95,10 @@ def r2c_2d(rdata, nx, ny):
 def r2c_2d_decomp(rdata, nx, ny, impose_hermitian=False):
     hdata = np.empty([nx, ny // 2 + 1], dtype=complex)
     for i in range(nx):
-        hdata[i] = r2c_1d(rdata[i], nx, impose_hermitian)
+        hdata[i] = r2c_1d(rdata[i], ny, impose_hermitian)
     for j in range(ny // 2 + 1):
         hdata[:,j] = np.fft.fft(hdata[:,j])
     return hdata
-
 
 def c2r_2d(hdata, nx, ny):
     cdata = np.zeros([nx, ny], dtype=complex)
@@ -115,6 +116,13 @@ def c2r_2d(hdata, nx, ny):
     cdata = np.fft.ifft2(cdata)
     return cdata.real
     
+def c2r_2d_decomp(hdata, nx, ny, impose_hermitian=False):
+    for j in range(ny // 2 + 1):
+        hdata[:,j] = np.fft.ifft(hdata[:,j])
+    rdata = np.empty([nx, ny])
+    for i in range(nx):
+        rdata[i] = c2r_1d(hdata[i], ny, impose_hermitian)
+    return rdata
 
 print("1D:", nx)
 
@@ -138,9 +146,17 @@ print(np.allclose(X, X00))
 
 print()
 print("inverse")
-print(np.fft.irfft(X,nx)) 
-print(c2r_1d(X, nx))
-print(x)
+print("np.fft.irfft")
+xx = np.fft.irfft(X,nx)
+print(xx)
+print("embedded:")
+xx0 = c2r_1d(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("embedded with Hermitian imposed:")
+xxx0 = c2r_1d(X, nx, True)
+print(xxx0)
+print(np.allclose(xx, xxx0))
 
 print()
 print("2D:", nx, ny)
@@ -174,12 +190,22 @@ print(np.allclose(X, X000))
 
 print("inverse")
 
+print("np.fft.irfft2:")
 xx = np.fft.irfft2(X, [nx, ny])
 print(xx)
 print(np.allclose(x, xx))
+print("2D embedded:")
 xx0 = c2r_2d(X, nx, ny)
 print(xx0)
 print(np.allclose(xx, xx0))
+print("1D embedded:")
+xx00 = c2r_2d_decomp(X, nx, ny)
+print(xx00)
+print(np.allclose(xx, xx00))
+print("1D embedded with 1D Hermitian imposed:")
+xx000 = c2r_2d_decomp(X, nx, ny, True)
+print(xx000)
+print(np.allclose(xx, xx000))
 
 
 print()
