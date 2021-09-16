@@ -68,9 +68,7 @@ def r2c_1d(rdata, nx, impose_hermitian=False):
         cdata[i] = rdata[i]
     cdata = np.fft.fft(cdata)
     if impose_hermitian:
-        cdata[0] = cdata[0].real
-        if nx % 2 == 0:
-            cdata[nx // 2] = cdata[nx // 2].real
+        cdata = symmetrize_1d(cdata, nx)
     return cdata[0:nx // 2 + 1]
 
 def c2r_1d(hdata, nx, impose_hermitian=False):
@@ -110,18 +108,18 @@ def c2r_2d(hdata, nx, ny):
             cdata[i][j] = hdata[i][ny - j].conj();
     for i in range(1, nx // 2):
         for j in range(ny // 2 + 1, ny):
-            print(i,j)
             cdata[i][j] = hdata[nx - i][ny - j].conj();
             cdata[nx - i][j] = hdata[i][ny - j].conj();
     cdata = np.fft.ifft2(cdata)
     return cdata.real
     
 def c2r_2d_decomp(hdata, nx, ny, impose_hermitian=False):
+    cdata = np.empty([nx, ny // 2 + 1], dtype=complex)
     for j in range(ny // 2 + 1):
-        hdata[:,j] = np.fft.ifft(hdata[:,j])
+        cdata[:,j] = np.fft.ifft(hdata[:,j])
     rdata = np.empty([nx, ny])
     for i in range(nx):
-        rdata[i] = c2r_1d(hdata[i], ny, impose_hermitian)
+        rdata[i] = c2r_1d(cdata[i], ny, impose_hermitian)
     return rdata
 
 
@@ -214,7 +212,6 @@ x = np.empty([nx, ny])
 for i in range(nx):
     for j in range(ny):
         x[i][j] = random.random()
-print(x)
 
 print("np.fft.rfft2:")
 X = np.fft.rfft2(x)
@@ -255,7 +252,56 @@ print("1D embedded with 1D Hermitian imposed:")
 xx000 = c2r_2d_decomp(X, nx, ny, True)
 print(xx000)
 print(np.allclose(xx, xx000))
-if not np.allclose(xx, xx000):
-    print("No, we can't impose 1D Hermitian formatting")
-else:
-    print("Yes, we can impose 1D Hermitian formatting")
+
+print()
+print("1D inverse on malformed data:")
+X = np.empty([nx], dtype=complex)
+for i in range(nx):
+    X[i] = complex(random.random(), random.random())
+print("np.fft.irfft")
+xx = np.fft.irfft(X,nx)
+print(xx)
+print("embedded:")
+xx0 = c2r_1d(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("embedded with Hermitian imposed:")
+xxx0 = c2r_1d(X, nx, True)
+print(xxx0)
+print(np.allclose(xx, xxx0))
+    
+print()
+print("2D inverse on malformed data:")
+
+X = np.empty([nx, nyp], dtype=complex)
+for i in range(nx):
+    for j in range(nyp):
+        X[i,j] = complex(random.random(), random.random())
+
+print("np.fft.irfft2:")
+xx = np.fft.irfft2(X, [nx, ny])
+print(xx)
+print("2D embedded:")
+xx0 = c2r_2d(X, nx, ny)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("1D embedded:")
+xx00 = c2r_2d_decomp(X, nx, ny)
+print(xx00)
+print(np.allclose(xx, xx00))
+print("1D embedded with 1D Hermitian imposed:")
+xx000 = c2r_2d_decomp(X, nx, ny, True)
+print(xx000)
+print(np.allclose(xx, xx000))
+
+print(X)
+X = symmetrize_2d(X, nx, ny)
+print(X)
+cdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+for j in range(ny // 2 + 1):
+    cdata[:,j] = np.fft.ifft(X[:,j])
+print(cdata)
+rdata = np.empty([nx, ny])
+for i in range(nx):
+    rdata[i] = np.fft.irfft(cdata[i], ny)
+print(rdata)
