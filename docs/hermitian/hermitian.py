@@ -71,6 +71,34 @@ def r2c_1d(rdata, nx, impose_hermitian=False):
         cdata = symmetrize_1d(cdata, nx)
     return cdata[0:nx // 2 + 1]
 
+def postkernel(Z):
+    Nhalf = len(Z)
+    N = 2 * Nhalf
+    Ncomplex = Nhalf + 1
+    hdata = np.empty(Ncomplex, dtype=complex)
+    hdata[0] = complex(Z[0].real + Z[0].imag, 0)
+    I = complex(0, 1)
+    if Nhalf % 2 == 0:
+        p = Nhalf // 2
+        omegaNp = -I
+        hdata[p] = Z[p].conjugate()
+    for p in range(1, Nhalf // 2):
+        q = Nhalf - p
+        omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
+        hdata[p] = Z[p] * 0.5 * (1 - I * omegaNp) + Z[q].conjugate() * 0.5 * (1 + I * omegaNp)
+        omegaNq = -omegaNp.conjugate()
+        hdata[q] = Z[q] * 0.5 * (1 - I * omegaNq) + Z[p].conjugate() * 0.5 * (1 + I * omegaNq)
+    hdata[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
+    return hdata
+
+def r2c_1d_even(rdata, nx):
+    cdata = np.empty([nx // 2], dtype=complex)
+    for i in range(nx // 2):
+        cdata[i] = complex(rdata[2*i], rdata[2*i+1])
+    cdata = np.fft.fft(cdata)
+    hdata = postkernel(cdata)
+    return hdata
+
 def c2r_1d(hdata, nx, impose_hermitian=False):
     if impose_hermitian:
         symmetrize_1d(hdata, nx)
@@ -82,6 +110,32 @@ def c2r_1d(hdata, nx, impose_hermitian=False):
     cdata = np.fft.ifft(cdata)
     return cdata.real
 
+def prekernel(hdata, nx):
+    cdata = np.empty(nx // 2, dtype=complex)
+    I = complex(0, 1)
+    Xp = hdata[0]
+    Xq = hdata[nx // 2]
+    cdata[0] = complex(Xp.real - Xp.imag + Xq.real + Xq.imag,
+                       Xp.real + Xp.imag - Xq.real + Xq.imag)
+    if nx % 4 == 0:
+        cdata[nx // 4] =  hdata[nx // 4].conjugate() * 2
+    for p in range(1, (nx // 2 + 1) // 2):
+        q = nx // 2 - p
+        omegaNp = cmath.exp(2.0 * math.pi * I * p / N);
+        omegaNq = -omegaNp.conjugate()
+        cdata[p] = hdata[p] * (1 + I * omegaNp) + X[q].conjugate() * (1 - I * omegaNp)
+        cdata[q] = hdata[q] * (1 + I * omegaNq) + X[p].conjugate() * (1 - I * omegaNq)
+    return cdata
+
+def c2r_1d_even(hdata, nx):
+    cdata = prekernel(hdata, nx)
+    cdata = np.fft.ifft(cdata)
+    rdata = np.empty(nx)
+    for i in range(nx // 2):
+        rdata[2 * i] = cdata[i].real
+        rdata[2 * i + 1] = cdata[i].imag
+    return rdata * 0.5
+        
 def r2c_2d(rdata, nx, ny):
     cdata = np.empty([nx, ny], dtype=complex)
     for i in range(nx):
@@ -184,8 +238,14 @@ print(X0)
 print(np.allclose(X, X0))
 print("embedded with imposed symmetry:")
 X00 = r2c_1d(x, nx, True)
-print(X0)
+print(X00)
 print(np.allclose(X, X00))
+print("even")
+X000 = r2c_1d_even(x, nx)
+print(X000)
+print(np.allclose(X, X000))
+
+
 
 print()
 print("inverse")
@@ -200,6 +260,11 @@ print("embedded with Hermitian imposed:")
 xxx0 = c2r_1d(X, nx, True)
 print(xxx0)
 print(np.allclose(xx, xxx0))
+print("even")
+xxxx0 = c2r_1d_even(X, nx)
+print(xxxx0)
+print(np.allclose(xx, xxxx0))
+
 
 print()
 print("2D:", nx, ny)
