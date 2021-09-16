@@ -10,11 +10,14 @@ ny = 4
 nyp = ny // 2 + 1
 
 def symmetrize_1d(hdata, nx):
-    hdata[0] = hdata[0].real
+    sdata = np.empty([nx // 2 + 1], dtype=complex)
+    for i in range(nx // 2 + 1):
+        sdata[i] = hdata[i]
+    sdata[0] = sdata[0].real
     if nx % 2 == 0:
         nxp = nx // 2 + 1
-        hdata[nxp - 1] = hdata[nxp - 1].real
-    return hdata
+        sdata[nxp - 1] = sdata[nxp - 1].real
+    return sdata
 
 def symmetrize_2d(hdata, nx, ny):
     nyp = ny // 2 + 1
@@ -71,7 +74,8 @@ def r2c_1d(rdata, nx, impose_hermitian=False):
         cdata = symmetrize_1d(cdata, nx)
     return cdata[0:nx // 2 + 1]
 
-def postkernel(Z):
+def postkernel(Z, impose_hermitian=False):
+    # TODO: can we actually impose hermitian here?
     Nhalf = len(Z)
     N = 2 * Nhalf
     Ncomplex = Nhalf + 1
@@ -91,17 +95,19 @@ def postkernel(Z):
     hdata[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
     return hdata
 
-def r2c_1d_even(rdata, nx):
+def r2c_1d_even(rdata, nx, impose_hermitian=False):
     cdata = np.empty([nx // 2], dtype=complex)
     for i in range(nx // 2):
         cdata[i] = complex(rdata[2*i], rdata[2*i+1])
     cdata = np.fft.fft(cdata)
-    hdata = postkernel(cdata)
+    hdata = postkernel(cdata, impose_hermitian)
     return hdata
 
-def c2r_1d(hdata, nx, impose_hermitian=False):
+def c2r_1d(input, nx, impose_hermitian=False):
     if impose_hermitian:
-        symmetrize_1d(hdata, nx)
+        hdata = symmetrize_1d(input, nx)
+    else:
+        hdata = input
     cdata = np.empty([nx], dtype=complex)
     for i in range(nx // 2 + 1):
         cdata[i] = hdata[i]
@@ -110,25 +116,34 @@ def c2r_1d(hdata, nx, impose_hermitian=False):
     cdata = np.fft.ifft(cdata)
     return cdata.real
 
-def prekernel(hdata, nx):
+def prekernel(hdata, nx, impose_hermitian=False):
     cdata = np.empty(nx // 2, dtype=complex)
     I = complex(0, 1)
-    Xp = hdata[0]
-    Xq = hdata[nx // 2]
-    cdata[0] = complex(Xp.real - Xp.imag + Xq.real + Xq.imag,
-                       Xp.real + Xp.imag - Xq.real + Xq.imag)
+    p = hdata[0]
+    q = hdata[nx // 2]
+    if impose_hermitian:
+        cdata[0] = complex(p.real + q.real,
+                           p.real - q.real)
+    else:
+        cdata[0] = complex(p.real - p.imag + q.real + q.imag,
+                           p.real + p.imag - q.real + q.imag)
+
+        
     if nx % 4 == 0:
         cdata[nx // 4] =  hdata[nx // 4].conjugate() * 2
-    for p in range(1, (nx // 2 + 1) // 2):
-        q = nx // 2 - p
-        omegaNp = cmath.exp(2.0 * math.pi * I * p / N);
+    for idx_p in range(1, (nx // 2 + 1) // 2):
+        idx_q = nx // 2 - idx_p
+        omegaNp = cmath.exp(2.0 * math.pi * I * idx_p / nx);
         omegaNq = -omegaNp.conjugate()
-        cdata[p] = hdata[p] * (1 + I * omegaNp) + X[q].conjugate() * (1 - I * omegaNp)
-        cdata[q] = hdata[q] * (1 + I * omegaNq) + X[p].conjugate() * (1 - I * omegaNq)
+        p = hdata[idx_p]
+        q = hdata[idx_q]
+        cdata[idx_p] = p * (1 + I * omegaNp) + q.conjugate() * (1 - I * omegaNp)
+        cdata[idx_q] = q * (1 + I * omegaNq) + p.conjugate() * (1 - I * omegaNq)
     return cdata
 
-def c2r_1d_even(hdata, nx):
-    cdata = prekernel(hdata, nx)
+def c2r_1d_even(hdata, nx, impose_hermitian=False):
+    print(hdata[0])
+    cdata = prekernel(hdata, nx, impose_hermitian)
     cdata = np.fft.ifft(cdata)
     rdata = np.empty(nx)
     for i in range(nx // 2):
@@ -148,6 +163,14 @@ def r2c_2d_decomp(rdata, nx, ny, impose_hermitian=False):
     hdata = np.empty([nx, ny // 2 + 1], dtype=complex)
     for i in range(nx):
         hdata[i] = r2c_1d(rdata[i], ny, impose_hermitian)
+    for j in range(ny // 2 + 1):
+        hdata[:,j] = np.fft.fft(hdata[:,j])
+    return hdata
+
+def r2c_2d_even(rdata, nx, ny, impose_hermitian=False):
+    hdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for i in range(nx):
+        hdata[i] = r2c_1d_even(rdata[i], ny, impose_hermitian)
     for j in range(ny // 2 + 1):
         hdata[:,j] = np.fft.fft(hdata[:,j])
     return hdata
@@ -174,6 +197,15 @@ def c2r_2d_decomp(hdata, nx, ny, impose_hermitian=False):
     rdata = np.empty([nx, ny])
     for i in range(nx):
         rdata[i] = c2r_1d(cdata[i], ny, impose_hermitian)
+    return rdata
+
+def c2r_2d_even(hdata, nx, ny, impose_hermitian=False):
+    cdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for j in range(ny // 2 + 1):
+        cdata[:,j] = np.fft.ifft(hdata[:,j])
+    rdata = np.empty([nx, ny])
+    for i in range(nx):
+        rdata[i] = c2r_1d_even(cdata[i], ny, impose_hermitian)
     return rdata
 
 
@@ -250,20 +282,24 @@ print(np.allclose(X, X000))
 print()
 print("inverse")
 print("np.fft.irfft")
-xx = np.fft.irfft(X,nx)
+xx = np.fft.irfft(X, nx)
 print(xx)
 print("embedded:")
 xx0 = c2r_1d(X, nx)
 print(xx0)
 print(np.allclose(xx, xx0))
 print("embedded with Hermitian imposed:")
-xxx0 = c2r_1d(X, nx, True)
-print(xxx0)
-print(np.allclose(xx, xxx0))
+xx0 = c2r_1d(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
 print("even")
-xxxx0 = c2r_1d_even(X, nx)
-print(xxxx0)
-print(np.allclose(xx, xxxx0))
+xx0 = c2r_1d_even(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even impose")
+xx0 = c2r_1d_even(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
 
 
 print()
@@ -297,6 +333,10 @@ print("1D embedded with 1D Hermitian imposed:")
 X000 = r2c_2d_decomp(x, nx, ny, True)
 print(X000)
 print(np.allclose(X, X000))
+print("2D even:")
+X000 = r2c_2d_even(x, nx, ny)
+print(X000)
+print(np.allclose(X, X000))
 
 print()
 print("inverse")
@@ -310,39 +350,88 @@ xx0 = c2r_2d(X, nx, ny)
 print(xx0)
 print(np.allclose(xx, xx0))
 print("1D embedded:")
-xx00 = c2r_2d_decomp(X, nx, ny)
-print(xx00)
-print(np.allclose(xx, xx00))
+xx0 = c2r_2d_decomp(X, nx, ny)
+print(xx0)
+print(np.allclose(xx, xx0))
 print("1D embedded with 1D Hermitian imposed:")
-xx000 = c2r_2d_decomp(X, nx, ny, True)
-print(xx000)
-print(np.allclose(xx, xx000))
+xx0 = c2r_2d_decomp(X, nx, ny, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("2D even:")
+xx0 = c2r_2d_even(X, nx, ny)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("2D even impose:")
+xx0 = c2r_2d_even(X, nx, ny, True)
+print(xx0)
+print(np.allclose(xx, xx0))
 
 print()
 print("1D inverse on malformed data:")
 X = np.empty([nx], dtype=complex)
 for i in range(nx):
     X[i] = complex(random.random(), random.random())
+print(X)
+if is_symmetric_1d(X, nx):
+    print("valid input")
+else:
+    print("invalid input")
+
 print("np.fft.irfft")
-xx = np.fft.irfft(X,nx)
+xx = np.fft.irfft(X, nx)
 print(xx)
 print("embedded:")
 xx0 = c2r_1d(X, nx)
 print(xx0)
 print(np.allclose(xx, xx0))
 print("embedded with Hermitian imposed:")
-xxx0 = c2r_1d(X, nx, True)
-print(xxx0)
-print(np.allclose(xx, xxx0))
-    
+xx0 = c2r_1d(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even:")
+xx0 = c2r_1d_even(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even imposed:")
+xx0 = c2r_1d_even(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+
+
+print()
+print("1D inverse on malformed data:")
+X = np.empty([nx], dtype=complex)
+for i in range(nx):
+    X[i] = complex(random.random(), random.random())
+print(X)
+print("np.fft.irfft")
+xx = np.fft.irfft(X, nx)
+print(xx)
+print("embedded:")
+xx0 = c2r_1d(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("embedded with Hermitian imposed:")
+xx0 = c2r_1d(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even")
+xx0 = c2r_1d_even(X, nx)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even impose")
+xx0 = c2r_1d_even(X, nx, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+
+
+
 print()
 print("2D inverse on malformed data:")
-
 X = np.empty([nx, nyp], dtype=complex)
 for i in range(nx):
     for j in range(nyp):
         X[i,j] = complex(random.random(), random.random())
-
 print("np.fft.irfft2:")
 xx = np.fft.irfft2(X, [nx, ny])
 print(xx)
@@ -351,22 +440,18 @@ xx0 = c2r_2d(X, nx, ny)
 print(xx0)
 print(np.allclose(xx, xx0))
 print("1D embedded:")
-xx00 = c2r_2d_decomp(X, nx, ny)
-print(xx00)
-print(np.allclose(xx, xx00))
+xx0 = c2r_2d_decomp(X, nx, ny)
+print(xx0)
+print(np.allclose(xx, xx0))
 print("1D embedded with 1D Hermitian imposed:")
-xx000 = c2r_2d_decomp(X, nx, ny, True)
-print(xx000)
-print(np.allclose(xx, xx000))
-
-print(X)
-X = symmetrize_2d(X, nx, ny)
-print(X)
-cdata = np.empty([nx, ny // 2 + 1], dtype=complex)
-for j in range(ny // 2 + 1):
-    cdata[:,j] = np.fft.ifft(X[:,j])
-print(cdata)
-rdata = np.empty([nx, ny])
-for i in range(nx):
-    rdata[i] = np.fft.irfft(cdata[i], ny)
-print(rdata)
+xx0 = c2r_2d_decomp(X, nx, ny, True)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even:")
+xx0 = c2r_2d_even(X, nx, ny)
+print(xx0)
+print(np.allclose(xx, xx0))
+print("even impose:")
+xx0 = c2r_2d_even(X, nx, ny, True)
+print(xx0)
+print(np.allclose(xx, xx0))
