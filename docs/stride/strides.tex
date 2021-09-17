@@ -1,0 +1,131 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{bm}
+
+\usepackage{diagbox}
+
+\usepackage{xcolor}
+
+\DeclareMathOperator{\lcm}{lcm}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\usepackage{cancel}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Notes on Strides}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+rocFFT buffers are organized as $n$-dimensional arrays with
+non-negative strides.  We currently support 3 dimensions with one
+batch dimension, but we are interested in increasing this, with at
+least 2 batch dimensions.
+
+For a length $\bm\ell=\(\ell_0,\dots,\ell_{N-1}\)$, index
+$\bm{a}=\(a_0, \dots, a_{N-1}\)$ has elements $a_i$ with
+$0\leq{}a_i<\ell_i$. Given the stride $\bm{s}=\(s_0,\dots,s_{N-1}\)$,
+index $\bm{a}$ refers to memory at pointer-offset
+\begin{dmath}
+  \bm{a}\cdot{}\bm{s}=\sum_{i=0}^{N-1}s_ia_i.
+\end{dmath}
+We require that $\bm{a}\cdot{}\bm{s}$ be injective; that is, no two
+indices refer to the same pointer offset.
+
+\section{Stride/length validity}
+
+Not all combinations of strides and lengths produce are valid.  For
+example, 1D transforms on non-unit length must have stride $>0$;
+otherwise, index 0 and index 1 would both refer to data at offset 0,
+and we would get a race condition when reading/writing to that
+address.
+
+The situation in higher dimensions is somewhat more complicated.  If
+there existss two admissible indices $\bm{a}$ and $\bm{b}$ such that
+\begin{dmath}
+  \bm{a}\cdot\bm{p} = \bm{b}\cdot\bm{p}
+\end{dmath}
+then the stride/length combination is invalid.  When do such
+combinations exist, and how can we detect them?
+
+Take length $(\ell,m)$ with stride $\bm{p} = (p,q)$.  The lowest
+address that has an index collission is at $\lcm(p,q)$.  For example,
+with strides $(3,5)$, the first few pointer offsets are given in
+Figure~\ref{tab35}.
+\begin{figure}[htbp]
+  \begin{center}
+    \begin{tabular}{|l|llllll|}
+      \hline
+      \diagbox{5}{3} & 0 & 1 & 2 & 3 & 4 & 5\\
+      \hline
+      0 & 0             & 3  & 6  & 9  & 12 & \color{red}15 \\
+      1 & 5             & 8  & 11 & 14 & 17 & 20            \\
+      2 & 10            & 13 & 16 & 19 & 22 & 25            \\
+      3 & \color{red}15 & 18 & 21 & 24 & 27 & 30            \\
+      \hline
+    \end{tabular}
+  \end{center}
+  \caption{Pointer offsets for strides $(3,5)$.}
+  \label{tab35}
+\end{figure}
+In fact, it's easy to see that collisions will only occur at multiples
+of $\lcm(p,q)$.
+
+The simplest way for an index to attain the $\lcm$ 
+
+
+
+
+
+\section{Buffer size computation}
+
+ways to calculate:
+sum
+last index
+max of extrema
+
+
+\section{negative indices}
+
+\end{document}
