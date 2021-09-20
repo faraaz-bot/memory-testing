@@ -89,10 +89,10 @@ there existss two admissible indices $\bm{a}$ and $\bm{b}$ such that
 then the stride/length combination is invalid.  When do such
 combinations exist, and how can we detect them?
 
-Take length $(\ell,m)$ with stride $\bm{p} = (p,q)$.  The lowest
-address that has an index collission is at $\lcm(p,q)$.  For example,
-with strides $(3,5)$, the first few pointer offsets are given in
-Figure~\ref{tab35}.
+Take length $(\ell_0,\ell_1)$ with stride $\bm{s} = (s_0,s_1)$.  The
+lowest address that has an index collission is at $\lcm(s_0,s_1)$.
+For example, with strides $\bm{s}=(3,5)$, the first few pointer
+offsets are given in Figure~\ref{tab35}.
 \begin{figure}[htbp]
   \begin{center}
     \begin{tabular}{|l|llllll|}
@@ -110,11 +110,40 @@ Figure~\ref{tab35}.
   \label{tab35}
 \end{figure}
 In fact, it's easy to see that collisions will only occur at multiples
-of $\lcm(p,q)$.
+of $\lcm(s_0,s_1)$.
 
-The simplest way for an index to attain the $\lcm$ 
+The simplest way for an index to attain the $\lcm$ is for one index to
+be zero: we are guaranteed that
+\begin{dmath}
+  \(\frac{\lcm(s_0,s_1))}{s_0}, 0\) \no\cdot (s_0, s_1) 
+  =  \(0, \frac{\lcm(s_0,s_1))}{s_1}\) \no\cdot (s_0, s_1) 
+  = \lcm(s_0,s_1).
+\end{dmath}
+Thus, we require that at least one of
+\begin{eqnarray}
+\ell_0<\frac{\lcm(s_0,s_1))}{s_0}\\
+\ell_1<\frac{\lcm(s_0,s_1))}{s_1}
+\end{eqnarray}
+be false.  Moreover, if
+\begin{dmath}
+  \(\ell_0 -1, \dots, \ell_{N-1}-1\) \cdot{} \bm{s} < \lcm\(s_0, \dots, s_{N-1}\)
+\end{dmath}
+then we are guaranteed that the pointer offset never reaches the lcm,
+so there is no chance for collision.
 
-
+In the remaining cases, where at one length is long enough to reach
+the lcm, but not all are, and the lcm is attainable, then we can
+brute-force the remaining values.  In particular, we need to check,
+for $a_0 = 1, \dots, \lcm(s_0,s_1)/s_0 - 1$, if we can find $a_1$ such
+that
+\begin{dmath}
+  a_1 = \frac{\lcm(s_0,s_1) - a_0 s_0}{s_1}.
+\end{dmath}
+In particular, it suffices to check whether 
+\begin{dmath}
+  s_1  \vert \(\lcm(s_0,s_1) - a_0 s_0\)
+\end{dmath}
+for the above values of $a_0$.
 
 
 
