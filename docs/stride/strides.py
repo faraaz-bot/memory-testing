@@ -29,6 +29,17 @@ def collisions2(s0, s1, l0, l1):
                 cols.append([flat[i][0], flat[j][0], flat[i][1]])
     return cols
 
+def check_valid2(s0, s1, l0, l1):
+    flat = set([])
+    for i in range(l0):
+        for j in range(l1):
+            pos = i * s0 + j * s1
+            if pos in flat:
+                return False
+            else:
+                flat.add(pos)
+    return True
+
 
 def is_valid2(s0, s1, l0, l1):
 
@@ -67,7 +78,7 @@ def is_valid2(s0, s1, l0, l1):
 valid = []
 invalid = []
 
-lmax = 20
+lmax = 100
 
 verbose = True
 
@@ -79,17 +90,20 @@ for l0 in range(2, lmax):
             for s1 in range(1, 2 * l1 +2 ):
                 if verbose:
                     print()
-                    print("length:", l0, l1, "strides:", s0, s1)
+                    print("length:", l0, l1, "strides:", s0, s1, end='\t')
                 testval = is_valid2(s0, s1, l0, l1)
-                cols = collisions2(s0, s1, l0, l1)
-                checkval = len(cols) == 0
+                #cols = collisions2(s0, s1, l0, l1)
+                #checkval = len(cols) == 0
+                checkval = check_valid2(s0, s1, l0, l1)
                 if (checkval != testval):
                     fails.append([s0, s1, l0, l1])
                     if verbose:
                         print("fail!")
                         print(l0, l1, s0, s1)
+                        cols = collisions2(s0, s1, l0, l)
                         print(cols)
                         print("testval:", testval)
+                        
                 else:
                     if testval:
                         if verbose:
