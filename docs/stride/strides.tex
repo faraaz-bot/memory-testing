@@ -20,6 +20,7 @@
 
 \DeclareMathOperator{\lcm}{lcm}
 
+
 \usepackage{listings}
 \lstset{language=C++,
                 basicstyle=\ttfamily,
@@ -28,6 +29,10 @@
                 commentstyle=\color{green}\ttfamily,
                 morecomment=[l][\color{magenta}]{\#}
 }
+
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+
 
 \usepackage{breqn}
 \usepackage[]{algorithm2e}
@@ -111,6 +116,53 @@ offsets are given in Figure~\ref{tab35}.
 \end{figure}
 In fact, it's easy to see that collisions will only occur at multiples
 of $\lcm(s_0,s_1)$.
+\begin{theorem}
+  Given the of positive strides $s_0$ and $s_1$, the first invalid
+  data point occurs at address $\lcm{(s_0,s_1)}$.
+\end{theorem}
+\begin{proof}
+  Suppose that $\gcd{s_0,s_1}=1$.  We know that $(s_1,0)$ and
+  $(0,s_0)$ give the address $s_0 s_1=\lcm(s_0,s_1)$.  Thus, the first
+  invalid address is at most $\lcm(s_0,s_1)$.
+
+  Suppose that there exists valid index $(a_0,a_1)$ and
+  $c<\lcm(s_0,s_1)$ such that
+  \begin{dmath}
+    s_0 a_0 + s_1 a_1 = c.
+  \end{dmath}
+  By Bézout's identity, we can find $x,y\in\mathbb{Z}$ such that
+  \begin{dmath}
+    x s_0 + y s_1 = 1
+  \end{dmath}
+  since $\gcd(s_0,s_1)=1$.  Then, $(c x, c y)$ gives address $c$.  We
+  are guaranteed multiple solutions over $\mathbb{Z}^2$, namely
+\begin{dmath}
+  (cx + s_1t, cy - s_0t)
+\end{dmath}
+for arbitrary $t\in\mathbb{Z}$.  However, since $c<s_0s_1$, if
+$t\neq{}0$, then either $cx + s_1t$ is negative, or $cy - s_0t$ is, and
+there is only one solution in $\mathbb{N}^2$. Thus, $c=\lcm(s_0,s_1)$.
+
+If $\gcd{s_0,s_1}=g>1$, then, again by Bézout, all memory addresses
+are multiple of $g$.  Noting that
+$$
+s_0 a_0 + s_1 a_1 = c \implies
+\frac{s_0}{g} a_0 + \frac{s_1}{g} a_1 = \frac{c}{g},
+$$
+and that
+\begin{dmath}
+  \lcm\(\frac{s_0}{g}, \frac{s_1}{g}\) = 1
+\end{dmath},
+the $\gcd{s_0,s_1}>1$ case reduces to the $\gcd{s_0,s_1}>1$ case.
+\end{proof}
+Unlike the Bézout's identity, not all redundant linear combinations
+are multiples of the $\lcm$.  This is easy to see with a counter-example.
+
+Consider strides $(2,3)$, which has $\lcm=6$.  Index $(1,2)$ gives
+memory position $1 \times{} 2 + 2 \times{} 3 = 8$, which is also attained by
+$(4,0)\rightarrow{}4\times{}2 + 0\times{}3 = 8$.
+
+
 
 The simplest way for an index to attain the $\lcm$ is for one index to
 be zero: we are guaranteed that
@@ -124,12 +176,8 @@ Thus, we require that at least one of
 \ell_0<\frac{\lcm(s_0,s_1))}{s_0}\\
 \ell_1<\frac{\lcm(s_0,s_1))}{s_1}
 \end{eqnarray}
-be false.  Moreover, if
-\begin{dmath}
-  \(\ell_0 -1, \dots, \ell_{N-1}-1\) \cdot{} \bm{s} < \lcm\(s_0, \dots, s_{N-1}\)
-\end{dmath}
-then we are guaranteed that the pointer offset never reaches the lcm,
-so there is no chance for collision.
+be false.
+
 
 In the remaining cases, where at one length is long enough to reach
 the lcm, but not all are, and the lcm is attainable, then we can
@@ -143,7 +191,7 @@ In particular, it suffices to check whether
 \begin{dmath}
   s_1  \vert \(\lcm(s_0,s_1) - a_0 s_0\)
 \end{dmath}
-for the above values of $a_0$.
+for the above values of $a_0$. 
 
 
 
