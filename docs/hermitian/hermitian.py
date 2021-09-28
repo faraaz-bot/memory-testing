@@ -15,29 +15,46 @@ def symmetrize_1d(hdata, nx):
     sdata = np.empty([nx // 2 + 1], dtype=complex)
     for i in range(nx // 2 + 1):
         sdata[i] = hdata[i]
-    sdata[0] = sdata[0].real
+        
+    xvals = [0]
     if nx % 2 == 0:
-        nxp = nx // 2 + 1
-        sdata[nxp - 1] = sdata[nxp - 1].real
+        xvals.append(nx // 2)
+        
+    for xval in xvals:
+        sdata[xval] = sdata[xval].real
+        
     return sdata
 
 def symmetrize_2d(hdata, nx, ny):
-    nyp = ny // 2 + 1
-    hdata[0][0] = hdata[0][0].real
-    if ny % 2 == 0:
-        hdata[0][nyp -1] = hdata[0][nyp -1].real
+    sdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny // 2 + 1):
+            sdata[i][j] = hdata[i][j]
+            
+    xvals = [0]
     if nx % 2 == 0:
-        hdata[nx // 2][0] = hdata[nx // 2][0].real
-        if ny % 2 == 0:
-            hdata[nx // 2][nyp -1] = hdata[nx // 2][nyp - 1].real
-    for i in range(1, nx // 2):
-        hdata[nx - i][0] = hdata[i][0].conj()
+        xvals.append(nx // 2)
+    yvals = [0]
     if ny % 2 == 0:
+        yvals.append(nx // 2)
+
+    for yval in yvals:
+        # DY/Nyquists:
+        for xval in xvals:
+            sdata[xval][yval] = sdata[xval][yval].real
+        # x-axes:
         for i in range(1, nx // 2):
-            hdata[nx - i][nyp - 1] = hdata[i][nyp - 1].conj()
-    return hdata
+            sdata[nx - i][yval] = sdata[i][yval].conj()
+            
+    return sdata
 
 def symmetrize_3d(hdata, nx, ny, nz):
+    sdata  = np.empty([nx, ny, nz // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz // 2 + 1):
+                sdata[i][j][k] = hdata[i][j][k]
+    
     xvals = [0]
     if nx % 2 == 0:
         xvals.append(nx // 2)
@@ -47,64 +64,89 @@ def symmetrize_3d(hdata, nx, ny, nz):
     zvals = [0]
     if nz % 2 == 0:
         zvals.append(nz // 2)
+        
     for zval in zvals:
         # DC/nyquists:
         for xval in xvals:
             for yval in yvals:
-                hdata[xval][yval][zval] = hdata[xval][yval][zval].real
+                sdata[xval][yval][zval] = sdata[xval][yval][zval].real
         # x-axes:
         for yval in yvals:
             for i in range(1, nx // 2):
-                hdata[nx - i][yval][zval] = hdata[i][yval][zval].conj()
+                sdata[nx - i][yval][zval] = sdata[i][yval][zval].conj()
         # y-axes:
         for xval in xvals:
             for j in range(1, ny // 2):
-                hdata[xval][ny - j][zval] = hdata[xval][j][zval].conj()
+                sdata[xval][ny - j][zval] = sdata[xval][j][zval].conj()
         # xy-planes:
         for i in range(1, nx // 2):
             for j in range(1, ny):
-                hdata[nx - i][ny - j][zval] = hdata[i][j][zval].conj()
-    return hdata
+                sdata[nx - i][ny - j][zval] = sdata[i][j][zval].conj()
+                
+    return sdata
         
 def is_symmetric_1d(hdata, nx):
-    if not np.isclose(hdata[0].imag, 0):
-        return False
+    xvals = [0]
     if nx % 2 == 0:
-        nxp = nx // 2 + 1
-        if not np.isclose(hdata[nxp - 1].imag, 0):
+        xvals.append(nx // 2)
+    for xval in xvals:
+        if not np.isclose(hdata[xval].imag, 0):
             return False
     return True
 
 def is_symmetric_2d(hdata, nx, ny):
-    if not np.isclose(hdata[0][0].imag, 0):
-        return False
-    nyp = ny // 2 + 1
-    if ny % 2 ==0:
-        if not np.isclose(hdata[0][nyp-1].imag, 0.0):
-            return False
-    for i in range(1, nx // 2):
-        if not np.isclose(hdata[nx - i][0], hdata[i][0].conj()):
-            return False
+    xvals = [0]
     if nx % 2 == 0:
-        if not np.isclose(hdata[nx // 2][0].imag, 0.0):
-            return False
-        if ny % 2 ==0:
-            if not np.isclose(hdata[nx // 2][nyp - 1].imag, 0.0):
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
+    for yval in yvals:
+        # DY/Nyquists:
+        for xval in xvals:
+            if not np.isclose(hdata[xval][yval].imag, 0):
                 return False
         for i in range(1, nx // 2):
-            if not np.isclose(hdata[nx - i][nyp - 1], hdata[i][nyp - 1].conj()):
+            if not np.isclose(hdata[nx - i][yval], hdata[i][yval].conj()):
                 return False
     return True
 
 def is_symmetric_3d(hdata, nx, ny, nz):
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
     zvals = [0]
     if nz % 2 == 0:
         zvals.append(nz // 2)
+        
     for zval in zvals:
-        for i in range(1, nx):
-            for j in range(1, ny):
-                if not np.isclose(hdata[i][j][zval], hdata[nx - i][ny - j][zval].conj()):
+        # DC/nyquists:
+        for xval in xvals:
+            for yval in yvals:
+                if not np.isclose(hdata[xval][yval][zval].imag, 0):
                     return False
+        # x-axes:
+        for yval in yvals:
+            for i in range(1, nx // 2):
+                if not np.isclose(hdata[nx - i][yval][zval], \
+                                  hdata[i][yval][zval].conj()):
+                    return False
+        # y-axes:
+        for xval in xvals:
+            for j in range(1, ny // 2):
+                if not np.isclose(hdata[xval][ny - j][zval], \
+                                  hdata[xval][j][zval].conj()):
+                    return False
+        # xy-planes:
+        for i in range(1, nx // 2):
+            for j in range(1, ny):
+                if not np.isclose(hdata[nx - i][ny - j][zval], \
+                                  hdata[i][j][zval].conj()):
+                    return False
+                
     return True
                 
 
@@ -132,9 +174,11 @@ def postkernel(Z, impose_hermitian=False):
     for p in range(1, Nhalf // 2):
         q = Nhalf - p
         omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
-        hdata[p] = Z[p] * 0.5 * (1 - I * omegaNp) + Z[q].conjugate() * 0.5 * (1 + I * omegaNp)
+        hdata[p] = Z[p] * 0.5 * (1 - I * omegaNp) \
+            + Z[q].conjugate() * 0.5 * (1 + I * omegaNp)
         omegaNq = -omegaNp.conjugate()
-        hdata[q] = Z[q] * 0.5 * (1 - I * omegaNq) + Z[p].conjugate() * 0.5 * (1 + I * omegaNq)
+        hdata[q] = Z[q] * 0.5 * (1 - I * omegaNq) \
+            + Z[p].conjugate() * 0.5 * (1 + I * omegaNq)
     hdata[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
     return hdata
 
