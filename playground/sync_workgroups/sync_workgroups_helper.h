@@ -48,8 +48,6 @@ inline const char* gpu_get_err_string(int e)
         auto ec = (call);                                                                      \
         if(ec)                                                                                 \
         {                                                                                      \
-            const char* errName;                                                               \
-            const char* errMsg;                                                                \
             std::cerr << "Failed at " << __FILE__ << ":" << __LINE__ << " in " << __FUNCTION__ \
                       << "()\n"                                                                \
                       << "Error code: " << ec << ", " << gpu_get_err_name(ec) << ", "          \
@@ -120,7 +118,16 @@ inline void device_memcpy_to_symbol_h2d(const void* dst, const void* src, size_t
 #ifdef CUDA
     GPU_ERR_CHECK(cudaMemcpyToSymbol(dst, src, bytes));
 #else
-    GPU_ERR_CHECK(hipMemcpyToSymbol(HIP_SYMBOL(dst), src, bytes));
+    GPU_ERR_CHECK(hipMemcpyToSymbol(dst, src, bytes));
+#endif
+}
+
+inline void device_memcpy_from_symbol(void* dst, const void* src, size_t bytes)
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaMemcpyFromSymbol(dst, src, bytes));
+#else
+    GPU_ERR_CHECK(hipMemcpyFromSymbol(dst, src, bytes));
 #endif
 }
 
