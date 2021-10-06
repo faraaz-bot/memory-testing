@@ -15,6 +15,7 @@
 #endif
 
 #include <atomic>
+#include <iomanip>
 #include <iostream>
 
 using namespace cooperative_groups;
@@ -225,13 +226,11 @@ static bool check_occupancy(
 #endif
 
     max_blocks_per_grid = device_properties.multiProcessorCount * max_blocks_per_sm;
-    std::cout << "max_blocks_per_sm " << max_blocks_per_sm << ", max_blocks_per_grid "
-              << max_blocks_per_grid << std::endl;
 
     if(grid_size > max_blocks_per_grid)
     {
-        std::cout << "Please reduce gridsize from " << grid_size << " to " << max_blocks_per_grid
-                  << std::endl;
+        std::cout << "max_blocks_per_sm " << max_blocks_per_sm << ", max_blocks_per_grid "
+                  << max_blocks_per_grid << "\nPlease reduce gridsize " << grid_size << ".\n";
         return false;
     }
 

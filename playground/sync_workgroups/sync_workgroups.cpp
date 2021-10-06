@@ -190,8 +190,6 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
 void solution_3(int* d_data, int trial)
 {
-    //check_occupancy((void*)plus_one_twice_sync_partion_atomic, LEN * LEN, LEN, 0);
-
     int   b_stride     = LEN;
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
@@ -340,9 +338,8 @@ int main(int argc, char* argv[])
 
     for(auto i = 0; i < SOLUTION_NUM; i++)
     {
-        //if(i != 2)
         {
-            std::cout << "solution " << i << " starting..." << std::endl;
+            // std::cout << "solution " << i << " starting..." << std::endl;
             device_reset();
             device_malloc((void**)&d_data, total_bytes);
             device_memcpy_h2d(d_data, h_in, total_bytes);
@@ -353,7 +350,7 @@ int main(int argc, char* argv[])
                 {
                     h_counters[k] = 0;
                 }
-
+                check_occupancy((void*)plus_one_twice_sync_partion_atomic, LEN * LEN, LEN, 0);
                 device_memcpy_to_symbol_h2d(g_partitioned_counters, h_counters, sizeof(int) * LEN);
             }
             else if(i == SOLUTION_NUM - 1)
@@ -365,7 +362,6 @@ int main(int argc, char* argv[])
                 }
 
                 device_memcpy_to_symbol_h2d(g_counters, h_counters, sizeof(int) * TRIAL_NUM * 2);
-                check_occupancy((void*)plus_one_twice_sync_tasks_atomic, LEN * 2, LEN, 0);
             }
 
             device_event_create();
