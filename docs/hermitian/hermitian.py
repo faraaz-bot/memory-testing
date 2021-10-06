@@ -120,7 +120,6 @@ def symmetrize_3d(hdata, nx, ny, nz, only_conj=False):
                 for yval in yvals:
                     sdata[xval][yval][zval] = sdata[xval][yval][zval].real
 
-
         # x-axes:
         for yval in yvals:
             for i in range(1, nx // 2):
@@ -315,10 +314,14 @@ def r2c_2d_even(rdata, nx, ny, impose_hermitian=False):
 
 def c2r_2d(hdata, nx, ny):
     cdata = np.zeros([nx, ny], dtype=complex)
+    # Copy the data to the new array:
     for i in range(nx):
         for j in range(ny // 2 + 1):
             cdata[i][j] = hdata[i][j];
-    for i in [0, nx // 2]:
+    xvals = [0]
+    if nx % 2 ==0:
+        xvals.append(nx // 2)
+    for i in xvals:
         for j in range(ny // 2 + 1, ny):
             cdata[i][j] = hdata[i][ny - j].conj();
     for i in range(1, nx // 2):
@@ -393,9 +396,6 @@ def c2r_3d_embed(hdata, nx, ny, nz):
     yvals = [0]
     if ny % 2 ==0:
         yvals.append(ny // 2)
-    zvals = [0]
-    if nz % 2 ==0:
-        zvals.append(nz // 2)
     for k in range(nz // 2 + 1, nz):
         for i in xvals:
             for j in yvals:

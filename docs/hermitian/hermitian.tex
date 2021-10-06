@@ -1,0 +1,134 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Hermitian Symmetry and Real/Complex Transforms}
+\author{Malcolm Roberts}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+Hermitian symmetry: how important is it?
+
+\subsection{Properties of real/complex DFTs}
+
+The DFT is defined as
+\begin{dmath}
+  F_k = \sum_{n=0}^{N-1} f_n \omega_N^{n k}
+\end{dmath}
+where $\omega_N^{n k} = e^{-i 2 \pi/N}$.  If the input
+$\{f_n\}_{n=0}^{N-1}$ is real-valued, then
+\begin{dmath}
+  F_{N-k}
+  = \sum_{n=0}^{N-1} f_n \omega_N^{n (N-k)}
+  = \sum_{n=0}^{N-1} f_n \,\cancelto{1}{\omega_N^{n N}}\,  \omega_N^{-nk}
+  = \sum_{n=0}^{N-1} f_n  \omega_N^{-nk}
+  = \(\sum_{n=0}^{N-1} f_n  \omega_N^{nk}\)^*
+  = F_{k}^*
+\end{dmath}
+where $a^*$ denotes the complex conjugate of $a$.  This relationship
+wihere $k\rightarrow N-k$ is equivalent to complex conjugation is
+called Hermitian symmetry. This holds for the inverse as well: $f$ is
+real valued if and only if $F$ is Hermitian-symmetric.
+
+This gives rise to the real/complex Fourier transform, which is more
+efficient than doing the complex version.  By using the symmetry of
+$F$, we only need to store $\floor{N/2}+1$ complex values.  Moreover,
+by taking advantage of the cyclic nature of the roots of unity, we can
+see that
+\begin{dmath}
+  F_0^* = F_{N-0} = F_0
+\end{dmath}
+which implies that $F_0$, being its own complex-conjugate, has zero
+imaginary part.  If $2 \mid N$, we also have
+\begin{dmath}
+  F_{N/2}^* = F_{N-N/2} = F_{N/2}
+\end{dmath}
+so $F_{N/2}$ (referred to as the Nyquist frequency) is also purely
+real-valued.
+
+The simplest way to compute a complex-to-real transform is to expand
+the input from lengtt $\floor{N/2} +1$ to $N$ by making use of the
+symmetry, performing an inverse complex FFT, and then taking the real
+part.  We will use this algorithm as our reference computation.
+
+For 2D transforms of size $N_x \times N_y$, the symmetry is
+\begin{dmath}
+  F_{i,j}^* = F_{N_x-i, N_y-j}
+\end{dmath}
+We could reduce symmetrize in either the $x$ or $y$ direction; the
+convention is that the last direction is used for symmetry.  Thus, we
+end up with a complex array of dimension $N_x \times \floor{N_y/2}+1$.
+Depending on the parity of $N_x$ and $N_y$ we have either one, two, or
+four values which are purely real.  In addition,
+\begin{dmath}
+  F_{i,0}^*
+  = F_{N_x-i, N_y-0}
+  = F_{N_x-i, 0}
+\end{dmath}
+so the the $y$-axis is itself Hermitian.  This is also true of the
+$y$-Nyquist axis if $2\mid{}N_x$.
+
+For 3D data, we have 1, 2, 4, or 8 purely real values at the corners,
+one or two $x$-axes, one or two $y$-axes, and one or two $xy$-planes
+which have Hermitian symmetry.
+
+When computing the inverse transform, the symmetrized dimension is the
+last to be transformed.  The other dimension transforms will produce
+an output which is purely real whenever a sub-dimensional array is
+Hermitian symmetric.  This implies, for example, that the batched 1D
+complex-to-real will always have zero imaginary part in the DC mode
+(and the Nyquist mode if even-length).  Thus, it is not necessary to
+read in this data.  However, having the conjugate-symmetry in place
+is necessary.
+
+This is shown in \texttt{hermitian.py}.  When we compute a
+multi-dimensional 3D complex-to-real transform on random complex data
+of size $N_x\times{}N_y\times{}N_z$ the output of the complex-embedded
+transform does not equal the output of the complex-embedded transform
+if Hermitian symmetry is imposed before the transform.  However, if we
+only impose the conjugate-symmetry, but not the zero imaginary part at
+the corners, we still get the same result.
+
+\end{document}
