@@ -381,7 +381,7 @@ def r2c_3d_even(rdata, nx, ny, nz, impose_hermitian=False):
             hdata[:,j,k] = np.fft.fft(hdata[:,j,k])
     return hdata
 
-def c2r_3d_embed(hdata, nx, ny, nz, impose_hermitian=False):
+def c2r_3d_embed(hdata, nx, ny, nz):
     cdata = np.zeros([nx, ny, nz], dtype=complex)
     for i in range(nx):
         for j in range(ny):
@@ -624,7 +624,7 @@ if nz % 2 == 0:
     xx0 = c2r_3d_even(X, nx, ny, nz, False)
     print(np.allclose(xx, xx0))
 print("3D embed", end='\t')
-xx0 = c2r_3d_embed(X, nx, ny, nz, False)
+xx0 = c2r_3d_embed(X, nx, ny, nz)
 print(np.allclose(xx, xx0))
 #print(xx0)
 #print(xx)
@@ -727,22 +727,26 @@ for i in range(nx):
             H[i][j][k] = X[i][j][k]
 
 print("real-part of c2c inv")
-x = np.fft.ifftn(X).real
-print(x)
+x = np.fft.ifftn(X,[nx,ny,nz]).real
+#print(x)
 
 print("3D embed")
-x0 = c2r_3d_embed(H, nx, ny, nz, False)
-print(x0)
+x0 = c2r_3d_embed(H, nx, ny, nz)
+#print(x0)
+print("\tmatches c2c real-part:\t", np.allclose(x, x0))
 
 H0 = symmetrize_3d(H, nx, ny, nz)
 print("3D embed symmetrized")
-xx0 = c2r_3d_embed(H0, nx, ny, nz, False)
-print(xx0)
-print(np.allclose(x0, xx0))
+xx0 = c2r_3d_embed(H0, nx, ny, nz)
+#print(xx0)
+print("\tmatches c2c real-part:\t", np.allclose(x, xx0))
+print("\tmatches 3D embed:\t", np.allclose(x, xx0))
 
-H0 = symmetrize_3d(H, nx, ny, nz)
+
 print("3D embed symmetrized only conjugates")
-xxx0 = c2r_3d_embed(H0, nx, ny, nz, True)
-print(xxx0)
-print("matches non-Hermitian:\t", np.allclose(x0, xxx0))
-print("matches Hermitian:\t", np.allclose(xx0, xxx0))
+H0 = symmetrize_3d(H, nx, ny, nz, True)
+xxx0 = c2r_3d_embed(H0, nx, ny, nz)
+#print(xxx0)
+print("\tmatches c2c real-part:\t", np.allclose(x, xxx0))
+print("\tmatches non-Hermitian:\t", np.allclose(x0, xxx0))
+print("\tmatches Hermitian:\t", np.allclose(xx0, xxx0))
