@@ -43,13 +43,14 @@ void __device__ plus_one_device(int* a, const int tile_id, const int b_stride, c
 
     if(threadIdx.x < LEN)
     {
-        // printf("w_tile_id %d, block %d, threadIdx.x %d, offset %d\n",
-        //        (int)tile_id,
-        //        (int)blockIdx.x,
-        //        (int)threadIdx.x,
-        //        offset);
         lds[threadIdx.x] = lds[threadIdx.x] + 1;
         a[offset]        = lds[threadIdx.x];
+        //     printf("w_tile_id %4d, block %4d, threadIdx.x %2d, offset %4d, lds %4d\n",
+        //            (int)tile_id,
+        //            (int)blockIdx.x,
+        //            (int)threadIdx.x,
+        //            offset,
+        //            lds[threadIdx.x]);
     }
 }
 
@@ -120,9 +121,8 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
     // and then wait for all workgroups sync.
     if(threadIdx.x == 0)
     {
-        atomicOr(&g_counter, 0x1 << blockIdx.x);
-
-        while(atomicOr(&g_counter, 0x1 << blockIdx.x) != 0xFFFF)
+        atomicAdd(&g_counter, 1);
+        while(atomicAdd(&g_counter, 0) != LEN * LEN)
         {
             done = 0;
         }
@@ -137,7 +137,7 @@ void __global__ plus_one_twice_sync_all_atomic(int* a, const int b_stride, const
 
     // clean up g_counter with leading thread in the 1st workgroup only
     if(threadIdx.x == 0 && blockIdx.x == 0)
-        atomicExch(&g_counter, 0);
+        atomicExch(&g_counter, done);
 }
 
 void solution_2(int* d_data, int trial)
@@ -151,7 +151,7 @@ void solution_2(int* d_data, int trial)
 
 //-----------------------------------------------------------------------------
 // solution_3: sync partioned workgroups with atomic
-__device__ int g_partitioned_counters[LEN] = {0, 0, 0, 0};
+__device__ int g_partitioned_counters[LEN];
 
 void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, const int c_stride)
 {
@@ -184,7 +184,7 @@ void __global__ plus_one_twice_sync_partion_atomic(int* a, const int b_stride, c
 
     if(threadIdx.x == 0 && blockIdx.x < LEN)
     {
-        atomicExch(&g_partitioned_counters[counterIdx], 0);
+        atomicExch(&g_partitioned_counters[counterIdx], done);
     }
 }
 
@@ -337,50 +337,67 @@ int main(int argc, char* argv[])
         h_in[i] = i;
 
     int* h_counters = new int[TRIAL_NUM * 2];
-    for(int i = 0; i < TRIAL_NUM; i++)
-    {
-        h_counters[i * 2]     = 0;
-        h_counters[i * 2 + 1] = -1;
-    }
 
     for(auto i = 0; i < SOLUTION_NUM; i++)
     {
-        // std::cout << "--- solution " << i << std::endl;
-        device_reset();
-        device_malloc((void**)&d_data, total_bytes);
-        device_memcpy_h2d(d_data, h_in, total_bytes);
-
-        if(i == SOLUTION_NUM - 1)
-            device_memcpy_to_symbol_h2d(g_counters, h_counters, sizeof(int) * TRIAL_NUM * 2);
-
-        device_event_create();
-
-        // warm up once
-        solution[i](d_data, 0);
-
-        device_event_record_start();
-
-        for(auto trial = 1; trial < TRIAL_NUM; ++trial)
+        //if(i != 2)
         {
-            solution[i](d_data, trial);
+            std::cout << "solution " << i << " starting..." << std::endl;
+            device_reset();
+            device_malloc((void**)&d_data, total_bytes);
+            device_memcpy_h2d(d_data, h_in, total_bytes);
+
+            if(i == 3)
+            {
+                for(auto k = 0; k < LEN; k++)
+                {
+                    h_counters[k] = 0;
+                }
+
+                device_memcpy_to_symbol_h2d(g_partitioned_counters, h_counters, sizeof(int) * LEN);
+            }
+            else if(i == SOLUTION_NUM - 1)
+            {
+                for(auto k = 0; k < TRIAL_NUM; k++)
+                {
+                    h_counters[k * 2]     = 0;
+                    h_counters[k * 2 + 1] = -1;
+                }
+
+                device_memcpy_to_symbol_h2d(g_counters, h_counters, sizeof(int) * TRIAL_NUM * 2);
+                check_occupancy((void*)plus_one_twice_sync_tasks_atomic, LEN * 2, LEN, 0);
+            }
+
+            device_event_create();
+
+            // warm up once
+            solution[i](d_data, 0);
+
+            device_event_record_start();
+
+            for(auto trial = 1; trial < TRIAL_NUM; ++trial)
+            {
+                solution[i](d_data, trial);
+            }
+
+            device_event_record_stop();
+            device_event_synchronize_stop();
+            device_synchronize();
+            std::cout << "solution_" << i << ": " << std::fixed << std::setw(8)
+                      << std::setprecision(3) << device_event_elapsed_time() << " ms\n";
+
+            device_memcpy_d2h(&h_out[i * total_size], d_data, total_bytes);
+
+            if(i == SOLUTION_NUM - 1)
+                device_memcpy_from_symbol(h_counters, g_counters, sizeof(int) * TRIAL_NUM * 2);
+
+            device_free(d_data);
+            device_event_destroy();
         }
-
-        device_event_record_stop();
-        device_event_synchronize_stop();
-        device_synchronize();
-        std::cout << "solution_" << i << ": " << device_event_elapsed_time() << " ms\n";
-
-        device_memcpy_d2h(&h_out[i * total_size], d_data, total_bytes);
-
-        if(i == SOLUTION_NUM - 1)
-            device_memcpy_from_symbol(h_counters, g_counters, sizeof(int) * TRIAL_NUM * 2);
-
-        device_free(d_data);
-        device_event_destroy();
     }
 
     // take the 1st run as reference to verify the output of each solution
-    std::cout << "verify...\n";
+    std::cout << "\nverify...\n";
     for(auto i = 1; i < SOLUTION_NUM; i++)
     {
         {
@@ -395,7 +412,7 @@ int main(int argc, char* argv[])
                 }
             }
             if(j == total_size)
-                std::cout << "solution_" << i << ": done\n";
+                std::cout << "solution_" << i << ": passed\n";
         }
     }
 
