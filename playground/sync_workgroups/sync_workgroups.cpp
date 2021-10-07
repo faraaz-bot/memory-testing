@@ -11,14 +11,14 @@
 // solution_1: do it in 1 kernel launch with HIP cooperative_groups grid.sync().
 // solution_2: do it in 1 kernel launch with atomic sync.
 // solution_3: do it in 1 kernel launch with atomic sync, but for partitioned workgroups.
-// solution_4: do it in 1 kernel launch but sync tasks with atomic.
+// solution_4: do it in 1 kernel launch in the way of task stealing.
 //
 //
 // Build:
 //    with hipcc:
 //      /opt/rocm/bin/hipcc sync_workgroups.cpp  sync_workgroups_helper.h -o sync_workgroups
 //    with nvcc:
-//      nvcc -x cu --std=c++11 -D CUDA sync_workgroups.cpp -o sync_workgroups_cuda
+//      nvcc -x cu --std=c++11 -D CUDA sync_workgroups.cpp sync_workgroups_helper.h -o sync_workgroups_cuda
 //
 
 #include "sync_workgroups_helper.h"
@@ -146,6 +146,9 @@ void solution_2(int* d_data, int trial)
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
+    // NB:
+    //   We launch it with coop_launch for safety.
+    //   You might run with normal launch for timing experiment only.
     coop_launch((void*)plus_one_twice_sync_all_atomic, (LEN * LEN), LEN, kernelArgs, 0);
 }
 
@@ -194,20 +197,23 @@ void solution_3(int* d_data, int trial)
     int   c_stride     = LEN;
     void* kernelArgs[] = {(void*)&d_data, (void*)&b_stride, (void*)&c_stride};
 
+    // NB:
+    //   We launch it with coop_launch for safety.
+    //   You might run with normal launch for timing experiment only.
     coop_launch((void*)plus_one_twice_sync_partion_atomic, (LEN * LEN), LEN, kernelArgs, 0);
 }
 
 //-----------------------------------------------------------------------------
-// solution_4: sync tasks with atomic
+// solution_4: task stealing
 
 __device__ int g_counters[TRIAL_NUM * 2];
 
 #define TASK_NUM (LEN * LEN)
 
-void __global__ plus_one_twice_sync_tasks_atomic(int*      a,
-                                                 const int b_stride,
-                                                 const int c_stride,
-                                                 int       counter_offset)
+void __global__ plus_one_twice_task_stealing(int*      a,
+                                             const int b_stride,
+                                             const int c_stride,
+                                             int       counter_offset)
 {
     int bs = b_stride;
     int cs = c_stride;
@@ -310,7 +316,7 @@ void __global__ plus_one_twice_sync_tasks_atomic(int*      a,
 
 void solution_4(int* d_data, int trial)
 {
-    plus_one_twice_sync_tasks_atomic<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN, trial * 2);
+    plus_one_twice_task_stealing<<<dim3(LEN * LEN), dim3(LEN)>>>(d_data, LEN, LEN, trial * 2);
 }
 
 //-----------------------------------------------------------------------------
@@ -353,7 +359,7 @@ int main(int argc, char* argv[])
                 check_occupancy((void*)plus_one_twice_sync_partion_atomic, LEN * LEN, LEN, 0);
                 device_memcpy_to_symbol_h2d(g_partitioned_counters, h_counters, sizeof(int) * LEN);
             }
-            else if(i == SOLUTION_NUM - 1)
+            else if(i == 4)
             {
                 for(auto k = 0; k < TRIAL_NUM; k++)
                 {

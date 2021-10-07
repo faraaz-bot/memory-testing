@@ -220,7 +220,7 @@ static bool check_occupancy(
         &max_blocks_per_sm, func, workgroup_size, dynamic_lds_size);
 #else
     hipDeviceProp_t device_properties;
-    hipGetDeviceProperties(&device_properties, 0);
+    hipGetDeviceProperties(&device_properties, device_id);
     hipOccupancyMaxActiveBlocksPerMultiprocessor(
         &max_blocks_per_sm, func, workgroup_size, dynamic_lds_size);
 #endif
