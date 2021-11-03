@@ -37,6 +37,14 @@ def local(cmd, echo=True, **kwargs):
     logging.info('local: ' + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
 
+def local_amdgpu_target():
+    try:
+        for line in subprocess.Popen(args=["rocminfo"], stdout=subprocess.PIPE).stdout.readlines():
+            if b'amdgcn-amd-amdhsa--' in line:
+                return line.split(b'--')[1].strip().decode('utf-8')
+    except:
+        pass
+    return ''
 
 def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git', ccache=False):
     """Build public rocFFT (at specified git `commit`) and install into `dest`."""
@@ -57,7 +65,7 @@ def build_rocfft(commit, dest=None, repo='git@github.com:ROCmSoftwarePlatform/ro
             '-DBUILD_CLIENTS_RIDER=ON',
             '-DROCFFT_CALLBACKS_ENABLED=OFF',
             '-DSINGLELIB=ON',
-            '-DAMDGPU_TARGETS=']
+            '-DAMDGPU_TARGETS=' + local_amdgpu_target()]
     if dest:
         defs += [f'-DCMAKE_INSTALL_PREFIX={dest}']
     if ccache:
