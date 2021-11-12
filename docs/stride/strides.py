@@ -3,8 +3,10 @@
 import math
 import sys
 
-def lcm(x, y):
-    return x * y // math.gcd(x, y)
+from valid import *
+
+lmax = 30
+
 
 if False:
     s0 = 3
@@ -82,7 +84,6 @@ def is_valid2(s0, s1, l0, l1):
 valid = []
 invalid = []
 
-lmax = 100
 
 verbose = True
 
