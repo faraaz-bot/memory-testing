@@ -94,10 +94,28 @@ there existss two admissible indices $\bm{a}$ and $\bm{b}$ such that
 then the stride/length combination is invalid.  When do such
 combinations exist, and how can we detect them?
 
+\begin{figure}[htbp]
+  \begin{center}
+    \begin{tabular}{|l|lllll|}
+      \hline
+      \diagbox{5}{3} & 0 & 1 & 2 & 3 & 4\\
+      \hline
+      0 & 0             & 3  & 6  & 9  & 12 \\
+      1 & 5             & 8  & 11 & 14 & 17            \\
+      2 & 10            & 13 & 16 & 19 & 22            \\
+      3 & 15 & 18 & 21 & 24 & 27            \\
+      \hline
+    \end{tabular}
+  \end{center}
+  \caption{Pointer offsets for strides $(3,5)$ and lengths $(5,4)$.}
+  \label{tab35_len54}
+\end{figure}
+
+
 Take length $(\ell_0,\ell_1)$ with stride $\bm{s} = (s_0,s_1)$.  The
 lowest address that has an index collission is at $\lcm(s_0,s_1)$.
 For example, with strides $\bm{s}=(3,5)$, the first few pointer
-offsets are given in Figure~\ref{tab35}.
+offsets are given in Figure~\ref{tab35_len64}.
 \begin{figure}[htbp]
   \begin{center}
     \begin{tabular}{|l|llllll|}
@@ -111,8 +129,8 @@ offsets are given in Figure~\ref{tab35}.
       \hline
     \end{tabular}
   \end{center}
-  \caption{Pointer offsets for strides $(3,5)$.}
-  \label{tab35}
+  \caption{Pointer offsets for strides $(3,5)$ and lengths $(6,4,)$.}
+  \label{tab35_len64}
 \end{figure}
 In fact, it's easy to see that collisions will only occur at multiples
 of $\lcm(s_0,s_1)$.
