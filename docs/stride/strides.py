@@ -51,9 +51,13 @@ def is_valid2(s0, s1, l0, l1):
 
     # If the lengths are too short to get to the lcm individually,
     # we're ok:
-    if not (s0 * (l0 - 1) >= c) and  not (s1 * (l1 - 1) >= c):
+    if not ((s0 * (l0 - 1) >= c) and (s1 * (l1 - 1) >= c)):
         return True
 
+    # if (s0 * (l0 - 1) <= c) and (s1 * (l1 - 1) <= c):
+    #     return True
+    return False    
+    
     # # What about if we can get to them with the max index?
     # if (s0 * (l0 - 1) + s1 * (l1 - 1)) >= c:
     #     return True
@@ -97,10 +101,11 @@ for l0 in range(2, lmax):
                 checkval = check_valid2(s0, s1, l0, l1)
                 if (checkval != testval):
                     fails.append([s0, s1, l0, l1])
+                    #exit(1)
                     if verbose:
                         print("fail!")
                         print(l0, l1, s0, s1)
-                        cols = collisions2(s0, s1, l0, l)
+                        cols = collisions2(s0, s1, l0, l1)
                         print(cols)
                         print("testval:", testval)
                         
