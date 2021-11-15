@@ -229,6 +229,67 @@ def all():
                   mi2003d]
     return itertools.chain(*[ make_suite(f)() for f in generators ])
 
+#
+# Some extra fundemental sizes good for POC
+#
+
+singleRadix = NS(label='singleRadix', lengths=[1,2,3,4,5,6,7,10,11,13,17], nbatch=1000000)
+def singleRaidx():
+    """single radix pass"""
+
+    # batched, complex forward, double, out-of-place
+    transforms = [NS(label='complex_forward'), NS(label='complex_backward')]
+    placements = [NS(label='outplace'), NS(label='inplace')]
+    for transform in transforms:
+        for dtype in dtypes:
+            for placement in placements:
+                for suite in [singleRadix]:
+                    label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
+                    yield dict(label=label,
+                               transform=transform,
+                               lengths=suite.lengths,
+                               nbatch=suite.nbatch,
+                               dtype=dtype,
+                               placement=placement)
+
+largeCC = NS(label='large1d', lengths=[6561, 8192, 10000, 16384, 32768, 40000, 65536], nbatch=5000)
+def large1d():
+    """L1D_CC"""
+
+    # batched, complex forward, double, out-of-place
+    transforms = [NS(label='complex_forward'), NS(label='complex_backward')]
+    placements = [NS(label='outplace'), NS(label='inplace')]
+    for transform in transforms:
+        for dtype in dtypes:
+            for placement in placements:
+                for suite in [largeCC]:
+                    label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
+                    yield dict(label=label,
+                               transform=transform,
+                               lengths=suite.lengths,
+                               nbatch=suite.nbatch,
+                               dtype=dtype,
+                               placement=placement)
+
+cubic50 = NS(label='50-cubic', lengths=[(50, 50, 50)], nbatch=250)
+cubic200 = NS(label='200-cubic', lengths=[(200, 200, 200)], nbatch=5)
+def cubicBLOCKRC():
+    """50x50x50, 200x200x200"""
+
+    # batched, complex forward, double, out-of-place
+    transforms = [NS(label='complex_forward'), NS(label='complex_backward')]
+    placements = [NS(label='outplace'), NS(label='inplace')]
+    for transform in transforms:
+        for dtype in dtypes:
+            for placement in placements:
+                for suite in [cubic50, cubic200]:
+                    label = '_'.join([suite.label, transform.label, dtype.label, placement.label])
+                    yield dict(label=label,
+                               transform=transform,
+                               lengths=suite.lengths,
+                               nbatch=suite.nbatch,
+                               dtype=dtype,
+                               placement=placement)
 
 def clients():
     """Only 'client' tests."""
