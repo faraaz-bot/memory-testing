@@ -103,24 +103,23 @@ for l0 in range(lmin, lmax):
             for s0 in range(1, smax):
                 for s1 in range(1, smax  ):
                     gcd01 = math.gcd(s0, s1)
-                    if gcd01 > 1:
-                        for s2 in range(1, smax ):
-                            gcd012 = math.gcd(gcd01, s2)
-                            if gcd012 > 1:
-                                print("length:", l0, l1, l2, "stride", s0, s1, s2, end = "\t")
-                                testval = is_valid3(s0, s1, s2, l0, l1, l2)
-                                checkval = check_valid3(s0, s1, s2, l0, l1, l2)
-                                if testval == checkval:
-                                    print("valid") if testval else print("invalid")
+                    for s2 in range(1, smax ):
+                        gcd012 = math.gcd(gcd01, s2)
+                        if gcd012 == 1:
+                            print("length:", l0, l1, l2, "stride", s0, s1, s2, end = "\t")
+                            testval = is_valid3(s0, s1, s2, l0, l1, l2)
+                            checkval = check_valid3(s0, s1, s2, l0, l1, l2)
+                            if testval == checkval:
+                                print("valid") if testval else print("invalid")
+                            else:
+                                print("FAIL: test says", testval)
+                                fails.append([l0, l1, l2, s0, s1, s2])
+                                if testval:
+                                    cols = collisions3(s0, s1, s2, l0, l1, l2)
+                                    print(cols)
                                 else:
-                                    print("FAIL: test says", testval)
-                                    fails.append([l0, l1, l2, s0, s1, s2])
-                                    if testval:
-                                        cols = collisions3(s0, s1, s2, l0, l1, l2)
-                                        print(cols)
-                                    else:
-                                        exit(1)
                                     exit(1)
+                                exit(1)
                                 
 print("fails:", len(fails))
 print(fails)
