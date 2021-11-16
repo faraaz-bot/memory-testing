@@ -2,23 +2,38 @@
 
 * Performance tracking
 
+  export TOP=$HOME
+  export TOP=/x
+
+  export PATH=$PATH:$TOP/rocFFT-internal/scripts/perf
+  cd $TOP/rocFFT-misc/docs/update2021
+
+  export ROCFFT_RIDER=$TOP/rocFFT-internal/build/clients/staging/rocfft-rider
+  export HIPFFT_RIDER=$TOP/hipFFT-internal/build/clients/staging/hipfft-rider
+  export VKFFT_RIDER=$TOP/rocFFT-misc/riders/vkfft/vkfft-rider
+
 ** rocfft
 
-   rocfft-perf run --prog $ROCFFT_RIDER --suite s21:md1 --out rocfft-md
+   rocfft-perf run --rider $ROCFFT_RIDER --suite s21:md1 --out rocfft-md
 
 ** vkfft
 
-   rocfft-perf run --prog $VKFFT_RIDER --suite s21:md1 --out vkfft-md
+   rocfft-perf run --rider $VKFFT_RIDER --suite s21:md1 --out vkfft-md
 
 ** hipfft (cuda)
 
-   rocfft-perf run --prog $HIPFFT_RIDER --suite s21:md1 --out cufft-md
+   rocfft-perf run --rider $HIPFFT_RIDER --suite s21:md1 --out cufft-md
 
 * Building riders
 
+  git clone git@github.com:ROCmSoftwarePlatform/rocFFT-internal.git
+  git clone git@github.com:ROCmSoftwarePlatform/rocFFT-misc.git
+  git clone git@github.com:ROCmSoftwarePlatform/hipFFT-internal.git
+  git clone git@github.com:DTolm/VkFFT.git
+
 ** rocfft
 
-   cmake -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF -DSINGLELIB=ON ..
+   cmake -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF ..
 
 ** vkfft
 
@@ -28,8 +43,30 @@
 
    In rocFFT-misc/riders/vkfft
 
-     make VKFFT_HOME=/path/to/vkfft/top/dir ROCFFT_HOME=/path/to/rocfft/top/dir
+     make VKFFT_HOME=$TOP/VkFFT ROCFFT_HOME=$TOP/rocFFT-internal
 
 ** hipfft (cuda)
 
-   cmake XXX
+   On ixt-rack-60; this builds against CUDA 11.2.
+
+   docker run --rm --tty --interactive --gpus all --volume /home/maemmett:/x rocfft-cuda-perf
+   cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENTS=ON -DBUILD_WITH_LIB=CUDA ..
+
+* Runs
+
+** TODO rocfft mi100
+
+   ixt-sjc2-54
+   rocm-4.2.0
+   rocfft 939575e
+   rocfft-misc XXX
+
+** TODO rocfft mi200
+** TODO cufft v100
+** TODO cufft a100
+** TODO vkfft mi100
+
+   ixt-sjc2-54
+   rocm-4.2.0
+   rocfft 939575e
+   vkfft 16ede62
