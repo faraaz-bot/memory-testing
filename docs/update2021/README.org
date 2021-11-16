@@ -1,0 +1,35 @@
+#+title: rocFFT update 2021 notes
+
+* Performance tracking
+
+** rocfft
+
+   rocfft-perf run --prog $ROCFFT_RIDER --suite s21:md1 --out rocfft-md
+
+** vkfft
+
+   rocfft-perf run --prog $VKFFT_RIDER --suite s21:md1 --out vkfft-md
+
+** hipfft (cuda)
+
+   rocfft-perf run --prog $HIPFFT_RIDER --suite s21:md1 --out cufft-md
+
+* Building riders
+
+** rocfft
+
+   cmake -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF -DSINGLELIB=ON ..
+
+** vkfft
+
+   In VkFFT/build:
+
+     cmake ..
+
+   In rocFFT-misc/riders/vkfft
+
+     make VKFFT_HOME=/path/to/vkfft/top/dir ROCFFT_HOME=/path/to/rocfft/top/dir
+
+** hipfft (cuda)
+
+   cmake XXX
