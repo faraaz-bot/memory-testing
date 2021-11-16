@@ -14,14 +14,14 @@ INCLUDES = \
  -I$(VKFFT_HOME)/benchmark_scripts/vkFFT_scripts/include \
  -I$(VKFFT_HOME)/glslang-master/glslang/Include \
  -I$(ROCFFT_HOME)/clients \
- -I$(ROCFFT_HOME)/include
+ -I$(ROCFFT_HOME)/library/include
 
 LIBRARIES = \
   -lboost_program_options \
   -lvulkan \
   -L$(VKFFT_HOME)/build/glslang-master/glslang -lglslang -lMachineIndependent -lGenericCodeGen \
   -L$(VKFFT_HOME)/build/glslang-master/OGLCompilersDLL -lOGLCompiler \
-  -L$(VKFFT_HOME)/build/glslang-master/OSDependend/Unix -lOSDependent \
+  -L$(VKFFT_HOME)/build/glslang-master/glslang/OSDependent/Unix -lOSDependent \
   -L$(VKFFT_HOME)/build/glslang-master/SPIRV -lSPIRV \
   -lvulkan
 
