@@ -2,15 +2,18 @@
 
 * Performance tracking
 
-  export TOP=$HOME
   export TOP=/x
 
+  export TOP=$HOME
   export PATH=$PATH:$TOP/rocFFT-internal/scripts/perf
   cd $TOP/rocFFT-misc/docs/update2021
 
   export ROCFFT_RIDER=$TOP/rocFFT-internal/build/clients/staging/rocfft-rider
   export HIPFFT_RIDER=$TOP/hipFFT-internal/build/clients/staging/hipfft-rider
   export VKFFT_RIDER=$TOP/rocFFT-misc/riders/vkfft/vkfft-rider
+
+  sudo apt install python3-numpy python3-pandas
+  pip3 install plotly
 
 ** rocfft
 
@@ -54,19 +57,41 @@
 
 * Runs
 
-** TODO rocfft mi100
+** DONE md rocfft mi100
 
-   ixt-sjc2-54
-   rocm-4.2.0
-   rocfft 939575e
+*** ixt-hq-107
+
+   rocm-4.5.1
+   rocfft 5df4ada
    rocfft-misc XXX
 
-** TODO rocfft mi200
-** TODO cufft v100
-** TODO cufft a100
-** TODO vkfft mi100
+   rocfft-perf run --rider $ROCFFT_RIDER --suite s21:md1 --out rocfft-mi100-md
+
+** TODO md rocfft mi200
+** TODO md cufft v100
+
+*** ixt-rack-60
+
+    docker run --rm --tty --interactive --gpus all --volume /home/maemmett:/x rocfft-cuda-perf
+    export TOP=/x
+    export PATH=$PATH:$TOP/rocFFT-internal/scripts/perf
+    export HIPFFT_RIDER=$TOP/hipFFT-internal/build/clients/staging/hipfft-rider
+    cd $TOP/rocFFT-misc/docs/update2021
+    rocfft-perf run --rider $HIPFFT_RIDER --suite s21:md1 --out cufft-v100-md
+
+** TODO md cufft a100
+** TODO md vkfft mi100
 
    ixt-sjc2-54
    rocm-4.2.0
    rocfft 939575e
    vkfft 16ede62
+
+* Comparisons
+
+** mi100 vs v100
+
+  rsync -auPz mi100-107:rocFFT-misc/docs/update2021/rocfft-mi100-md/ rocfft-mi100-md/
+  rsync -auPz v100-60:rocFFT-misc/docs/update2021/cufft-v100-md/ cufft-v100-md/
+
+  rocfft-perf post mi100-v100 rocfft-mi100-md/ cufft-v100-md/

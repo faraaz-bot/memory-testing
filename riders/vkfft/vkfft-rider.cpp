@@ -10,7 +10,6 @@ namespace po = boost::program_options;
 
 class vkfft_params : public fft_params
 {
-
 };
 
 // mostly lifed from VkFFT
@@ -67,6 +66,9 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     configuration.commandPool = &vkGPU.commandPool;
     configuration.physicalDevice = &vkGPU.physicalDevice;
     configuration.isCompilerInitialized = 1;
+    if(fft_params.transform_type == rocfft_transform_type_real_forward ||
+       fft_params.transform_type == rocfft_transform_type_real_backward)
+        configuration.performR2C = true;
 
     uint64_t bufferSize = (uint64_t)sizeof(float) * 2 * configuration.size[0] * configuration.numberBatches;
 
