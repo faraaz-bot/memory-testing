@@ -96,30 +96,39 @@ def is_valid3(s0, s1, s2, l0, l1, l2):
 
 
 fails = []
-for l0 in range(lmin, lmax):
-    for l1 in range(lmin, lmax):
-        for l2 in range(lmin, lmax):
-            smax = the_smax(l0, l1, l2)
-            for s0 in range(1, smax):
-                for s1 in range(1, smax  ):
-                    gcd01 = math.gcd(s0, s1)
-                    for s2 in range(1, smax ):
-                        gcd012 = math.gcd(gcd01, s2)
-                        if gcd012 == 1:
-                            print("length:", l0, l1, l2, "stride", s0, s1, s2, end = "\t")
-                            testval = is_valid3(s0, s1, s2, l0, l1, l2)
-                            checkval = check_valid3(s0, s1, s2, l0, l1, l2)
-                            if testval == checkval:
-                                print("valid") if testval else print("invalid")
-                            else:
-                                print("FAIL: test says", testval)
-                                fails.append([l0, l1, l2, s0, s1, s2])
-                                if testval:
-                                    cols = collisions3(s0, s1, s2, l0, l1, l2)
-                                    print(cols)
-                                else:
-                                    exit(1)
-                                exit(1)
+nextl = 0
+l0 = lmin
+l1 = lmin
+l2 = lmin
+while l0 < lmax and l1 < lmax and l2 < lmax:
+    smax = the_smax(l0, l1, l2)
+    for s0 in range(1, smax):
+        for s1 in range(1, smax  ):
+            gcd01 = math.gcd(s0, s1)
+            for s2 in range(1, smax ):
+                gcd012 = math.gcd(gcd01, s2)
+                if gcd012 == 1 and s0 * s1 * s2 < l0 * l1 * l2 * l0 *l1 * l2:
+                    print("length:", l0, l1, l2, "stride", s0, s1, s2, end = "\t")
+                    testval = is_valid3(s0, s1, s2, l0, l1, l2)
+                    checkval = check_valid3(s0, s1, s2, l0, l1, l2)
+                    if testval == checkval:
+                        print("valid") if testval else print("invalid")
+                    else:
+                        print("FAIL: test says", testval)
+                        fails.append([l0, l1, l2, s0, s1, s2])
+                        if testval:
+                            cols = collisions3(s0, s1, s2, l0, l1, l2)
+                            print(cols)
+                        else:
+                            exit(1)
+                        exit(1)
+    if nextl == 0:
+        l0 += 1
+    if nextl == 1:
+        l1 += 1
+    if nextl == 2:
+        l2 += 1
+    nextl = (nextl + 1 ) % 3
                                 
 print("fails:", len(fails))
 print(fails)
