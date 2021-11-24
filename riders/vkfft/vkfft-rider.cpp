@@ -66,8 +66,8 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     configuration.commandPool = &vkGPU.commandPool;
     configuration.physicalDevice = &vkGPU.physicalDevice;
     configuration.isCompilerInitialized = 1;
-    if(fft_params.transform_type == rocfft_transform_type_real_forward ||
-       fft_params.transform_type == rocfft_transform_type_real_backward)
+    if(params.transform_type == rocfft_transform_type_real_forward ||
+       params.transform_type == rocfft_transform_type_real_inverse)
         configuration.performR2C = true;
 
     uint64_t bufferSize = (uint64_t)sizeof(float) * 2 * configuration.size[0] * configuration.numberBatches;
