@@ -1,28 +1,29 @@
 #
 # vkfft-rider makefile
 #
-# After cloning VkFFT, build it using cmake, then
+# After cloning VkFFT, build it using cmake, install to VKFFT_HOME, then
 #
-# make VKFFT_HOME=/path/to/vkfft/source/dir ROCFFT_HOME=/path/to/rocfft/source/dir
+# make VKFFT_HOME=/path/to/vkfft/install/dir ROCFFT_SRC=/path/to/rocfft/source/dir VKFFT_SRC=/path/to/vkFFT_source_dir
 #
 
-VKFFT_HOME ?= $(HOME)/VkFFT
-ROCFFT_HOME ?= $(HOME)/rocFFT
+VKFFT_SRC ?= $(HOME)/VkFFT
+VKFFT_ROOT ?= $(HOME)/VkFFT
+ROCFFT_SRC ?= $(HOME)/rocFFT
 
 INCLUDES = \
- -I$(VKFFT_HOME)/vkFFT \
- -I$(VKFFT_HOME)/benchmark_scripts/vkFFT_scripts/include \
- -I$(VKFFT_HOME)/glslang-master/glslang/Include \
- -I$(ROCFFT_HOME)/clients \
- -I$(ROCFFT_HOME)/library/include
+ -I$(VKFFT_SRC)/vkFFT \
+ -I$(VKFFT_SRC)/benchmark_scripts/vkFFT_scripts/include \
+ -I$(VKFFT_SRC)/glslang-master/glslang/Include \
+ -I$(ROCFFT_SRC)/clients \
+ -I$(ROCFFT_SRC)/library/include
 
 LIBRARIES = \
   -lboost_program_options \
   -lvulkan \
-  -L$(VKFFT_HOME)/build/glslang-master/glslang -lglslang -lMachineIndependent -lGenericCodeGen \
-  -L$(VKFFT_HOME)/build/glslang-master/OGLCompilersDLL -lOGLCompiler \
-  -L$(VKFFT_HOME)/build/glslang-master/glslang/OSDependent/Unix -lOSDependent \
-  -L$(VKFFT_HOME)/build/glslang-master/SPIRV -lSPIRV \
+  -L$(VKFFT_HOME)/lib -lglslang -lMachineIndependent -lGenericCodeGen \
+  -L$(VKFFT_HOME)/lib -lOGLCompiler \
+  -L$(VKFFT_HOME)/lib -lOSDependent \
+  -L$(VKFFT_HOME)/lib -lSPIRV \
   -lvulkan
 
 all: vkfft-rider
@@ -34,4 +35,9 @@ vkfft-rider.o: vkfft-rider.cpp
 	hipcc -std=c++17 $(INCLUDES) vkfft-rider.cpp -c -o vkfft-rider.o
 
 utils_VkFFT.o:
-	hipcc -std=c++17 $(INCLUDES) $(VKFFT_HOME)/benchmark_scripts/vkFFT_scripts/src/utils_VkFFT.cpp -c -o utils_VkFFT.o
+	hipcc -std=c++17 $(INCLUDES) $(VKFFT_SRC)/benchmark_scripts/vkFFT_scripts/src/utils_VkFFT.cpp -c -o utils_VkFFT.o
+
+clean:  FORCE
+	rm -rf vkfft-rider vkfft-rider.o utils_VkFFT.o
+
+FORCE:
