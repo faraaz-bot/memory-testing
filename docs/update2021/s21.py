@@ -71,7 +71,7 @@ def cholla1d():
     nbatch     = 500
 
     for length, precision, direction, inplace, real in product(lengths, precisions, directions, inplaces, reals):
-        yield Problem(length,
+        yield Problem([length],
                       tag=mktag('cholla1d', precision, direction, inplace, real),
                       nbatch=nbatch,
                       direction=direction,
