@@ -37,16 +37,18 @@
 ** rocfft
 
    cmake -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF ..
+   cmake -G Ninja -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF ..
+   cmake -DCMAKE_CXX_COMPILER=hipcc -DBUILD_CLIENTS=ON -DAMDGPU_TARGETS= -DROCFFT_CALLBACKS_ENABLED=OFF ..
 
 ** vkfft
 
    In VkFFT/build:
 
-     cmake ..
+     cmake -DCMAKE_INSTALL_PREFIX=$HOME/vkfft-install ..
 
    In rocFFT-misc/riders/vkfft
 
-     make VKFFT_HOME=$TOP/VkFFT ROCFFT_HOME=$TOP/rocFFT-internal
+   make VKFFT_HOME=$HOME/vkfft-install ROCFFT_SRC=$HOME/rocFFT-develop VKFFT_SRC=$HOME/VkFFT
 
 ** hipfft (cuda)
 
@@ -54,6 +56,10 @@
 
    docker run --rm --tty --interactive --gpus all --volume /home/maemmett:/x rocfft-cuda-perf
    cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release -DBUILD_CLIENTS=ON -DBUILD_WITH_LIB=CUDA ..
+
+   To build Docker image:
+   cd rocFFT-misc/perf/docker
+   docker build -t rocfft-cuda-perf .
 
 * Runs
 
@@ -67,8 +73,17 @@
 
    rocfft-perf run --rider $ROCFFT_RIDER --suite s21:md1 --out rocfft-mi100-md
 
-** TODO md rocfft mi200
-** TODO md cufft v100
+** DONE md rocfft mi200
+
+*** x1000c0s6b0n0
+
+    export TOP=$HOME
+    export PATH=$PATH:$HOME/opt/bin:$TOP/rocFFT-internal/scripts/perf
+    export ROCFFT_RIDER=$TOP/rocFFT-internal/build/clients/staging/rocfft-rider
+    cd $TOP/rocFFT-misc/docs/update2021
+    rocfft-perf run --rider $ROCFFT_RIDER --suite s21:md1 --out rocfft-mi200-md
+
+** DONE md cufft v100
 
 *** ixt-rack-60
 
@@ -79,13 +94,31 @@
     cd $TOP/rocFFT-misc/docs/update2021
     rocfft-perf run --rider $HIPFFT_RIDER --suite s21:md1 --out cufft-v100-md
 
-** TODO md cufft a100
+** DONE md cufft a100
+
+*** ixt-sjc2-88
+
+docker run --rm --tty --interactive --gpus all --volume /home/maemmett:/x rocfft-cuda-perf
+export TOP=/x
+export PATH=$PATH:$TOP/rocFFT-internal/scripts/perf
+export HIPFFT_RIDER=$TOP/hipFFT-internal/build/clients/staging/hipfft-rider
+cd $TOP/rocFFT-misc/docs/update2021
+rocfft-perf run --rider $HIPFFT_RIDER --suite s21:md1 --out cufft-a100-md
+
 ** TODO md vkfft mi100
 
    ixt-sjc2-54
    rocm-4.2.0
    rocfft 939575e
    vkfft 16ede62
+
+  export TOP=$HOME
+  export PATH=$PATH:$TOP/rocFFT-internal/scripts/perf
+  cd $TOP/rocFFT-misc/docs/update2021
+  export ROCFFT_RIDER=$TOP/rocFFT-internal/build/clients/staging/rocfft-rider
+  export HIPFFT_RIDER=$TOP/hipFFT-internal/build/clients/staging/hipfft-rider
+  export VKFFT_RIDER=$TOP/rocFFT-misc/riders/vkfft/vkfft-rider
+  rocfft-perf run --rider $VKFFT_RIDER --suite s21:md1 --out vkfft-mi100-md
 
 * Comparisons
 
@@ -94,4 +127,54 @@
   rsync -auPz mi100-107:rocFFT-misc/docs/update2021/rocfft-mi100-md/ rocfft-mi100-md/
   rsync -auPz v100-60:rocFFT-misc/docs/update2021/cufft-v100-md/ cufft-v100-md/
 
-  rocfft-perf post mi100-v100 rocfft-mi100-md/ cufft-v100-md/
+  rocfft-perf post mi100-v100 cufft-v100-md rocfft-mi100-md
+  rocfft-perf html mi100-v100 cufft-v100-md rocfft-mi100-md
+
+** mi200 vs a100
+
+  rsync -auPz lockhart:rocFFT-misc/docs/update2021/rocfft-mi200-md/ rocfft-mi200-md/
+  rsync -auPz a100-88:rocFFT-misc/docs/update2021/cufft-a100-md/ cufft-a100-md/
+
+  rocfft-perf post mi200-a100 cufft-a100-md rocfft-mi200-md
+  rocfft-perf html mi200-a100 cufft-a100-md rocfft-mi200-md
+
+
+* Multi batch notes
+
+** rocfft mi100
+
+maemmett@ixt-hq-107:~/rocFFT-develop/build$ clients/staging/rocfft-rider --length 192 192 192  -b 10 -N 10
+in-place
+Running profile with 10 samples
+length: 192 192 192
+
+Execution gpu time: 5.85166 5.85358 5.86222 5.84174 5.85614 5.85678 5.85998 5.8539 5.86158 5.89278 ms
+Execution gflops:   1376.16 1375.71 1373.68 1378.5 1375.11 1374.96 1374.21 1375.63 1373.83 1366.56
+
+** rocfft mi200
+
+maemmett@x1000c0s6b0n0:~/rocFFT-internal/build$ clients/staging/rocfft-rider --length 192 192 192  -b 10 -N 10
+in-place
+Running profile with 10 samples
+length: 192 192 192
+
+Execution gpu time: 6.73472 6.72608 6.73984 6.71184 6.72192 6.70464 6.664 6.7088 6.73616 6.7368 ms
+Execution gflops:   1195.72 1197.25 1194.81 1199.79 1198 1201.08 1208.41 1200.34 1195.46 1195.35
+
+** cufft v100
+
+root@5b357bbb490f:/x/hipFFT-internal/build# clients/staging/hipfft-rider --length 192 192 192  -b 10 -N 10
+Placement: in-place
+Running profile with 10 samples
+Length: 192 192 192
+
+Execution gpu time: 4.22906 4.22851 4.22771 4.23587 4.23101 4.23344 4.22794 4.23542 4.22896 4.23549 ms
+
+** cufft a100
+
+root@8a14305d4d69:/x/hipFFT-internal/build# clients/staging/hipfft-rider --length 192 192 192  -b 10 -N 10
+Placement: in-place
+Running profile with 10 samples
+Length: 192 192 192
+
+Execution gpu time: 2.56733 2.56816 2.57485 2.57027 2.5759 2.57296 2.56954 2.56714 2.5705 2.58461 ms
