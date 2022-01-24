@@ -1,5 +1,5 @@
 # make ROCFFT_SRC=~/repo/rocfft8 CXX=clang++
-
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/rocm/hip/lib
 
 ROCFFT_SRC ?= $(HOME)/rocFFT
 
