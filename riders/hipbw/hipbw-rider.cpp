@@ -30,6 +30,63 @@ namespace po = boost::program_options;
 #include<hip/hip_runtime.h>
 #include<hip/hip_runtime_api.h>
 
+
+template<class Tcomplex>
+__global__ void trivial_transform_c2c(const Tcomplex* in, Tcomplex* out, const size_t N)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < N) {
+      out[idx].x = in[idx].x * N;
+      out[idx].y = in[idx].y * N;
+    }
+}
+
+__global__ void trivial_transform_r2c_float(const float* in, float2* out, const size_t halfN)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < halfN) {
+      out[idx].x = in[2 * idx] * halfN;
+      out[idx].y = in[2 * idx + 1] * halfN;
+    }
+}
+
+__global__ void trivial_transform_r2c_double(const double* in, double2* out, const size_t halfN)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < halfN) {
+      out[idx].x = in[2 * idx] * halfN; 
+      out[idx].y = in[2 * idx + 1] * halfN;
+    }
+}
+
+template<class Tfloat, class Tcomplex>
+__global__ void trivial_transform_r2c_double(const Tfloat* in, Tcomplex* out, const size_t halfN)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < halfN) {
+      out[2 * idx] = out[idx].x * halfN; 
+      out[2 * idx + 1] = out[idx].y * halfN; 
+    }
+}
+
+ __global__ void trivial_transform_c2r_float(const float2* in, float* out, const size_t halfN)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < halfN) {
+      out[2 * idx] = in[idx].x * halfN; 
+      out[2 * idx + 1] = in[idx].y * halfN; 
+    }
+}
+
+ __global__ void trivial_transform_c2r_double(const double2* in, double* out, const size_t halfN)
+{
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < halfN) {
+      out[2 * idx] = in[idx].x * halfN; 
+      out[2 * idx + 1] = in[idx].y * halfN; 
+    }
+}
+
 class hipbw_params : public fft_params
 {
 public:
@@ -44,17 +101,94 @@ public:
     {
       return 0;
     }
-
   
   fft_status create_plan() override
   {
-    // FIXME: implement
-    
     return fft_status_success;
   }
   
   virtual fft_status execute(void** in, void** out) override
   {
+    using Tlength = decltype(length)::value_type;
+    const size_t N = std::accumulate(length.begin(), length.end(),  (Tlength)nbatch,
+				     std::multiplies<Tlength>());
+    size_t blockSize = 256;
+    size_t blocks    = (N + blockSize - 1) / blockSize;
+
+    switch(precision) {
+      case fft_precision_single:
+	switch(transform_type) {
+	  case fft_transform_type_complex_forward:
+	  case fft_transform_type_complex_inverse:
+	    hipLaunchKernelGGL(trivial_transform_c2c<float2>,
+			       dim3(blocks),
+			       dim3(blockSize),
+			       0, // sharedMemBytes
+			       0, // stream
+			       (float2*)in[0],
+			       (float2*)out[0],
+			       N);
+	    break;
+	  case fft_transform_type_real_forward:
+	    hipLaunchKernelGGL(trivial_transform_r2c_float,
+	    		       dim3(blocks),
+	    		       dim3(blockSize),
+	    		       0, // sharedMemBytes
+	    		       0, // stream
+	    		       (float*)in[0],
+	    		       (float2*)out[0],
+	    		       N / 2);
+	    break;
+	  case fft_transform_type_real_inverse:
+	    hipLaunchKernelGGL(trivial_transform_c2r_float,
+	    		       dim3(blocks),
+	    		       dim3(blockSize),
+	    		       0, // sharedMemBytes
+	    		       0, // stream
+	    		       (float2*)in[0],
+	    		       (float*)out[0],
+	    		       N / 2);
+	    break;
+	}
+	break;
+      case fft_precision_double:
+	switch(transform_type)  {
+	  case fft_transform_type_complex_forward:
+	  case fft_transform_type_complex_inverse:
+	      hipLaunchKernelGGL(trivial_transform_c2c<double2>,
+			       dim3(blocks),
+			       dim3(blockSize),
+			       0, // sharedMemBytes
+			       0, // stream
+			       (double2*)in[0],
+			       (double2*)out[0],
+			       N);
+
+	      break;
+	  case fft_transform_type_real_forward:
+	    hipLaunchKernelGGL(trivial_transform_r2c_double,
+			       dim3(blocks),
+			       dim3(blockSize),
+			       0, // sharedMemBytes
+			       0, // stream
+			       (double*)in[0],
+			       (double2*)out[0],
+			       N / 2);
+	    break;
+	  case fft_transform_type_real_inverse:
+	    hipLaunchKernelGGL(trivial_transform_c2r_double,
+	    		       dim3(blocks),
+	    		       dim3(blockSize),
+	    		       0, // sharedMemBytes
+	    		       0, // stream
+	    		       (double2*)in[0],
+	    		       (double*)out[0],
+	    		       N / 2);
+	    break;
+	}
+	break;
+    }
+
     // FIXME: implement
     return fft_status_success;
   };
@@ -222,16 +356,112 @@ int main(int argc, char* argv[])
     auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
     compute_input(params, gpu_input);
 
+auto hip_ret = hipSuccess;
+
     // GPU input and output buffers:
     auto                ibuffer_sizes = params.ibuffer_sizes();
     std::vector<gpubuf> ibuffer(ibuffer_sizes.size());
     std::vector<void*>  pibuffer(ibuffer_sizes.size());
     for(unsigned int i = 0; i < ibuffer.size(); ++i)
     {
-      ibuffer[i].alloc(ibuffer_sizes[i]);
-        pibuffer[i] = ibuffer[i].data();
+      auto ret = ibuffer[i].alloc(ibuffer_sizes[i]);
+      if(ret != hipSuccess)
+	throw std::runtime_error("alloc failed");
+      pibuffer[i] = ibuffer[i].data();
     }
 
-  
+    std::vector<gpubuf>  obuffer_data;
+    std::vector<gpubuf>* obuffer = &obuffer_data;
+    if(params.placement == fft_placement_inplace)
+    {
+        obuffer = &ibuffer;
+    }
+    else
+    {
+        auto obuffer_sizes = params.obuffer_sizes();
+        obuffer_data.resize(obuffer_sizes.size());
+        for(unsigned int i = 0; i < obuffer_data.size(); ++i)
+        {
+	  hip_ret = obuffer_data[i].alloc(obuffer_sizes[i]);
+	  if(hip_ret != hipSuccess)
+	    throw std::runtime_error("alloc failed");
+        }
+    }
+    std::vector<void*> pobuffer(obuffer->size());
+    for(unsigned int i = 0; i < obuffer->size(); ++i)
+    {
+        pobuffer[i] = obuffer->at(i).data();
+    }
+
+
+// Warm up once:
+for(int idx = 0; idx < gpu_input.size(); ++idx) {
+  hip_ret = hipMemcpy(
+    pibuffer[idx], gpu_input[idx].data(), gpu_input[idx].size(), hipMemcpyHostToDevice);
+  if(hip_ret != hipSuccess)
+    throw std::runtime_error("hipMemcpy failed");
+
+ }
+
+
+
+    params.execute(pibuffer.data(), pobuffer.data());
+
+    // Run the transform several times and record the execution time:
+    std::vector<double> gpu_time(ntrial);
+
+    hipEvent_t start, stop;
+    hip_ret = hipEventCreate(&start);
+if(hip_ret != hipSuccess)
+    throw std::runtime_error("hipEventCreate failed");
+    hip_ret = hipEventCreate(&stop);
+if(hip_ret != hipSuccess)
+    throw std::runtime_error("hipEventCreate failed");
+
+for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
+	  {
+	    // Copy the input data to the GPU:
+	    for(int idx = 0; idx < gpu_input.size(); ++idx)
+	      {
+		hip_ret = hipMemcpy(pibuffer[idx],
+			  gpu_input[idx].data(),
+			  gpu_input[idx].size(),
+			  hipMemcpyHostToDevice);
+		if(hip_ret != hipSuccess)
+		  throw std::runtime_error("hipMemcpy failed");
+
+	      }
+
+	    hip_ret = hipEventRecord(start);
+	    if(hip_ret != hipSuccess)
+	      throw std::runtime_error("hipEventRecord failed");
+
+	    params.execute(pibuffer.data(), pobuffer.data());
+
+	    hip_ret = hipEventRecord(stop);
+	    if(hip_ret != hipSuccess)
+	      throw std::runtime_error("hipEventRecord failed");
+	    
+	    hip_ret = hipEventSynchronize(stop);
+	    if(hip_ret != hipSuccess)
+	      throw std::runtime_error("hipEventSynchronize failed");
+
+	    
+	    float time;
+	    hip_ret = hipEventElapsedTime(&time, start, stop);
+	    if(hip_ret != hipSuccess)
+	      throw std::runtime_error("hipEventElapsedTime failed");
+
+	    gpu_time[itrial] = time;
+
+	  }
+
+    std::cout << "\nExecution gpu time:";
+    for(const auto& i : gpu_time)
+    {
+        std::cout << " " << i;
+    }
+    std::cout << " ms" << std::endl;
+    
   return 0;
-}
+} 
