@@ -1,0 +1,20 @@
+hipbw is a C++ code that mimics the global read/write behaviour or an
+idealized FFT.
+
+The code is useful for running rocFFT benchmarks relative to a
+roofline based on achievable bandwidth on a particular device.
+hipbw-rider uses the fft_params struct from rocFFT; this was done so
+that we can easily pass command-line arguments which match the ones
+used in rocFFT rider, hipFFT rider, etc.
+
+Compilation and requirements:
+
+hipbw-rider uses boost program options.  You must specify the location
+of the rocFFT source tree.
+
+eg:
+make ROCFFT_SRC=~/rocFFT
+
+To use the NVIDIA backend, compile with
+
+make ROCFFT_SRC=~/rocFFT RUNTIME=NVIDIA
