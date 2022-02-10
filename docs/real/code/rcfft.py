@@ -6,7 +6,7 @@ import numpy as np
 
 from rckernels import postkernel, prekernel
        
-N = 8
+N = 12
 
 Nhalf = N // 2
 Ncomplex = Nhalf + 1

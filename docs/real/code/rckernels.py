@@ -57,6 +57,11 @@ def prekernel(X):
     #     Z[p] = X[p] * (1 + I * omegaNp) + X[q].conjugate() * (1 - I * omegaNp)
     #     Z[q] = X[q] * (1 + I * omegaNq) + X[p].conjugate() * (1 - I * omegaNq)
 
+    # The twiddle table only needs to be 1/4 the length of the transform.
+    twids = np.empty(Nhalf // 2, dtype=complex)
+    for k in range(len(twids)):
+        twids[k] = cmath.exp(2.0 * math.pi * I * k / N)
+    
     Xp = X[0]
     Xq = X[Nhalf]
     Z[0] = complex(Xp.real - Xp.imag + Xq.real + Xq.imag,
@@ -65,7 +70,10 @@ def prekernel(X):
         Z[Nhalf // 2] =  X[Nhalf // 2].conjugate() * 2
     for p in range(1, (Nhalf + 1) // 2):
         q = Nhalf - p
-        omegaNp = cmath.exp(2.0 * math.pi * I * p / N);
+        #omegaNp = cmath.exp(2.0 * math.pi * I * p / N)
+        omegaNp = twids[p] if p < Nhalf // 2  else -twids[p].conjugate
+        if not omegaNp == cmath.exp(2.0 * math.pi * I * p / N):
+            print("error in twiddle computation at index", p) 
         omegaNq = -omegaNp.conjugate()
         Z[p] = X[p] * (1 + I * omegaNp) + X[q].conjugate() * (1 - I * omegaNp)
         Z[q] = X[q] * (1 + I * omegaNq) + X[p].conjugate() * (1 - I * omegaNq)
