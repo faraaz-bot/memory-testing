@@ -57,8 +57,8 @@ def prekernel(X):
         # p and Nhalf - p are both used in the same computation, so we
         # can save a twiddle and a r/w.
        
-        twid = np.empty(Nhalf, dtype=complex)
-        for p in range(Nhalf):
+        twid = np.empty((Nhalf + 1) // 2, dtype=complex)
+        for p in range(len(twid)):
             twid[p] = cmath.exp(2.0 * math.pi * I * p / N)
             
         Xp = X[0]
