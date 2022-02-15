@@ -10,12 +10,30 @@ def postkernel(Z):
     
     X = np.empty(Ncomplex, dtype=complex)
 
-    if True:
+    I = complex(0, 1)
+    
+    version = "half"
+    
+    if version == "simple":
         X[0] = complex(Z[0].real + Z[0].imag, 0)
-        I = complex(0, 1)
+        for p in range(1, Nhalf):
+            omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
+            X[p] = Z[p] * 0.5 * (1 - I * omegaNp) \
+                + Z[Nhalf - p].conjugate() * 0.5 * (1 + I * omegaNp)
+        X[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
+        return X
+    elif version == "half":
+        twid = np.empty((Nhalf + 1) // 2, dtype=complex)
+        for p in range(len(twid)):
+            twid[p] = cmath.exp(-2.0 * math.pi * I * p / N)
+        
+        X[0] = complex(Z[0].real + Z[0].imag, 0)
         for p in range(1, (Nhalf + 1) // 2):
             q = Nhalf - p
-            omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
+            omegaNp = twid[p]
+            if omegaNp != cmath.exp(-2.0 * math.pi * I * p / N):
+                print("failure in twiddle computation")
+            #omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
             #omegaNq = cmath.exp(-2.0 * math.pi * I * q / N);
             omegaNq = -omegaNp.conjugate()
             X[p] = Z[p] * 0.5 * (1 - I * omegaNp) \
@@ -27,16 +45,8 @@ def postkernel(Z):
             omegaNp = -I
             X[p] = Z[p].conjugate()
         X[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
-    else:
-        X[0] = complex(Z[0].real + Z[0].imag, 0)
-        I = complex(0, 1)
-        for p in range(1, Nhalf):
-            omegaNp = cmath.exp(-2.0 * math.pi * I * p / N);
-            X[p] = Z[p] * 0.5 * (1 - I * omegaNp) \
-                + Z[Nhalf - p].conjugate() * 0.5 * (1 + I * omegaNp)
-        X[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
-    
-    return X
+        return X
+        
 
 def prekernel(X):
     Nhalf = len(X) - 1
@@ -80,8 +90,6 @@ def prekernel(X):
             Z[q] = X[q] * (1 + I * omegaNq) \
                 + X[p].conjugate() * (1 - I * omegaNq)
         return Z        
-    
-    return Z
 
 def unpackbatch(Z):
     dim = len(Z.shape)
