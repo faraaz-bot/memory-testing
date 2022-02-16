@@ -1,6 +1,6 @@
 
 #include "vkFFT.h"
-#include "client_utils.h"
+#include "fft_params.h"
 #include "utils_VkFFT.h"
 
 #include <iostream>
@@ -66,8 +66,8 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     configuration.commandPool = &vkGPU.commandPool;
     configuration.physicalDevice = &vkGPU.physicalDevice;
     configuration.isCompilerInitialized = 1;
-    if(params.transform_type == rocfft_transform_type_real_forward ||
-       params.transform_type == rocfft_transform_type_real_inverse)
+    if(params.transform_type == fft_transform_type_real_forward ||
+       params.transform_type == fft_transform_type_real_inverse)
         configuration.performR2C = true;
 
     uint64_t bufferSize = (uint64_t)sizeof(float) * 2 * configuration.size[0] * configuration.numberBatches;
@@ -80,7 +80,9 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     configuration.bufferSize = &bufferSize;
 
     // Input data:
-    const auto gpu_input = compute_input(params);
+    auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
+    compute_input(params, gpu_input);
+    
     resFFT = transferDataFromCPU(&vkGPU, (void*)gpu_input[0].data(), &buffer, bufferSize);
 
     if (resFFT != VKFFT_SUCCESS) return resFFT;
@@ -158,25 +160,25 @@ int main(int argc, char* argv[])
 
     // clang-format doesn't handle boost program options very well:
     // clang-format off
-    po::options_description opdesc("rocfft rider command line options");
+    po::options_description opdesc("vkfft rider command line options");
     opdesc.add_options()("help,h", "produces this help message")
         ("device", po::value<int>(&deviceId)->default_value(0), "Select a specific device id")
         ("verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")
         ("ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")
         ("notInPlace,o", "Not in-place FFT transform (default: in-place)")
         ("double", "Double precision transform (default: single)")
-        ("transformType,t", po::value<rocfft_transform_type>(&params.transform_type)
-         ->default_value(rocfft_transform_type_complex_forward),
+        ("transformType,t", po::value<fft_transform_type>(&params.transform_type)
+         ->default_value(fft_transform_type_complex_forward),
          "Type of transform:\n0) complex forward\n1) complex inverse\n2) real "
          "forward\n3) real inverse")
         ( "batchSize,b", po::value<size_t>(&params.nbatch)->default_value(1),
           "If this value is greater than one, arrays will be used ")
-        ( "itype", po::value<rocfft_array_type>(&params.itype)
-          ->default_value(rocfft_array_type_unset),
+        ( "itype", po::value<fft_array_type>(&params.itype)
+          ->default_value(fft_array_type_unset),
           "Array type of input data:\n0) interleaved\n1) planar\n2) real\n3) "
           "hermitian interleaved\n4) hermitian planar")
-        ( "otype", po::value<rocfft_array_type>(&params.otype)
-          ->default_value(rocfft_array_type_unset),
+        ( "otype", po::value<fft_array_type>(&params.otype)
+          ->default_value(fft_array_type_unset),
           "Array type of output data:\n0) interleaved\n1) planar\n2) real\n3) "
           "hermitian interleaved\n4) hermitian planar")
         ("length",  po::value<std::vector<size_t>>(&params.length)->multitoken(), "Lengths.")
@@ -205,8 +207,8 @@ int main(int argc, char* argv[])
     }
 
     params.placement
-        = vm.count("notInPlace") ? rocfft_placement_notinplace : rocfft_placement_inplace;
-    params.precision = vm.count("double") ? rocfft_precision_double : rocfft_precision_single;
+        = vm.count("notInPlace") ? fft_placement_notinplace : fft_placement_inplace;
+    params.precision = vm.count("double") ? fft_precision_double : fft_precision_single;
 
     if(!vm.count("length"))
     {

@@ -5,9 +5,9 @@
 #
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/rocm/hip/lib
 
-CXX=/opt/rocm/hip/bin/hipcc
+CXX ?= /opt/rocm/hip/bin/hipcc
 
-RUNTIME ?= AMDs
+RUNTIME ?= AMD
 
 ROCFFT_SRC ?= $(HOME)/rocFFT
 
@@ -22,8 +22,8 @@ ALL = hipbw-rider
 
 
 ifeq ($(strip $(RUNTIME)),AMD)
-	INCLUDES=-I$(ROCFFT_SRC) -I/opt/rocm/hip/include/
-	CXXFLAGS= -std=c++17 -D__HIP_PLATFORM_AMD__ -Ofast $(INCLUDES)
+	INCLUDES=-I$(ROCFFT_SRC) -I/opt/rocm/hip/include/ -I/opt/rocm/llvm/include/
+	CXXFLAGS=-std=c++17 -D__HIP_PLATFORM_AMD__ -Ofast $(INCLUDES) -x hip
 	AMD=no
 endif
 ifeq ($(strip $(RUNTIME)),NVIDIA)
@@ -32,7 +32,8 @@ ifeq ($(strip $(RUNTIME)),NVIDIA)
 endif
 
 LIBRARIES=-L$(HOME)/boost -lboost_program_options -L/opt/rocm/hip/lib -lamdhip64 -lhiprtc-builtins
-LDFLAGS=$(LIBRARIES)
+LDFLAGS=--driver-mode=g++ -lgcc_s -lgcc   $(LIBRARIES) -lclang_rt.builtins-x86_64 -lclang_rt.builtins-x86_64
+LDFLAGS=--driver-mode=g++ -L"/opt/rocm-4.5.0/hip/lib" -lgcc_s -lgcc -lpthread -lm -lrt -Wl,--enable-new-dtags -Wl,-rpath=/opt/rocm-4.5.0/hip/lib:/opt/rocm-4.5.0/lib -lamdhip64 -std=c++17 --driver-mode=g++ -L/home/mal/boost -lboost_program_options -L/opt/rocm/hip/lib -lamdhip64 -lhiprtc-builtins -o "hipbw-rider" -L/opt/rocm-4.5.0/llvm/bin/../lib/clang/13.0.0/lib/linux -lclang_rt.builtins-x86_64
 
 all: $(ALL)
 
