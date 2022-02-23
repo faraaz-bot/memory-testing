@@ -21,7 +21,7 @@
 //   Further performance tuning might be done later.
 static const unsigned int LAUNCH_BOUNDS_R2C_C2R_KERNEL = 256;
 
-#ifdef __HIP_PLATFORM_NVIDIA__
+#ifdef CUDA
 #include "vector_types.h"
 #include <cuComplex.h>
 

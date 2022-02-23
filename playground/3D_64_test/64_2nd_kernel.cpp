@@ -1,7 +1,7 @@
 #include "butterfly_constant.h"
 #include "callback.h"
 #include "common.h"
-#include "hip/hip_runtime.h"
+#include "runtime_api_wrapper.h"
 #include <iostream>
 #include <math.h>
 #include <stdio.h>
@@ -542,7 +542,6 @@ __global__ void fft_64_2nd_kernel(float2* inputs, float2* outputs)
                   + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_7 = inputs[inoutID];
     }
-
     __syncthreads();
 
     if((((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
@@ -626,7 +625,7 @@ __global__ void fft_64_2nd_kernel(float2* inputs, float2* outputs)
 //     float2* h_a = (float2*)malloc(bytes);
 //     float2* d_a = (float2*)malloc(bytes);
 
-//     HIP_ASSERT(hipMalloc(&d_a, bytes));
+//     device_malloc(&d_a, bytes);
 
 //     for(int i = 0; i < n; i++)
 //     {
@@ -647,7 +646,7 @@ __global__ void fft_64_2nd_kernel(float2* inputs, float2* outputs)
 
 //     HIP_ASSERT(hipMemcpy(h_a, d_a, bytes, hipMemcpyDeviceToHost));
 
-//     HIP_ASSERT(hipFree(d_a));
+//     device_free(d_a);
 
 //     free(h_a);
 
@@ -1215,6 +1214,8 @@ __global__
 template <typename scalar_type>
 int fft_64_2nd(int trial, bool isRef)
 {
+    device_reset();
+
     int n = 64 * 64 * 64;
 
     int n_bytes = n * sizeof(scalar_type);
@@ -1235,10 +1236,10 @@ int fft_64_2nd(int trial, bool isRef)
     void* __restrict__ store_cb_fn   = nullptr;
     void* __restrict__ store_cb_data = nullptr;
 
-    HIP_ASSERT(hipMalloc(&d_twd, 64 * sizeof(scalar_type)));
-    HIP_ASSERT(hipMalloc(&d_lengths, 4 * sizeof(int)));
-    HIP_ASSERT(hipMalloc(&d_strides, 4 * sizeof(int)));
-    HIP_ASSERT(hipMalloc(&d_a, n_bytes));
+    device_malloc((void**)&d_twd, 64 * sizeof(scalar_type));
+    device_malloc((void**)&d_lengths, 4 * sizeof(int));
+    device_malloc((void**)&d_strides, 4 * sizeof(int));
+    device_malloc((void**)&d_a, n_bytes);
 
     for(int i = 0; i < n; i++)
     {
@@ -1259,20 +1260,17 @@ int fft_64_2nd(int trial, bool isRef)
     h_strides[2] = 64 * 64 * 64;
     h_strides[3] = 64 * 64 * 64;
 
-    HIP_ASSERT(hipMemcpy(d_a, h_a, n_bytes, hipMemcpyHostToDevice));
-    HIP_ASSERT(hipMemcpy(d_twd, h_twd, 64 * sizeof(scalar_type), hipMemcpyHostToDevice));
-    HIP_ASSERT(hipMemcpy(d_lengths, h_lengths, 4 * sizeof(int), hipMemcpyHostToDevice));
-    HIP_ASSERT(hipMemcpy(d_strides, h_strides, 4 * sizeof(int), hipMemcpyHostToDevice));
+    device_memcpy_h2d(d_a, h_a, n_bytes);
+    device_memcpy_h2d(d_twd, h_twd, 64 * sizeof(scalar_type));
+    device_memcpy_h2d(d_lengths, h_lengths, 4 * sizeof(int));
+    device_memcpy_h2d(d_strides, h_strides, 4 * sizeof(int));
 
     for(int i = 0; i < n; i++)
     {
         h_a[i] = scalar_type(0, 0);
     }
 
-    hipEvent_t start, stop;
-    HIP_ASSERT(hipEventCreate(&start));
-    HIP_ASSERT(hipEventCreate(&stop));
-    std::vector<double> gpu_time(trial);
+    device_event_create();
 
     if(isRef)
     {
@@ -1285,7 +1283,7 @@ int fft_64_2nd(int trial, bool isRef)
 
         //fft_64_2nd_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
         // Debug only, verify pure copy quickly
-        // HIP_ASSERT(hipMemcpy(h_a, d_a, n_bytes, hipMemcpyDeviceToHost));
+        // device_memcpy_d2h(h_a, d_a, n_bytes);
         // for(int i = 0; i < n; i++)
         // {
         //     if((int)h_a[i].x != (i + 1) || (int)h_a[i].y != (i + 1))
@@ -1296,25 +1294,17 @@ int fft_64_2nd(int trial, bool isRef)
         // }
         // std::cout << "verify pure copy done.\n";
 
-        for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
+        device_event_record_start();
+        for(int itrial = 0; itrial < trial; ++itrial)
         {
-            HIP_ASSERT(hipEventRecord(start));
-
             VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a, d_twd);
             // fft_64_2nd_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
-
-            HIP_ASSERT(hipEventRecord(stop));
-            HIP_ASSERT(hipEventSynchronize(stop));
-
-            float time;
-            HIP_ASSERT(hipEventElapsedTime(&time, start, stop));
-            gpu_time[itrial] = time;
         }
-        std::cout << "\nExecution gpu time:";
-        for(const auto& i : gpu_time)
-        {
-            std::cout << " " << i;
-        }
+        device_event_record_stop();
+        device_event_synchronize_stop();
+        device_synchronize();
+        std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
+                  << device_event_elapsed_time() << " ms\n";
     }
     else
     {
@@ -1336,7 +1326,7 @@ int fft_64_2nd(int trial, bool isRef)
                                                store_cb_fn,
                                                store_cb_data,
                                                d_a);
-        HIP_ASSERT(hipMemcpy(h_a, d_a, n_bytes, hipMemcpyDeviceToHost));
+        //device_memcpy_d2h(h_a, d_a, n_bytes);
         // for(int i = 0; i < n; i++)
         // {
         //     if((int)h_a[i].x != (i + 1) || (int)h_a[i].y != (i + 1))
@@ -1347,10 +1337,9 @@ int fft_64_2nd(int trial, bool isRef)
         // }
         // std::cout << "verify pure copy done.\n";
 
-        for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
+        device_event_record_start();
+        for(int itrial = 0; itrial < trial; ++itrial)
         {
-            HIP_ASSERT(hipEventRecord(start));
-
             ip_forward_length64_SBRR<scalar_type,
                                      SB_NONUNIT,
                                      EmbeddedType::NONE,
@@ -1367,33 +1356,26 @@ int fft_64_2nd(int trial, bool isRef)
                                                    store_cb_fn,
                                                    store_cb_data,
                                                    d_a);
-            HIP_ASSERT(hipEventRecord(stop));
-            HIP_ASSERT(hipEventSynchronize(stop));
-
-            float time;
-            HIP_ASSERT(hipEventElapsedTime(&time, start, stop));
-            gpu_time[itrial] = time;
         }
-        std::cout << "\nExecution gpu time:";
-        for(const auto& i : gpu_time)
-        {
-            std::cout << " " << i;
-        }
+        device_event_record_stop();
+        device_event_synchronize_stop();
+        device_synchronize();
+        std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
+                  << device_event_elapsed_time() << " ms\n";
     }
 
-    HIP_ASSERT(hipDeviceSynchronize());
+    device_synchronize();
 
     std::cout << "Execution done.\n";
 
-    HIP_ASSERT(hipMemcpy(h_a, d_a, n_bytes, hipMemcpyDeviceToHost));
+    device_memcpy_d2h(h_a, d_a, n_bytes);
 
-    HIP_ASSERT(hipEventDestroy(start));
-    HIP_ASSERT(hipEventDestroy(stop));
+    device_event_destroy();
 
-    HIP_ASSERT(hipFree(d_a));
-    HIP_ASSERT(hipFree(d_lengths));
-    HIP_ASSERT(hipFree(d_strides));
-    HIP_ASSERT(hipFree(d_twd));
+    device_free(d_a);
+    device_free(d_lengths);
+    device_free(d_strides);
+    device_free(d_twd);
     free(h_twd);
     free(h_a);
 
