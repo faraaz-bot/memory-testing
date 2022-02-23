@@ -4,8 +4,6 @@
 
 #ifndef COMMON_H
 #define COMMON_H
-#include <hip/hip_runtime.h>
-#include <hip/hip_vector_types.h>
 
 #ifdef WIN32
 #define ROCFFT_DEVICE_EXPORT __declspec(dllexport)
@@ -78,6 +76,11 @@ __device__ inline double2 operator-(const double2& a)
 {
     return cuCmul(a, make_double2(-1.0, -1.0));
 }
+
+#else
+
+#include <hip/hip_runtime.h>
+#include <hip/hip_vector_types.h>
 
 #endif
 

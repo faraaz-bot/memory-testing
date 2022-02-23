@@ -23,7 +23,7 @@
 #ifndef ROCFFT_DEVICE_CALLBACK_H
 #define ROCFFT_DEVICE_CALLBACK_H
 
-#include <hip/hip_vector_types.h>
+#include "runtime_api_wrapper.h"
 
 // user-provided data saying what callbacks to run
 struct UserCallbacks

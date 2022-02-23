@@ -1243,12 +1243,12 @@ int fft_64_2nd(int trial, bool isRef)
 
     for(int i = 0; i < n; i++)
     {
-        h_a[i] = scalar_type(i + 1, i + 1);
+        h_a[i].x  = h_a[i].y = i + 1;
     }
 
     for(int i = 0; i < 64; i++)
     {
-        h_twd[i] = scalar_type(i * 2, i * 2);
+        h_twd[i].x =  h_twd[i].y = i * 2;
     }
 
     int h_lengths[4];
@@ -1267,7 +1267,7 @@ int fft_64_2nd(int trial, bool isRef)
 
     for(int i = 0; i < n; i++)
     {
-        h_a[i] = scalar_type(0, 0);
+        h_a[i].x  = h_a[i].y = 0;
     }
 
     device_event_create();
