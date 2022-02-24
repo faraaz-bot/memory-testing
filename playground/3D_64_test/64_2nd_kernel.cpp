@@ -8,6 +8,18 @@
 #include <stdlib.h>
 #include <vector>
 
+__device__ int get_1d_global_idx()
+{
+
+    int blockId = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
+
+    int threadId = blockId * (blockDim.x * blockDim.y * blockDim.z)
+                   + (threadIdx.z * (blockDim.x * blockDim.y)) + (threadIdx.y * blockDim.x)
+                   + threadIdx.x;
+
+    return threadId;
+}
+
 const float loc_PI      = 3.1415926535897932384626433832795f;
 const float loc_SQRT1_2 = 0.70710678118654752440084436210485f;
 typedef struct
@@ -69,43 +81,55 @@ extern "C" __launch_bounds__(512) __global__
     {
         inoutID = (1 * (threadIdx.y + 0) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+        // if(get_1d_global_idx() == 0 || get_1d_global_idx() == 64)
+        // {
+        //     printf("glb2reg: thread %d, 1st glb_offset %d\n",
+        //            (int)get_1d_global_idx(),
+        //            (int)(inoutID));
+        // }
         temp_0  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 8) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+        // if(get_1d_global_idx() == 0 || get_1d_global_idx() == 64)
+        // {
+        //     printf("glb2reg: thread %d, 2nd glb_offset %d\n",
+        //            (int)get_1d_global_idx(),
+        //            (int)(inoutID));
+        // }
         temp_1  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 16) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_2  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 24) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_3  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 32) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_4  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 40) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_5  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 48) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_6  = inputs[inoutID];
         inoutID = (1 * (threadIdx.y + 56) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                    + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         temp_7 = inputs[inoutID];
     }
     if((((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
@@ -223,47 +247,49 @@ extern "C" __launch_bounds__(512) __global__
         sdataID           = inoutID + 0;
         sdataID           = sharedStride * sdataID;
         sdataID           = sdataID + threadIdx.x;
-        // if(blockIdx.x == 0 && threadIdx.x < 64 && threadIdx.y <= 1 && blockIdx.z == 0)
-        // {
-        //     printf("lds 1st read : thread %d, threadIdx.y %d, offset %d\n",
-        //            (int)threadIdx.x,
-        //            (int)threadIdx.y,
+        sdata[sdataID]    = temp_0;
+        sdataID           = inoutID + 1;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_1;
+        sdataID           = inoutID + 2;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_2;
+        sdataID           = inoutID + 3;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_3;
+        sdataID           = inoutID + 4;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_4;
+        sdataID           = inoutID + 5;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_5;
+        sdataID           = inoutID + 6;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_6;
+        sdataID           = inoutID + 7;
+        sdataID           = sharedStride * sdataID;
+        sdataID           = sdataID + threadIdx.x;
+        sdata[sdataID]    = temp_7;
 
-        //            (int)sdataID);
-        // }
-        sdata[sdataID] = temp_0;
-        sdataID        = inoutID + 1;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        // if(blockIdx.x == 0 && threadIdx.x < 64 && threadIdx.y == 0 && blockIdx.z == 0)
+        // if(get_1d_global_idx() < 8 || get_1d_global_idx() == 64)
         // {
-        //     printf("lds 2nd read : thread %d, offset %d\n", (int)threadIdx.x, (int)sdataID);
+        //     printf("reg2lds: thread %d, lds_offset %d, %d, %d, %d, %d, %d, %d, %d\n",
+        //            (int)get_1d_global_idx(),
+        //            (int)((inoutID + 0) * 64 + threadIdx.x),
+        //            (int)((inoutID + 1) * 64 + threadIdx.x),
+        //            (int)((inoutID + 2) * 64 + threadIdx.x),
+        //            (int)((inoutID + 3) * 64 + threadIdx.x),
+        //            (int)((inoutID + 4) * 64 + threadIdx.x),
+        //            (int)((inoutID + 5) * 64 + threadIdx.x),
+        //            (int)((inoutID + 6) * 64 + threadIdx.x),
+        //            (int)((inoutID + 7) * 64 + threadIdx.x));
         // }
-        sdata[sdataID] = temp_1;
-        sdataID        = inoutID + 2;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_2;
-        sdataID        = inoutID + 3;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_3;
-        sdataID        = inoutID + 4;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_4;
-        sdataID        = inoutID + 5;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_5;
-        sdataID        = inoutID + 6;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_6;
-        sdataID        = inoutID + 7;
-        sdataID        = sharedStride * sdataID;
-        sdataID        = sdataID + threadIdx.x;
-        sdata[sdataID] = temp_7;
     }
     __syncthreads();
 
@@ -274,20 +300,28 @@ extern "C" __launch_bounds__(512) __global__
         stageInvocationID = (threadIdx.y + 0) % (8);
         LUTId             = stageInvocationID + 3;
         temp_0            = sdata[sharedStride * (threadIdx.y + 0) + threadIdx.x];
-        // if(blockIdx.x == 0 && threadIdx.x < 64 && threadIdx.y == 0 && blockIdx.z == 0)
+        temp_1            = sdata[sharedStride * (threadIdx.y + 8) + threadIdx.x];
+        temp_2            = sdata[sharedStride * (threadIdx.y + 16) + threadIdx.x];
+        temp_3            = sdata[sharedStride * (threadIdx.y + 24) + threadIdx.x];
+        temp_4            = sdata[sharedStride * (threadIdx.y + 32) + threadIdx.x];
+        temp_5            = sdata[sharedStride * (threadIdx.y + 40) + threadIdx.x];
+        temp_6            = sdata[sharedStride * (threadIdx.y + 48) + threadIdx.x];
+        temp_7            = sdata[sharedStride * (threadIdx.y + 56) + threadIdx.x];
+
+        // if(get_1d_global_idx() < 8 || get_1d_global_idx() == 64)
         // {
-        //     printf("lds 1st and 2nd write: thread %d, offset %d, %d\n",
-        //            (int)threadIdx.x,
+        //     printf("lds2reg: thread %d, lds_ffset %d, %d, %d, %d, %d, %d, %d, %d\n",
+        //            (int)get_1d_global_idx(),
         //            (int)(sharedStride * (threadIdx.y + 0) + threadIdx.x),
-        //            (int)(sharedStride * (threadIdx.y + 8) + threadIdx.x));
+        //            (int)(sharedStride * (threadIdx.y + 8) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 16) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 24) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 32) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 40) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 48) + threadIdx.x),
+        //            (int)(sharedStride * (threadIdx.y + 56) + threadIdx.x));
         // }
-        temp_1   = sdata[sharedStride * (threadIdx.y + 8) + threadIdx.x];
-        temp_2   = sdata[sharedStride * (threadIdx.y + 16) + threadIdx.x];
-        temp_3   = sdata[sharedStride * (threadIdx.y + 24) + threadIdx.x];
-        temp_4   = sdata[sharedStride * (threadIdx.y + 32) + threadIdx.x];
-        temp_5   = sdata[sharedStride * (threadIdx.y + 40) + threadIdx.x];
-        temp_6   = sdata[sharedStride * (threadIdx.y + 48) + threadIdx.x];
-        temp_7   = sdata[sharedStride * (threadIdx.y + 56) + threadIdx.x];
+
         w        = twiddleLUT[LUTId];
         loc_0.x  = temp_4.x * w.x - temp_4.y * w.y;
         loc_0.y  = temp_4.y * w.x + temp_4.x * w.y;
@@ -394,55 +428,67 @@ extern "C" __launch_bounds__(512) __global__
         inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 0) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+        // if(get_1d_global_idx() == 0 || get_1d_global_idx() == 64)
+        // {
+        //     printf("reg2glb: thread %d, 1st glb_offset %d\n",
+        //            (int)get_1d_global_idx(),
+        //            (int)(inoutID));
+        // }
         outputs[inoutID] = temp_0;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 8) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+        // if(get_1d_global_idx() == 0 || get_1d_global_idx() == 64)
+        // {
+        //     printf("reg2glb: thread %d, 2nd glb_offset %d\n",
+        //            (int)get_1d_global_idx(),
+        //            (int)(inoutID));
+        // }
         outputs[inoutID] = temp_1;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 16) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_2;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 24) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_3;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 32) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_4;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 40) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_5;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 48) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_6;
         inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
                   + (1 * (threadIdx.y + 56) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
                      + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 4096
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 64;
+                        * 64
+                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
         outputs[inoutID] = temp_7;
     }
 }
 
-__global__ void fft_64_2nd_kernel(float2* inputs, float2* outputs)
+__global__ void fft_64_2nd_copy_kernel(float2* inputs, float2* outputs)
 {
     unsigned int sharedStride = 64;
     //float2*      sdata        = (float2*)shared;
@@ -638,7 +684,7 @@ __global__ void fft_64_2nd_kernel(float2* inputs, float2* outputs)
 //         h_a[i] = float2(0, 0);
 //     }
 
-//     fft_64_2nd_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+//     fft_64_2nd_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
 
 //     HIP_ASSERT(hipDeviceSynchronize());
 
@@ -1243,12 +1289,12 @@ int fft_64_2nd(int trial, bool isRef)
 
     for(int i = 0; i < n; i++)
     {
-        h_a[i].x  = h_a[i].y = i + 1;
+        h_a[i].x = h_a[i].y = i + 1;
     }
 
     for(int i = 0; i < 64; i++)
     {
-        h_twd[i].x =  h_twd[i].y = i * 2;
+        h_twd[i].x = h_twd[i].y = i * 2;
     }
 
     int h_lengths[4];
@@ -1267,7 +1313,7 @@ int fft_64_2nd(int trial, bool isRef)
 
     for(int i = 0; i < n; i++)
     {
-        h_a[i].x  = h_a[i].y = 0;
+        h_a[i].x = h_a[i].y = 0;
     }
 
     device_event_create();
@@ -1281,7 +1327,7 @@ int fft_64_2nd(int trial, bool isRef)
         // warm up
         VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a, d_twd);
 
-        //fft_64_2nd_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+        //fft_64_2nd_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
         // Debug only, verify pure copy quickly
         // device_memcpy_d2h(h_a, d_a, n_bytes);
         // for(int i = 0; i < n; i++)
@@ -1298,7 +1344,7 @@ int fft_64_2nd(int trial, bool isRef)
         for(int itrial = 0; itrial < trial; ++itrial)
         {
             VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a, d_twd);
-            // fft_64_2nd_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+            // fft_64_2nd_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
         }
         device_event_record_stop();
         device_event_synchronize_stop();
@@ -1389,5 +1435,6 @@ int main()
     std::cout << "rocFFT...\n";
     fft_64_2nd<float2>(20, 0);
 
+    //fft_64_2nd<float2>(0, 1);
     return 0;
 }
