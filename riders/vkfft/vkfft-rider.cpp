@@ -13,7 +13,7 @@ class vkfft_params : public fft_params
 };
 
 // mostly lifed from VkFFT
-VkFFTResult launch_vkfft(vkfft_params params) {
+VkFFTResult launch_vkfft(const vkfft_params& params, std::vector<double> &gpu_time) {
 
     VkGPU vkGPU = {};
     VkFFTResult resFFT = VKFFT_SUCCESS;
@@ -85,10 +85,12 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     
     resFFT = transferDataFromCPU(&vkGPU, (void*)gpu_input[0].data(), &buffer, bufferSize);
 
-    if (resFFT != VKFFT_SUCCESS) return resFFT;
+    if (resFFT != VKFFT_SUCCESS)
+        return resFFT;
 
     resFFT = initializeVkFFT(&app, configuration);
-    if (resFFT != VKFFT_SUCCESS) return resFFT;
+    if (resFFT != VKFFT_SUCCESS)
+        return resFFT;
 
     VkFFTLaunchParams launchParams = {};
 
@@ -96,13 +98,17 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     commandBufferAllocateInfo.commandPool = vkGPU.commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = 1;
+    
     VkCommandBuffer commandBuffer = {};
     res = vkAllocateCommandBuffers(vkGPU.device, &commandBufferAllocateInfo, &commandBuffer);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_ALLOCATE_COMMAND_BUFFERS;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_ALLOCATE_COMMAND_BUFFERS;
+    
     VkCommandBufferBeginInfo commandBufferBeginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
     commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     res = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_BEGIN_COMMAND_BUFFER;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_BEGIN_COMMAND_BUFFER;
 
     launchParams.commandBuffer = &commandBuffer;
 
@@ -114,23 +120,74 @@ VkFFTResult launch_vkfft(vkfft_params params) {
     }
 
     res = vkEndCommandBuffer(commandBuffer);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_END_COMMAND_BUFFER;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_END_COMMAND_BUFFER;
+    
     VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
+    
+    
+    // https://stackoverflow.com/questions/67358235/how-to-measure-execution-time-of-vulkan-pipeline
+
+    // https://www.reddit.com/r/vulkan/comments/nfxt6n/problems_with_vkcmdwritetimestamp/
+
+    VkQueryPoolCreateInfo createInfo{};
+    VkPhysicalDeviceHostQueryResetFeatures resetFeatures;
+    createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    createInfo.pNext = nullptr;
+    createInfo.flags = 0;
+    createInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    createInfo.queryCount = 2;
+
+    createInfo.pNext = &resetFeatures;
+
+    VkQueryPool_T* queryPool;
+    vkCreateQueryPool(vkGPU.device, &createInfo, nullptr, &queryPool);
+	
+    vkCmdResetQueryPool(commandBuffer, queryPool, 0, 2);
+    
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+
     std::chrono::steady_clock::time_point timeSubmit = std::chrono::steady_clock::now();
+
+
     res = vkQueueSubmit(vkGPU.queue, 1, &submitInfo, vkGPU.fence);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_SUBMIT_QUEUE;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_SUBMIT_QUEUE;
+
+    
     res = vkWaitForFences(vkGPU.device, 1, &vkGPU.fence, VK_TRUE, 100000000000);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_WAIT_FOR_FENCES;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_WAIT_FOR_FENCES;
+    
     std::chrono::steady_clock::time_point timeEnd = std::chrono::steady_clock::now();
+
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
+
+    
+    
+    VkResult result;
+    uint64_t timingRes[2]={ 0 };
+    result = vkGetQueryPoolResults(vkGPU.device, queryPool, 0, 2, sizeof(uint64_t) * 2, timingRes, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+    if (result == VK_NOT_READY)
+    {
+        std::cout << "not ready" << std::endl;
+    }
+    //vkResetQueryPool(vkGPU.device, queryPool, 0, 2);
+    vkDestroyQueryPool(vkGPU.device, queryPool, VK_NULL_HANDLE);
+
+    std::cout << timingRes[0] << std::endl;
+    std::cout << timingRes[1] << std::endl;
+
     double totTime = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeSubmit).count() * 0.001;
 
     std::cout << "Total time: " << totTime << std::endl;
 
     res = vkResetFences(vkGPU.device, 1, &vkGPU.fence);
-    if (res != 0) return VKFFT_ERROR_FAILED_TO_RESET_FENCES;
+    if (res != 0)
+        return VKFFT_ERROR_FAILED_TO_RESET_FENCES;
 
     // vkFreeCommandBuffers(vkGPU.device, vkGPU.commandPool, 1, &commandBuffer);
 
@@ -221,7 +278,11 @@ int main(int argc, char* argv[])
     params.valid(true);
     std::cout << params.str() << std::endl;
 
-    auto ret = launch_vkfft(params);
+    
+    // Run the transform several times and record the execution time:
+    std::vector<double> gpu_time(ntrial);
+    
+    auto ret = launch_vkfft(params, gpu_time);
 
     std::cout << ret << std::endl;
 }
