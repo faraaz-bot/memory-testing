@@ -14,7 +14,8 @@ add_compile_definitions(VKFFT_BACKEND=2)
 target_include_directories( vkfft-hip-rider PUBLIC
   ${VKFFT_DIR}/include
   ${VKFFT_SRC_DIR}
-  ${ROCFFT_SRC_DIR}/clients)
+  ${ROCFFT_SRC_DIR}/clients
+  ${ROCFFT_SRC_DIR}/shared)
 
 add_library( VkFFT INTERFACE )
 target_compile_definitions( VkFFT INTERFACE -DVKFFT_BACKEND=2 )

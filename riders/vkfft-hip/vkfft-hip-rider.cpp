@@ -12,15 +12,21 @@
 #include "vkFFT.h"
 #include "benchmark_scripts/vkFFT_scripts/include/utils_VkFFT.h"
 
-#include "fft_params.h"
+#include "vkfft_params.h"
+
+#include "gpubuf.h"
+
+int verbose = 3;
 
 int main()
 {
-    fft_params params;
+    vkfft_params params;
 
     params.length = {8};
     params.nbatch = 1;
 
+    params.validate();
+    
     std::cout << params.token() << std::endl;
 
     if(hipInit(0) != hipSuccess)
@@ -28,125 +34,92 @@ int main()
         throw std::runtime_error("hipInit failed");
     }
 
-    VkGPU vkGPU = {};
-    vkGPU.device = 0;
-    
-    if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
+    if(params.create_plan() != fft_status_success)
     {
-        throw std::runtime_error("hipSetDevice failed");
+        throw std::runtime_error("plan creation failed");
     }
-    if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
+    
+    // Input data:
+    auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
+    compute_input(params, gpu_input);
+    if(verbose > 1)
     {
-        throw std::runtime_error("hipGetDevice failed");
+        std::cout << "GPU input:\n";
+        params.print_ibuffer(gpu_input);
     }
-    if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
+    
+    // GPU input and output buffers:
+    auto                ibuffer_sizes = params.ibuffer_sizes();
+    std::vector<gpubuf> ibuffer(ibuffer_sizes.size());
+    std::vector<void*>  pibuffer(ibuffer_sizes.size());
+    for(unsigned int i = 0; i < ibuffer.size(); ++i)
     {
-        throw std::runtime_error("hipCtxCreate failed");
+        if( ibuffer[i].alloc(ibuffer_sizes[i]) != hipSuccess)
+        {
+            throw std::runtime_error("ibuffer alloc failed");
+        }
+        pibuffer[i] = ibuffer[i].data();
     }
-    
-    // TODO: set all params data.
-
-    VkFFTConfiguration configuration = {};
-    
-    // So, looks like vkFFT ignores the fft dim, and actually looks at all of the 3 dims, so set
-    // them to one by default.
-    configuration.size[0] = 1;
-    configuration.size[1] = 1;
-    configuration.size[2] = 1;
-    
-    configuration.FFTdim = params.length.size();
-    for (int i = 0; i< params.length.size(); ++i) {
-        configuration.size[i] = params.length[i];
-    }
-    configuration.numberBatches = params.nbatch;
-
-    // No discrete cosine transform.
-    configuration.performDCT = false;
-    
-    configuration.performR2C = (params.transform_type == fft_transform_type_real_forward ||
-                                params.transform_type == fft_transform_type_real_inverse);
-    
-    configuration.doublePrecision = params.precision == fft_precision_single ? 0 : 1;
-
-    configuration.disableReorderFourStep = 0;
-    configuration.registerBoost = 0;
-    //configuration.isCompilerInitialized = 0;
-    
-    configuration.device = &vkGPU.device;
-
-    const size_t storageComplexSize = params.precision == fft_precision_double ? sizeof(std::complex<double>) : sizeof(std::complex<float>);
-    
-    // Allocate buffer for the input data.
-    // Assumed contiguous for now.
-    uint64_t bufferSize = 0;
-    if (params.transform_type == fft_transform_type_real_forward || params.transform_type == fft_transform_type_real_inverse) {
-        bufferSize = (uint64_t)(storageComplexSize / 2) * (configuration.size[0] + 2)
-            * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
-    }
-    else {
-        bufferSize = (uint64_t)storageComplexSize
-            * configuration.size[0] * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
-    }
-             
-    hipDoubleComplex* buffer = 0;
-    if( hipMalloc((void**)&buffer, bufferSize) != hipSuccess)
+    std::vector<gpubuf>  obuffer_data;
+    std::vector<gpubuf>* obuffer = &obuffer_data;
+    if(params.placement == fft_placement_inplace)
     {
-        throw std::runtime_error("hipMalloc failed");
+        obuffer = &ibuffer;
     }
-    configuration.buffer = (void**)&buffer;
-                        
-    configuration.bufferSize = &bufferSize;
-
-    VkFFTLaunchParams launchParams = {};
+    else
+    {
+        auto obuffer_sizes = params.obuffer_sizes();
+        obuffer_data.resize(obuffer_sizes.size());
+        for(unsigned int i = 0; i < obuffer_data.size(); ++i)
+        {
+            if(obuffer_data[i].alloc(obuffer_sizes[i]) != hipSuccess)
+            {
+                throw std::runtime_error("obuffer alloc failed");
+            }
+        }
+    }
+    std::vector<void*> pobuffer(obuffer->size());
+    for(unsigned int i = 0; i < obuffer->size(); ++i)
+    {
+        pobuffer[i] = obuffer->at(i).data();
+    }
     
-    std::vector<std::complex<double>> idata(std::accumulate(params.length.begin(),
-                                                            params.length.end(),
-                                                            static_cast<size_t>(1),
-                                                            std::multiplies<size_t>()));
-    // Intitilize the 1D data for now.
-    for(int i = 0; i < params.length[0]; ++i)
+    // Warm up once:
+    for(int idx = 0; idx < gpu_input.size(); ++idx)
     {
-        idata[i] = std::complex<double>(i, i);
+        if(hipMemcpy(pibuffer[idx],
+                     gpu_input[idx].data(),
+                     gpu_input[idx].size(),
+                     hipMemcpyHostToDevice)
+           != hipSuccess)
+        {
+                throw std::runtime_error("obuffer alloc failed");
+        }
     }
-    std::cout << "input:";
-    for(const auto& val : idata)
+    
+    if(params.execute(pibuffer.data(), pobuffer.data()) != fft_status_success)
     {
-        std::cout << " " << val;
+        throw std::runtime_error("exec failed");
     }
-    std::cout << std::endl;
-    if(hipMemcpy(buffer, idata.data(), idata.size() * sizeof(decltype(idata)::value_type), hipMemcpyHostToDevice) !=  hipSuccess)
+    
+    if(verbose > 2)
     {
-        throw std::runtime_error("hipMemcpy failed");
+        auto output = allocate_host_buffer(params.precision, params.otype, params.osize);
+        for(int idx = 0; idx < output.size(); ++idx)
+        {
+            if( hipMemcpy(output[idx].data(),
+                          pobuffer[idx],
+                          output[idx].size(),
+                          hipMemcpyDeviceToHost)
+                != hipSuccess)
+            {
+                throw std::runtime_error("obuffer hipMemcpy failed");
+            }
+        }
+        std::cout << "GPU output:\n";
+        params.print_obuffer(output);
     }
 
-    VkFFTApplication app = {};
-    if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
-    {
-        throw std::runtime_error("initializeVkFFT failed");
-    }
-    
-    // -1 for forward.
-    if(VkFFTAppend(&app, -1, &launchParams) !=  VKFFT_SUCCESS)
-    {
-        throw std::runtime_error("VkFFTAppend failed");
-    }
-
-
-    std::vector<std::complex<double>> odata(std::accumulate(params.length.begin(),
-                                                            params.length.end(),
-                                                            static_cast<size_t>(1),
-                                                            std::multiplies<size_t>()));
-    if(hipMemcpy(odata.data(), buffer, odata.size() * sizeof(decltype(odata)::value_type), hipMemcpyDeviceToHost) !=  hipSuccess)
-    {
-        throw std::runtime_error("hipMemcpy failed");
-    }
-
-    std::cout << "output:";
-    for(const auto& val : odata)
-    {
-        std::cout << " " << val;
-    }
-    std::cout << std::endl;
     
     return 0;
 }
