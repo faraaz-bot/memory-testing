@@ -15,8 +15,8 @@ add_compile_definitions(VKFFT_BACKEND=2)
 
 target_include_directories( vkfft-hip-rider PUBLIC
   $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
-  ${VKFFT_DIR}/include
-  ${VKFFT_SRC_DIR}
+  ${VKFFT_SRC_DIR}/include
+  ${VKFFT_SRC_DIR}/vkFFT
   ${ROCFFT_SRC_DIR}/clients
   ${ROCFFT_SRC_DIR}/shared)
 

@@ -101,7 +101,8 @@ int main(int argc, char* argv[])
             std::cout << "Unable to parse token." << std::endl;
             exit(1);
         }
-    }    else
+    }
+    else
     {
         if(!vm.count("length"))
         {
