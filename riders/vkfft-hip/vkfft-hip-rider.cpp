@@ -315,24 +315,12 @@ int main(int argc, char* argv[])
         }
 
         float time;
-        hipEventElapsedTime(&time, start, stop);
+        if(hipEventElapsedTime(&time, start, stop) !=  hipSuccess)
+        {
+            throw std::runtime_error("hipEventElapsedTime failed");
+        }
         gpu_time[itrial] = time;
 
-        if(verbose > 2)
-        {
-            auto output = allocate_host_buffer(params.precision, params.otype, params.osize);
-            for(int idx = 0; idx < output.size(); ++idx)
-            {
-                if(hipMemcpy(
-                       output[idx].data(), pobuffer[idx], output[idx].size(), hipMemcpyDeviceToHost)
-                   !=  hipSuccess)
-                {
-                    throw std::runtime_error("obuffer hipMemcpy failed");
-                }
-            }
-            std::cout << "GPU output:\n";
-            params.print_obuffer(output);
-        }
     }
 
     std::cout << "\nExecution gpu time:";

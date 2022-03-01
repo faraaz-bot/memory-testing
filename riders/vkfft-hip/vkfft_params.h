@@ -25,108 +25,116 @@ public:
     
 
     fft_status create_plan() override
-        {    
-            vkGPU.device = 0;
+    {    
+	vkGPU.device = 0;
     
-            if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
-            {
-                throw std::runtime_error("hipSetDevice failed");
-            }
-            if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
-            {
-                throw std::runtime_error("hipGetDevice failed");
-            }
-            if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
-            {
-                throw std::runtime_error("hipCtxCreate failed");
-            }
+	if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
+	{
+	    throw std::runtime_error("hipSetDevice failed");
+	}
+	if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
+	{
+	    throw std::runtime_error("hipGetDevice failed");
+	}
+	if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
+	{
+	    throw std::runtime_error("hipCtxCreate failed");
+	}
         
-    
-        // So, looks like vkFFT ignores the fft dim, and actually looks at all of the 3 dims, so set
-        // them to one by default.
-        configuration.size[0] = 1;
-        configuration.size[1] = 1;
-        configuration.size[2] = 1;
-    
-        configuration.FFTdim = length.size();
-        for (int i = 0; i< length.size(); ++i) {
-            configuration.size[i] = length[i];
-        }
-        configuration.numberBatches = nbatch;
 
-        // No discrete cosine transform.
-        configuration.performDCT = false;
-    
-        configuration.performR2C = (transform_type == fft_transform_type_real_forward ||
-                                    transform_type == fft_transform_type_real_inverse);
-    
-        configuration.doublePrecision = precision == fft_precision_single ? 0 : 1;
+        
 
-        configuration.disableReorderFourStep = 0;
-        configuration.registerBoost = 0;
-        //configuration.isCompilerInitialized = 0;
+	configuration.FFTdim = length.size();
+            
+	// So, looks like vkFFT ignores the fft dim, and actually looks at all of the 3 dims, so set
+	// them to one by default.
+	configuration.size[0] = 1;
+	configuration.size[1] = 1;
+	configuration.size[2] = 1;
+	for (int i = 0; i < length.size(); ++i) {
+	    configuration.size[i] = length[i];
+	}
+        
+	configuration.isInputFormatted = 1;
+	configuration.inputBufferStride[0] = 1;
+	configuration.inputBufferStride[1] = 1;
+	configuration.inputBufferStride[2] = 1;
+	for (int i = 0; i < istride.size(); ++i) {
+	    configuration.inputBufferStride[i] = istride[i];
+	}
+
+	configuration.isOutputFormatted = 1;
+	configuration.outputBufferStride[0] = 1;
+	configuration.outputBufferStride[1] = 1;
+	configuration.outputBufferStride[2] = 1;
+	for (int i = 0; i < istride.size(); ++i) {
+	    configuration.outputBufferStride[i] = ostride[i];
+	}
+        
+	configuration.numberBatches = nbatch;
+
+	// No discrete cosine transform.
+	configuration.performDCT = false;
     
-        configuration.device = &vkGPU.device;
+	configuration.performR2C = (transform_type == fft_transform_type_real_forward ||
+				    transform_type == fft_transform_type_real_inverse);
+    
+	configuration.doublePrecision = precision == fft_precision_single ? 0 : 1;
+
+	configuration.disableReorderFourStep = 0;
+	configuration.registerBoost = 0;
+	//configuration.isCompilerInitialized = 0;
+    
+	configuration.device = &vkGPU.device;
 
 
-        const size_t storageComplexSize = precision == fft_precision_double
-            ? sizeof(std::complex<double>) : sizeof(std::complex<float>);
+	const size_t storageComplexSize = precision == fft_precision_double
+	    ? sizeof(std::complex<double>) : sizeof(std::complex<float>);
     
-        // Allocate buffer for the input data.
-        // Assumed contiguous for now.
-        uint64_t bufferSize = 0;
-        if (transform_type == fft_transform_type_real_forward
-            || transform_type == fft_transform_type_real_inverse) {
-            bufferSize = (uint64_t)(storageComplexSize / 2) * (configuration.size[0] + 2)
-                * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
-        }
-        else {
-            bufferSize = (uint64_t)storageComplexSize
-                * configuration.size[0] * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
-        }
+	// Allocate buffer for the input data.
+	// Assumed contiguous for now.
+	uint64_t bufferSize = 0;
+	if (transform_type == fft_transform_type_real_forward
+	    || transform_type == fft_transform_type_real_inverse) {
+	    bufferSize = (uint64_t)(storageComplexSize / 2) * (configuration.size[0] + 2)
+		* configuration.size[1] * configuration.size[2] * configuration.numberBatches;
+	}
+	else {
+	    bufferSize = (uint64_t)storageComplexSize
+		* configuration.size[0] * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
+	}
              
 
-        configuration.bufferSize = &bufferSize;
+	configuration.bufferSize = &bufferSize;
         
-            return fft_status_success;
-        }
+	if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
+	{
+	    throw std::runtime_error("initializeVkFFT failed");
+	}
+	return fft_status_success;
+    }
     
     virtual fft_status execute(void** in, void** out) override
     {
-        return execute(in[0], out[0]);
+	return execute(in[0], out[0]);
     };
 
     fft_status execute(void* ibuffer, void* obuffer)
     {
-
-        // Ok, so it seems that initializeVkFFT eats up a lot of time (RTC?), but one needs to pass
-        // the data buffers via the configuration struct, so that means that we are going to hack
-        // things so that we just do that once.
-        if(configuration.buffer != (void**)&ibuffer)
-        {
-            configuration.buffer = (void**)&ibuffer;
-
-            // TODO: deal with output buffer
-                        
-
-            if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
-            {
-                throw std::runtime_error("initializeVkFFT failed");
-            }
-        }
-    
-        VkFFTLaunchParams launchParams = {};
+	VkFFTLaunchParams launchParams = {};
+	launchParams.buffer = (void**)&ibuffer;
+	if(placement == fft_placement_notinplace)
+	{
+	    launchParams.outputBuffer = (void**)&obuffer;
+	}
+                
+	const int direction = (transform_type == fft_transform_type_complex_forward ||
+			       transform_type == fft_transform_type_real_forward ) ? -1 : 1;
         
+	if(VkFFTAppend(&app, direction, &launchParams) ==  VKFFT_SUCCESS)
+	    return fft_status_success;
         
-        const int direction = (transform_type == fft_transform_type_complex_forward ||
-                               transform_type == fft_transform_type_real_forward ) ? -1 : 1;
-        
-        if(VkFFTAppend(&app, direction, &launchParams) ==  VKFFT_SUCCESS)
-            return fft_status_success;
-        
-        
-        // FIXME: implement
-        return fft_status_failure;
+	return fft_status_failure;
     }
 };
 
