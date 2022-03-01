@@ -19,123 +19,28 @@ public:
     vkfft_params(const vkfft_params&) = delete;
     vkfft_params& operator=(const vkfft_params&) = delete;
     
-    // VkFFTConfiguration configuration = {};
-    // VkGPU vkGPU = {};
-    // //VkFFTApplication app = {};
+    VkFFTConfiguration configuration = {};
+    VkGPU vkGPU = {};
+    VkFFTApplication app = {};
     
-    fft_status setup_structs()
-    {
-        
-        // vkGPU.device = 0;
-        
-        // if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
-        // {
-        //     throw std::runtime_error("hipSetDevice failed");
-        // }
-        // if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
-        // {
-        //     throw std::runtime_error("hipGetDevice failed");
-        // }
-        // if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
-        // {
-        //     throw std::runtime_error("hipCtxCreate failed");
-        // }
-        
-        // // So, looks like vkFFT ignores the fft dim, and actually looks at all of the 3 dims, so set
-        // // them to one by default.
-        // configuration.size[0] = 1;
-        // configuration.size[1] = 1;
-        // configuration.size[2] = 1;
-        
-        // configuration.FFTdim = length.size();
-        // for (int i = 0; i < length.size(); ++i) {
-        //     configuration.size[i] = length[i];
-        // }
-        // configuration.numberBatches = nbatch;
+
+    fft_status create_plan() override
+        {    
+            vkGPU.device = 0;
     
-        // configuration.doublePrecision = precision == fft_precision_single ? 0 : 1;
+            if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
+            {
+                throw std::runtime_error("hipSetDevice failed");
+            }
+            if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
+            {
+                throw std::runtime_error("hipGetDevice failed");
+            }
+            if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
+            {
+                throw std::runtime_error("hipCtxCreate failed");
+            }
         
-        // configuration.disableReorderFourStep = 0;
-        // configuration.registerBoost = 0;
-
-        // configuration.device = &vkGPU.device;
-        
-        // // No discrete cosine transform.
-        // configuration.performDCT = false;
-    
-        // configuration.performR2C = (transform_type == fft_transform_type_real_forward ||
-        //                             transform_type == fft_transform_type_real_inverse);
-    
-        
-        // configuration.disableReorderFourStep = 0;
-        // configuration.registerBoost = 0;
-        // //configuration.isCompilerInitialized = 0;
-    
-        return fft_status_success;
-    }
-
-    virtual fft_status execute(void** in, void** out) override
-    {
-        return execute(in[0], out[0]);
-    };
-
-    fft_status execute(void* ibuffer, void* obuffer)
-    {
-       
-        // //configuration.buffer = (void**)&ibuffer;
-        
-        // // TODO: generalize
-        // const size_t storageComplexSize = precision == fft_precision_double
-        //     ? sizeof(std::complex<double>) : sizeof(std::complex<float>);
-        // if (transform_type == fft_transform_type_real_forward
-        //     || transform_type == fft_transform_type_real_inverse) {
-        //     bufferSize = (uint64_t)(storageComplexSize / 2) * (configuration.size[0] + 2)
-        //         * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
-        // }
-        // else {
-        //     bufferSize = (uint64_t)storageComplexSize
-        //         * configuration.size[0]
-        //         * configuration.size[1]
-        //         * configuration.size[2] *
-        //         configuration.numberBatches;
-        // }
-
-        
-        // // FIXME: temp
-        // hipDoubleComplex* buffer = 0;
-        // if( hipMalloc((void**)&buffer, bufferSize) != hipSuccess)
-        // {
-        //     throw std::runtime_error("hipMalloc failed");
-        // }
-        // configuration.buffer = (void**)&buffer;
-        
-        // configuration.bufferSize = &bufferSize;
-
-        // VkFFTApplication app = {};
-        // if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
-        // {
-        //     throw std::runtime_error("initializeVkFFT failed");
-        // }
-        
-        // VkFFTLaunchParams launchParams = {};
-
-        VkGPU vkGPU = {};
-        vkGPU.device = 0;
-    
-        if(hipSetDevice((int)vkGPU.device_id) != hipSuccess)
-        {
-            throw std::runtime_error("hipSetDevice failed");
-        }
-        if( hipDeviceGet(&vkGPU.device, (int)vkGPU.device_id) != hipSuccess)
-        {
-            throw std::runtime_error("hipGetDevice failed");
-        }
-        if(hipCtxCreate(&vkGPU.context, 0, (int)vkGPU.device) != hipSuccess)
-        {
-            throw std::runtime_error("hipCtxCreate failed");
-        }
-
-        VkFFTConfiguration configuration = {};
     
         // So, looks like vkFFT ignores the fft dim, and actually looks at all of the 3 dims, so set
         // them to one by default.
@@ -163,6 +68,7 @@ public:
     
         configuration.device = &vkGPU.device;
 
+
         const size_t storageComplexSize = precision == fft_precision_double
             ? sizeof(std::complex<double>) : sizeof(std::complex<float>);
     
@@ -179,19 +85,25 @@ public:
                 * configuration.size[0] * configuration.size[1] * configuration.size[2] * configuration.numberBatches;
         }
              
-        hipDoubleComplex* buffer = 0;
-        if( hipMalloc((void**)&buffer, bufferSize) != hipSuccess)
-        {
-            throw std::runtime_error("hipMalloc failed");
-        }
-        
-        configuration.buffer = (void**)&ibuffer;
-        //configuration.buffer = (void**)&buffer;
-                        
+
         configuration.bufferSize = &bufferSize;
+        
+            return fft_status_success;
+        }
+    
+    virtual fft_status execute(void** in, void** out) override
+    {
+        return execute(in[0], out[0]);
+    };
 
+    fft_status execute(void* ibuffer, void* obuffer)
+    {
 
-        VkFFTApplication app = {};
+        configuration.buffer = (void**)&ibuffer;
+
+        // TODO: deal with output buffer
+                        
+
         if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
         {
             throw std::runtime_error("initializeVkFFT failed");
