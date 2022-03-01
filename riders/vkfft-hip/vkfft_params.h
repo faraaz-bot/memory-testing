@@ -99,16 +99,21 @@ public:
     fft_status execute(void* ibuffer, void* obuffer)
     {
 
-        configuration.buffer = (void**)&ibuffer;
+        // Ok, so it seems that initializeVkFFT eats up a lot of time (RTC?), but one needs to pass
+        // the data buffers via the configuration struct, so that means that we are going to hack
+        // things so that we just do that once.
+        if(configuration.buffer != (void**)&ibuffer)
+        {
+            configuration.buffer = (void**)&ibuffer;
 
-        // TODO: deal with output buffer
+            // TODO: deal with output buffer
                         
 
-        if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
-        {
-            throw std::runtime_error("initializeVkFFT failed");
+            if(initializeVkFFT(&app, configuration) !=  VKFFT_SUCCESS)
+            {
+                throw std::runtime_error("initializeVkFFT failed");
+            }
         }
-
     
         VkFFTLaunchParams launchParams = {};
         
