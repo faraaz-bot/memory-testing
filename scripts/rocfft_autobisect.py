@@ -193,4 +193,11 @@ def main():
             sys.exit(1)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        if e.stdout:
+            print(e.stdout.decode('utf-8'))
+        if e.stderr:
+            print(e.stderr.decode('utf-8'))
+        raise
