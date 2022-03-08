@@ -1003,13 +1003,13 @@ __global__
     scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
     int          offset                   = 0;
     unsigned int offset_lds;
-    int          stride_lds;
-    int          batch;
-    int          transform;
-    const bool   lds_is_real = false; //ebtype == EmbeddedType::NONE;
-    const int    stride0     = (sb == SB_UNIT) ? (1) : (stride[0]);
-    auto         load_cb     = get_load_cb<scalar_type, cbtype>(load_cb_fn);
-    auto         store_cb    = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+    //int          stride_lds;
+    int        batch;
+    int        transform;
+    const bool lds_is_real = false; //ebtype == EmbeddedType::NONE;
+    const int  stride0     = (sb == SB_UNIT) ? (1) : (stride[0]);
+    //auto         load_cb     = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    //auto         store_cb    = get_store_cb<scalar_type, cbtype>(store_cb_fn);
 
     // large twiddles
     // - no large twiddles
@@ -1020,12 +1020,14 @@ __global__
     int index_along_d;
     transform = blockIdx.x * 64 + threadIdx.x / 8;
     remaining = transform;
-    for(int d = 1; d < dim; ++d)
-    {
-        index_along_d = remaining % lengths[d];
-        remaining     = remaining / lengths[d];
-        offset        = offset + index_along_d * stride[d];
-    }
+    // for(int d = 1; d < dim; ++d)
+    // {
+    //     index_along_d = remaining % lengths[d];
+    //     if(transform == 8)
+    //         printf("-------- %d, %d, %d, %d, %d\n", d, remaining, index_along_d, offset, stride[d]);
+    //     remaining = remaining / lengths[d];
+    //     offset    = offset + index_along_d * stride[d];
+    // }
     // if(blockIdx.x == 58 && threadIdx.x == 8)
     // {
     //     printf("offset %d, stride0 %d,dim %d, stride[dim] %d\n",
@@ -1034,15 +1036,15 @@ __global__
     //            (int)dim,
     //            (int)stride[dim]);
     // }
-    batch      = remaining;
-    offset     = offset + batch * stride[dim];
-    stride_lds = 64 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
-    offset_lds = stride_lds * (transform % 64);
+    //batch  = remaining;
+    //offset = offset + batch * stride[dim];
+    //stride_lds = 64 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds = 64 * (transform % 64);
 
-    if(batch >= nbatch)
-    {
-        return;
-    }
+    // if(batch >= nbatch)
+    // {
+    //     return;
+    // }
 
     // if(!lds_is_real)
     // {
@@ -1110,14 +1112,14 @@ __global__
         // else
         {
             offset = blockIdx.x * 64 * 64;
-            R[0]   = load_cb(buf, offset + threadIdx.x + 0 * stride0, load_cb_data, nullptr);
-            R[1]   = load_cb(buf, offset + threadIdx.x + 1 * stride0, load_cb_data, nullptr);
-            R[2]   = load_cb(buf, offset + threadIdx.x + 2 * stride0, load_cb_data, nullptr);
-            R[3]   = load_cb(buf, offset + threadIdx.x + 3 * stride0, load_cb_data, nullptr);
-            R[4]   = load_cb(buf, offset + threadIdx.x + 4 * stride0, load_cb_data, nullptr);
-            R[5]   = load_cb(buf, offset + threadIdx.x + 5 * stride0, load_cb_data, nullptr);
-            R[6]   = load_cb(buf, offset + threadIdx.x + 6 * stride0, load_cb_data, nullptr);
-            R[7]   = load_cb(buf, offset + threadIdx.x + 7 * stride0, load_cb_data, nullptr);
+            R[0]   = buf[offset + threadIdx.x + 0 * stride0];
+            R[1]   = buf[offset + threadIdx.x + 1 * stride0];
+            R[2]   = buf[offset + threadIdx.x + 2 * stride0];
+            R[3]   = buf[offset + threadIdx.x + 3 * stride0];
+            R[4]   = buf[offset + threadIdx.x + 4 * stride0];
+            R[5]   = buf[offset + threadIdx.x + 5 * stride0];
+            R[6]   = buf[offset + threadIdx.x + 6 * stride0];
+            R[7]   = buf[offset + threadIdx.x + 7 * stride0];
         }
     }
 
@@ -1127,9 +1129,109 @@ __global__
     // else
     internal_lds_offset = (threadIdx.x % 64) * 64;
 
+    //__syncthreads();
     // transform
     ip_forward_length64_SBRR_device<scalar_type, lds_is_real, SB_UNIT>(
         R, lds_real, lds_complex, twiddles, 1, internal_lds_offset);
+
+    //FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+
+    // int         stageInvocationID = threadIdx.x / 8;
+    // int         LUTId             = stageInvocationID + 0;
+    // scalar_type loc_0;
+    // scalar_type iw;
+    // scalar_type w = twiddles[LUTId];
+    // loc_0.x       = R[4].x * w.x - R[4].y * w.y;
+    // loc_0.y       = R[4].y * w.x + R[4].x * w.y;
+    // R[4].x        = R[0].x - loc_0.x;
+    // R[4].y        = R[0].y - loc_0.y;
+    // R[0].x        = R[0].x + loc_0.x;
+    // R[0].y        = R[0].y + loc_0.y;
+    // loc_0.x       = R[5].x * w.x - R[5].y * w.y;
+    // loc_0.y       = R[5].y * w.x + R[5].x * w.y;
+    // R[5].x        = R[1].x - loc_0.x;
+    // R[5].y        = R[1].y - loc_0.y;
+    // R[1].x        = R[1].x + loc_0.x;
+    // R[1].y        = R[1].y + loc_0.y;
+    // loc_0.x       = R[6].x * w.x - R[6].y * w.y;
+    // loc_0.y       = R[6].y * w.x + R[6].x * w.y;
+    // R[6].x        = R[2].x - loc_0.x;
+    // R[6].y        = R[2].y - loc_0.y;
+    // R[2].x        = R[2].x + loc_0.x;
+    // R[2].y        = R[2].y + loc_0.y;
+    // loc_0.x       = R[7].x * w.x - R[7].y * w.y;
+    // loc_0.y       = R[7].y * w.x + R[7].x * w.y;
+    // R[7].x        = R[3].x - loc_0.x;
+    // R[7].y        = R[3].y - loc_0.y;
+    // R[3].x        = R[3].x + loc_0.x;
+    // R[3].y        = R[3].y + loc_0.y;
+    // w             = twiddles[LUTId + 1];
+
+    // loc_0.x = R[2].x * w.x - R[2].y * w.y;
+    // loc_0.y = R[2].y * w.x + R[2].x * w.y;
+    // R[2].x  = R[0].x - loc_0.x;
+    // R[2].y  = R[0].y - loc_0.y;
+    // R[0].x  = R[0].x + loc_0.x;
+    // R[0].y  = R[0].y + loc_0.y;
+    // loc_0.x = R[3].x * w.x - R[3].y * w.y;
+    // loc_0.y = R[3].y * w.x + R[3].x * w.y;
+    // R[3].x  = R[1].x - loc_0.x;
+    // R[3].y  = R[1].y - loc_0.y;
+    // R[1].x  = R[1].x + loc_0.x;
+    // R[1].y  = R[1].y + loc_0.y;
+    // iw.x    = -w.y;
+    // iw.y    = w.x;
+    // loc_0.x = R[6].x * iw.x - R[6].y * iw.y;
+    // loc_0.y = R[6].y * iw.x + R[6].x * iw.y;
+    // R[6].x  = R[4].x - loc_0.x;
+    // R[6].y  = R[4].y - loc_0.y;
+    // R[4].x  = R[4].x + loc_0.x;
+    // R[4].y  = R[4].y + loc_0.y;
+    // loc_0.x = R[7].x * iw.x - R[7].y * iw.y;
+    // loc_0.y = R[7].y * iw.x + R[7].x * iw.y;
+    // R[7].x  = R[5].x - loc_0.x;
+    // R[7].y  = R[5].y - loc_0.y;
+    // R[5].x  = R[5].x + loc_0.x;
+    // R[5].y  = R[5].y + loc_0.y;
+    // w       = twiddles[LUTId + 2];
+
+    // loc_0.x = R[1].x * w.x - R[1].y * w.y;
+    // loc_0.y = R[1].y * w.x + R[1].x * w.y;
+    // R[1].x  = R[0].x - loc_0.x;
+    // R[1].y  = R[0].y - loc_0.y;
+    // R[0].x  = R[0].x + loc_0.x;
+    // R[0].y  = R[0].y + loc_0.y;
+    // iw.x    = -w.y;
+    // iw.y    = w.x;
+    // loc_0.x = R[3].x * iw.x - R[3].y * iw.y;
+    // loc_0.y = R[3].y * iw.x + R[3].x * iw.y;
+    // R[3].x  = R[2].x - loc_0.x;
+    // R[3].y  = R[2].y - loc_0.y;
+    // R[2].x  = R[2].x + loc_0.x;
+    // R[2].y  = R[2].y + loc_0.y;
+    // iw.x    = w.x * loc_SQRT1_2 - w.y * loc_SQRT1_2;
+    // iw.y    = w.y * loc_SQRT1_2 + w.x * loc_SQRT1_2;
+
+    // loc_0.x = R[5].x * iw.x - R[5].y * iw.y;
+    // loc_0.y = R[5].y * iw.x + R[5].x * iw.y;
+    // R[5].x  = R[4].x - loc_0.x;
+    // R[5].y  = R[4].y - loc_0.y;
+    // R[4].x  = R[4].x + loc_0.x;
+    // R[4].y  = R[4].y + loc_0.y;
+    // w.x     = -iw.y;
+    // w.y     = iw.x;
+    // loc_0.x = R[7].x * w.x - R[7].y * w.y;
+    // loc_0.y = R[7].y * w.x + R[7].x * w.y;
+    // R[7].x  = R[6].x - loc_0.x;
+    // R[7].y  = R[6].y - loc_0.y;
+    // R[6].x  = R[6].x + loc_0.x;
+    // R[6].y  = R[6].y + loc_0.y;
+    // loc_0   = R[1];
+    // R[1]    = R[4];
+    // R[4]    = loc_0;
+    // loc_0   = R[3];
+    // R[3]    = R[6];
+    // R[6]    = loc_0;
 
     // if(!lds_is_real)
     // {
@@ -1245,14 +1347,14 @@ __global__
             // R[6].y = 0;
             // R[7].x = offset + threadIdx.x + 7 * stride0;
             // R[7].y = 0;
-            store_cb(buf, offset + threadIdx.x + 0 * stride0, R[0], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 1 * stride0, R[1], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 2 * stride0, R[2], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 3 * stride0, R[3], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 4 * stride0, R[4], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 5 * stride0, R[5], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 6 * stride0, R[6], store_cb_data, nullptr);
-            store_cb(buf, offset + threadIdx.x + 7 * stride0, R[7], store_cb_data, nullptr);
+            buf[offset + threadIdx.x + 0 * stride0] = R[0];
+            buf[offset + threadIdx.x + 1 * stride0] = R[1];
+            buf[offset + threadIdx.x + 2 * stride0] = R[2];
+            buf[offset + threadIdx.x + 3 * stride0] = R[3];
+            buf[offset + threadIdx.x + 4 * stride0] = R[4];
+            buf[offset + threadIdx.x + 5 * stride0] = R[5];
+            buf[offset + threadIdx.x + 6 * stride0] = R[6];
+            buf[offset + threadIdx.x + 7 * stride0] = R[7];
         }
     }
 }
@@ -1344,7 +1446,7 @@ int fft_64_2nd(int trial, bool isRef)
         for(int itrial = 0; itrial < trial; ++itrial)
         {
             VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a, d_twd);
-            // fft_64_2nd_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+            //fft_64_2nd_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
         }
         device_event_record_stop();
         device_event_synchronize_stop();
