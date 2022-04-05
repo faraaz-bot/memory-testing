@@ -2,14 +2,18 @@
 // build:
 //    hipcc st_lds_sim.cpp -o st_lds_sim -lboost_program_options
 //
-// quick test:
-//    ./st_lds_sim -t 2 -f 4 2 -w 4
+// quick tests:
+//    ./st_lds_sim -t 2 -f 4 2 -w 4 -v
+//    ./st_lds_sim -t 8 -f 8 8
+//    ./st_lds_sim -t 10 -f 5 5 4
 //
 
 #include <boost/program_options.hpp>
 #include <hip/hip_runtime.h>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <tuple>
 #include <vector>
 namespace po = boost::program_options;
 
@@ -20,30 +24,52 @@ typename Titer::value_type product(Titer begin, Titer end)
         begin, end, typename Titer::value_type(1), std::multiplies<typename Titer::value_type>());
 }
 
-void load_lds(
-    int length, int threads_per_transform, int offset_lds, int threadIdx, int h, int width, int dt)
+std::vector<std::tuple<int, int>> load_lds(int  length,
+                                           int  threads_per_transform,
+                                           int  offset_lds,
+                                           int  threadIdx,
+                                           int  h,
+                                           int  width,
+                                           int  dt,
+                                           int  elem_bytes,
+                                           int  bank_bytes,
+                                           bool debug)
 {
-    int thread  = threadIdx % threads_per_transform;
-    int lstride = 1;
+    std::vector<std::tuple<int, int>> ret;
+    int                               thread  = threadIdx % threads_per_transform;
+    int                               lstride = 1;
     for(int w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
         const auto idx = offset_lds + (tid + w * length / width) * lstride;
-        std::cout << "\tread  lds: R[" << h * width + w << "], lds[" << idx << "]" << std::endl;
+
+        const auto bank_start = idx * elem_bytes / bank_bytes;
+        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_bytes;
+        ret.push_back(std::make_tuple(bank_start, bank_end));
+        if(debug)
+            std::cout << "\ttid " << std::setw(3) << threadIdx << " R: reg[" << std::setw(3)
+                      << h * width + w << "], lds[" << std::setw(3) << idx << "], bank["
+                      << std::setw(2) << bank_start << "-" << std::setw(2) << bank_end << "]"
+                      << std::endl;
     }
+    return ret;
 }
 
-void store_lds(int length,
-               int threads_per_transform,
-               int offset_lds,
-               int threadIdx,
-               int h,
-               int width,
-               int dt,
-               int cumheight)
+std::vector<std::tuple<int, int>> store_lds(int  length,
+                                            int  threads_per_transform,
+                                            int  offset_lds,
+                                            int  threadIdx,
+                                            int  h,
+                                            int  width,
+                                            int  dt,
+                                            int  cumheight,
+                                            int  elem_bytes,
+                                            int  bank_bytes,
+                                            bool debug)
 {
-    int thread  = threadIdx % threads_per_transform;
-    int lstride = 1;
+    std::vector<std::tuple<int, int>> ret;
+    int                               thread  = threadIdx % threads_per_transform;
+    int                               lstride = 1;
 
     for(int w = 0; w < width; ++w)
     {
@@ -52,30 +78,39 @@ void store_lds(int length,
             = offset_lds
               + (tid / cumheight * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
 
-        std::cout << "\twrite lds: lds[" << idx << "], R [" << h * width + w << "]" << std::endl;
+        const auto bank_start = idx * elem_bytes / bank_bytes;
+        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_bytes;
+        ret.push_back(std::make_tuple(bank_start, bank_end));
+        if(debug)
+            std::cout << "\ttid " << std::setw(3) << threadIdx << " W: lds[" << std::setw(3) << idx
+                      << "], reg[" << std::setw(3) << h * width + w << "], bank[" << std::setw(2)
+                      << bank_start << "-" << std::setw(2) << bank_end << "]" << std::endl;
     }
+    return ret;
 }
 
 template <typename T>
 void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     std::vector<int>& factors,
                                     int               wavefront_size,
-                                    int               bank_bytes)
+                                    int               bank_bytes,
+                                    bool              debug)
 {
     int   length             = product(factors.begin(), factors.end());
     int   elem_bytes         = sizeof(T);
     float transform_per_warp = (float)wavefront_size / threads_per_transform;
     std::cout << "transform_per_warp: " << transform_per_warp << std::endl;
 
-    // simulate the first n complete transforms only for now
-    for(int transform_id = 0; transform_id < transform_per_warp; transform_id++)
+    for(int npass = 0; npass < factors.size(); ++npass)
     {
-        std::cout << "Transform " << transform_id << std::endl;
-        // no any padding or strides, elementwise
-        int regular_offset_lds = transform_id * length;
-
-        for(int npass = 0; npass < factors.size(); ++npass)
+        std::cout << "Pass " << npass << std::endl;
+        // simulate the first n complete transforms only for now
+        for(int transform_id = 0; transform_id < transform_per_warp; transform_id++)
         {
+            std::cout << "\ttransform " << transform_id << std::endl;
+            // no any padding or strides, elementwise
+            int regular_offset_lds = transform_id * length;
+
             int   width     = factors[npass];
             float height    = static_cast<float>(length) / width / threads_per_transform;
             int   cumheight = product(factors.begin(), factors.begin() + npass);
@@ -83,12 +118,13 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
             int iheight = std::floor(height);
             if(height > iheight && threads_per_transform > length / width)
                 iheight += 1;
-            std::cout << "  pass " << npass << std::endl;
             // std::cout << "iheight " << iheight << std::endl;
             if(npass != factors.size() - 1)
                 for(int h = 0; h < iheight; ++h)
                     //work += generator(h, 0, width, 0);
-                    for(int threadIdx = 0; threadIdx < threads_per_transform; ++threadIdx)
+                    for(int threadIdx = transform_id * threads_per_transform;
+                        threadIdx < (transform_id + 1) * threads_per_transform;
+                        ++threadIdx)
                         store_lds(length,
                                   threads_per_transform,
                                   regular_offset_lds,
@@ -96,56 +132,40 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                   h,
                                   width,
                                   0,
-                                  cumheight);
+                                  cumheight,
+                                  elem_bytes,
+                                  bank_bytes,
+                                  debug);
 
             if(npass != 0)
                 for(int h = 0; h < iheight; ++h)
                     //work += generator(h, 0, width, 0);
-                    for(int threadIdx = 0; threadIdx < threads_per_transform; ++threadIdx)
+                    for(int threadIdx = transform_id * threads_per_transform;
+                        threadIdx < (transform_id + 1) * threads_per_transform;
+                        ++threadIdx)
                         load_lds(length,
                                  threads_per_transform,
                                  regular_offset_lds,
                                  threadIdx,
                                  h,
                                  width,
-                                 0);
+                                 0,
+                                 elem_bytes,
+                                 bank_bytes,
+                                 debug);
         }
     }
-
-    // if(threads_per_transform > wavefront_size)
-    // {
-    // }
-    // else if(threads_per_transform == wavefront_size)
-    // {
-    //     // guarantee one wavefront doing 1 transform
-    // }
-    // else
-    // {
-    // }
 }
 
 int main(int argc, char* argv[])
 {
+    std::string      precision;
     std::vector<int> factors;
 
-    // Some exampls
-    // factors.push_back(5);
-    // factors.push_back(5);
-    // factors.push_back(4);
-    // st_batched_1d_lds_conflict_sim(10, factors, 64, 4);
+    int threads_per_transform;
+    int wavefront_size;
+    int bank_bytes;
 
-    // factors.push_back(8);
-    // factors.push_back(8);
-    // st_batched_1d_lds_conflict_sim<float2>(8, factors, 64, 4);
-
-    // factors.push_back(4);
-    // factors.push_back(2);
-    // st_batched_1d_lds_conflict_sim<float2>(2, factors, 4, 4);
-
-    int         wavefront_size;
-    int         bank_bytes;
-    int         threads_per_transform;
-    std::string precision;
     // clang-format off
     po::options_description opdesc("lds conflict sim options");
     opdesc.add_options()
@@ -154,7 +174,8 @@ int main(int argc, char* argv[])
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
-        ("bank_bytes,b", po::value<int>(&bank_bytes)->default_value(4), "lds bank size in bytes");
+        ("bank_bytes,b", po::value<int>(&bank_bytes)->default_value(4), "lds bank size in bytes.")
+        ("verbose,v", "Print detailed debug info.");
     // clang-format on
 
     po::variables_map vm;
@@ -169,10 +190,10 @@ int main(int argc, char* argv[])
 
     if(precision == "float2")
         st_batched_1d_lds_conflict_sim<float2>(
-            threads_per_transform, factors, wavefront_size, bank_bytes);
+            threads_per_transform, factors, wavefront_size, bank_bytes, vm.count("verbose"));
     else if(precision == "double2")
         st_batched_1d_lds_conflict_sim<double2>(
-            threads_per_transform, factors, wavefront_size, bank_bytes);
+            threads_per_transform, factors, wavefront_size, bank_bytes, vm.count("verbose"));
 
     return 0;
 }
