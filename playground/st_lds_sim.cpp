@@ -115,6 +115,11 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
     float transform_per_warp = (float)wavefront_size / threads_per_transform;
     std::cout << "transform_per_warp: " << transform_per_warp << std::endl;
 
+    int score         = 0; // the overall score, the lower the better.
+    int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2 - factors.front()
+                         - factors.back())
+                        * NUM_OF_BANK; // the idea target, hit bank once per access.
+
     for(auto npass = 0; npass < factors.size(); ++npass)
     {
         std::cout << "Pass " << npass << std::endl;
@@ -177,6 +182,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                 for(auto i = bank_pair.first; i <= bank_pair.second; i++)
                                 {
                                     write_hit_counts[w][i]++;
+                                    score++;
                                 }
                         }
                     }
@@ -204,6 +210,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                 for(auto i = bank_pair.first; i <= bank_pair.second; i++)
                                 {
                                     read_hit_counts[w][i]++;
+                                    score++;
                                 }
                         }
                     }
@@ -245,6 +252,8 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
         }
         delete[] read_hit_counts;
     }
+
+    std::cout << "Overall score: " << score << " vs bottom_line " << optimal_score << std::endl;
 }
 
 int main(int argc, char* argv[])
