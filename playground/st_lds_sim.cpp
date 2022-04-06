@@ -26,6 +26,8 @@ namespace po = boost::program_options;
 
 #define NUM_OF_BANK 32
 
+typedef std::vector<std::pair<int, int>> bank_ranges_t;
+
 template <typename Titer>
 typename Titer::value_type product(Titer begin, Titer end)
 {
@@ -33,21 +35,21 @@ typename Titer::value_type product(Titer begin, Titer end)
         begin, end, typename Titer::value_type(1), std::multiplies<typename Titer::value_type>());
 }
 
-std::vector<std::pair<int, int>> load_lds(int  length,
-                                          int  threads_per_transform,
-                                          int  offset_lds,
-                                          int  threadIdx,
-                                          int  h,
-                                          int  width,
-                                          int  dt,
-                                          int  elem_bytes,
-                                          int  bank_width,
-                                          bool debug)
+bank_ranges_t lds2reg(int  length,
+                      int  threads_per_transform,
+                      int  offset_lds,
+                      int  threadIdx,
+                      int  h,
+                      int  width,
+                      int  dt,
+                      int  elem_bytes,
+                      int  bank_width,
+                      bool debug)
 {
-    std::vector<std::pair<int, int>> ret;
-    int                              thread  = threadIdx % threads_per_transform;
-    int                              lstride = 1;
-    for(int w = 0; w < width; ++w)
+    bank_ranges_t ret;
+    auto          thread  = threadIdx % threads_per_transform;
+    auto          lstride = 1;
+    for(auto w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
         const auto idx = offset_lds + (tid + w * length / width) * lstride;
@@ -64,23 +66,23 @@ std::vector<std::pair<int, int>> load_lds(int  length,
     return ret;
 }
 
-std::vector<std::pair<int, int>> store_lds(int  length,
-                                           int  threads_per_transform,
-                                           int  offset_lds,
-                                           int  threadIdx,
-                                           int  h,
-                                           int  width,
-                                           int  dt,
-                                           int  cumheight,
-                                           int  elem_bytes,
-                                           int  bank_width,
-                                           bool debug)
+bank_ranges_t reg2lds(int  length,
+                      int  threads_per_transform,
+                      int  offset_lds,
+                      int  threadIdx,
+                      int  h,
+                      int  width,
+                      int  dt,
+                      int  cumheight,
+                      int  elem_bytes,
+                      int  bank_width,
+                      bool debug)
 {
-    std::vector<std::pair<int, int>> ret;
-    int                              thread  = threadIdx % threads_per_transform;
-    int                              lstride = 1;
+    bank_ranges_t ret;
+    auto          thread  = threadIdx % threads_per_transform;
+    auto          lstride = 1;
 
-    for(int w = 0; w < width; ++w)
+    for(auto w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
         const auto idx
@@ -106,17 +108,18 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     int               bank_width,
                                     bool              debug)
 {
-    int   length             = product(factors.begin(), factors.end());
-    int   elem_bytes         = sizeof(T);
+    auto  length             = product(factors.begin(), factors.end());
+    auto  elem_bytes         = sizeof(T);
     float transform_per_warp = (float)wavefront_size / threads_per_transform;
     std::cout << "transform_per_warp: " << transform_per_warp << std::endl;
 
-    for(int npass = 0; npass < factors.size(); ++npass)
+    for(auto npass = 0; npass < factors.size(); ++npass)
     {
         std::cout << "Pass " << npass << std::endl;
 
-        const int radix = factors[npass];
+        const auto radix = factors[npass];
 
+        // 2D bank stats storage for all steps in one pass
         int** read_hit_counts = new int*[radix];
         for(int i = 0; i < radix; i++)
         {
@@ -149,27 +152,26 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                 iheight += 1;
             // std::cout << "iheight " << iheight << std::endl;
             if(npass != factors.size() - 1)
-                for(int h = 0; h < iheight; ++h)
+                for(auto h = 0; h < iheight; ++h)
                     //work += generator(h, 0, width, 0);
-                    for(int threadIdx = transform_id * threads_per_transform;
+                    for(auto threadIdx = transform_id * threads_per_transform;
                         threadIdx < (transform_id + 1) * threads_per_transform;
                         ++threadIdx)
                     {
-                        std::vector<std::pair<int, int>> bank_ranges
-                            = store_lds(length,
-                                        threads_per_transform,
-                                        regular_offset_lds,
-                                        threadIdx,
-                                        h,
-                                        width,
-                                        0,
-                                        cumheight,
-                                        elem_bytes,
-                                        bank_width,
-                                        debug);
+                        bank_ranges_t bank_ranges = reg2lds(length,
+                                                            threads_per_transform,
+                                                            regular_offset_lds,
+                                                            threadIdx,
+                                                            h,
+                                                            width,
+                                                            0,
+                                                            cumheight,
+                                                            elem_bytes,
+                                                            bank_width,
+                                                            debug);
                         for(auto bank_pair : bank_ranges)
                         {
-                            for(int w = 0; w < width; ++w)
+                            for(auto w = 0; w < width; ++w)
                                 for(auto i = bank_pair.first; i <= bank_pair.second; i++)
                                 {
                                     write_hit_counts[w][i]++;
@@ -178,26 +180,25 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                     }
 
             if(npass != 0)
-                for(int h = 0; h < iheight; ++h)
+                for(auto h = 0; h < iheight; ++h)
                     //work += generator(h, 0, width, 0);
-                    for(int threadIdx = transform_id * threads_per_transform;
+                    for(auto threadIdx = transform_id * threads_per_transform;
                         threadIdx < (transform_id + 1) * threads_per_transform;
                         ++threadIdx)
                     {
-                        std::vector<std::pair<int, int>> bank_ranges
-                            = load_lds(length,
-                                       threads_per_transform,
-                                       regular_offset_lds,
-                                       threadIdx,
-                                       h,
-                                       width,
-                                       0,
-                                       elem_bytes,
-                                       bank_width,
-                                       debug);
+                        bank_ranges_t bank_ranges = lds2reg(length,
+                                                            threads_per_transform,
+                                                            regular_offset_lds,
+                                                            threadIdx,
+                                                            h,
+                                                            width,
+                                                            0,
+                                                            elem_bytes,
+                                                            bank_width,
+                                                            debug);
                         for(auto bank_pair : bank_ranges)
                         {
-                            for(int w = 0; w < width; ++w)
+                            for(auto w = 0; w < width; ++w)
                                 for(auto i = bank_pair.first; i <= bank_pair.second; i++)
                                 {
                                     read_hit_counts[w][i]++;
@@ -206,8 +207,8 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                     }
         }
 
-        std::cout << "  W bank stat:" << std::endl;
-        for(int w = 0; w < radix; ++w)
+        std::cout << "  W bank stats:" << std::endl;
+        for(auto w = 0; w < radix; ++w)
         {
             std::cout << "  ";
             for(auto i = 0; i < NUM_OF_BANK; i++)
@@ -215,8 +216,8 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
             std::cout << std::endl;
         }
         std::cout << std::endl;
-        std::cout << "  R bank stat:" << std::endl;
-        for(int w = 0; w < radix; ++w)
+        std::cout << "  R bank stats:" << std::endl;
+        for(auto w = 0; w < radix; ++w)
         {
             std::cout << "  ";
             for(auto i = 0; i < NUM_OF_BANK; i++)
