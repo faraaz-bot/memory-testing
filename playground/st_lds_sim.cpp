@@ -2,12 +2,14 @@
 //
 // Description:
 //    To simulate lds conflict of 1D batched Stockham for all intermediate
-//    passes(assume reg -> lds -> ... -> reg).
+//    passes(assume reg -> lds -> ... -> lds -> reg).
+//    The elements swapping happens between tow passes: reg2lds then lds2reg.
 //
 // Build:
 //    hipcc st_lds_sim.cpp -o st_lds_sim -lboost_program_options
 //
 // Quick tests:
+//    ./st_lds_sim -t 2 -f 4 2 -w 2 -v
 //    ./st_lds_sim -t 2 -f 4 2 -w 4 -v
 //    ./st_lds_sim -t 8 -f 8 8
 //    ./st_lds_sim -t 10 -f 5 5 4
@@ -207,21 +209,27 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                     }
         }
 
-        std::cout << "  W bank stats:" << std::endl;
+        std::cout << "  W bank stats:\n  bank  ";
+        for(auto i = 0; i < NUM_OF_BANK; i++)
+            std::cout << std::setw(2) << i << ",";
+        std::cout << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
-            std::cout << "  ";
+            std::cout << "  step" << std::setw(2) << w;
             for(auto i = 0; i < NUM_OF_BANK; i++)
-                std::cout << write_hit_counts[w][i] << ",";
+                std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
             std::cout << std::endl;
         }
+
+        std::cout << "\n  R bank stats:\n  bank  ";
+        for(auto i = 0; i < NUM_OF_BANK; i++)
+            std::cout << std::setw(2) << i << ",";
         std::cout << std::endl;
-        std::cout << "  R bank stats:" << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
-            std::cout << "  ";
+            std::cout << "  step" << std::setw(2) << w;
             for(auto i = 0; i < NUM_OF_BANK; i++)
-                std::cout << read_hit_counts[w][i] << ",";
+                std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
             std::cout << std::endl;
         }
         std::cout << std::endl;
@@ -252,7 +260,7 @@ int main(int argc, char* argv[])
     po::options_description opdesc("lds conflict sim options");
     opdesc.add_options()
         ("help,h", "produces this help message")
-        ("precision,p",  po::value<std::string>(&precision)->default_value("float2"), "precision choices: float2, double2.")
+        ("precision,p",  po::value<std::string>(&precision)->default_value("float2"), "precision choices: float2, double2, float, double.")
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
@@ -270,6 +278,12 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+    if(precision == "float")
+        st_batched_1d_lds_conflict_sim<float>(
+            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
+    else if(precision == "double")
+        st_batched_1d_lds_conflict_sim<double>(
+            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
     if(precision == "float2")
         st_batched_1d_lds_conflict_sim<float2>(
             threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
