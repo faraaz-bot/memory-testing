@@ -3,7 +3,7 @@
 // Description:
 //    To simulate lds conflict of 1D batched Stockham for all intermediate
 //    passes(assume reg -> lds -> ... -> lds -> reg).
-//    The elements swapping happens between tow passes: reg2lds then lds2reg.
+//    The elements swapping happens between two passes: reg2lds then lds2reg.
 //
 // Build:
 //    hipcc st_lds_sim.cpp -o st_lds_sim -lboost_program_options
@@ -26,7 +26,7 @@
 
 namespace po = boost::program_options;
 
-#define NUM_OF_BANK 32
+#define NUM_OF_PHY_BANK 32
 
 typedef std::vector<std::pair<int, int>> bank_ranges_t;
 
@@ -46,18 +46,20 @@ bank_ranges_t lds2reg(int  length,
                       int  dt,
                       int  elem_bytes,
                       int  bank_width,
+                      int  num_of_bank,
                       bool debug)
 {
     bank_ranges_t ret;
     auto          thread  = threadIdx % threads_per_transform;
     auto          lstride = 1;
+
     for(auto w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
         const auto idx = offset_lds + (tid + w * length / width) * lstride;
 
-        const auto bank_start = idx * elem_bytes / bank_width % NUM_OF_BANK;
-        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % NUM_OF_BANK;
+        const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
+        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
         ret.push_back(std::make_pair(bank_start, bank_end));
         if(debug)
             std::cout << "    tid " << std::setw(3) << threadIdx << " R: reg[" << std::setw(3)
@@ -78,6 +80,7 @@ bank_ranges_t reg2lds(int  length,
                       int  cumheight,
                       int  elem_bytes,
                       int  bank_width,
+                      int  num_of_bank,
                       bool debug)
 {
     bank_ranges_t ret;
@@ -91,8 +94,8 @@ bank_ranges_t reg2lds(int  length,
             = offset_lds
               + (tid / cumheight * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
 
-        const auto bank_start = idx * elem_bytes / bank_width % NUM_OF_BANK;
-        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % NUM_OF_BANK;
+        const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
+        const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
         ret.push_back(std::make_pair(bank_start, bank_end));
         if(debug)
             std::cout << "    tid " << std::setw(3) << threadIdx << " W: lds[" << std::setw(3)
@@ -107,18 +110,28 @@ template <typename T>
 void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     std::vector<int>& factors,
                                     int               wavefront_size,
-                                    int               bank_width,
+                                    int               phy_bank_width,
+                                    int               num_of_phy_bank,
                                     bool              debug)
 {
-    auto  length             = product(factors.begin(), factors.end());
-    auto  elem_bytes         = sizeof(T);
-    float transform_per_warp = (float)wavefront_size / threads_per_transform;
+    const auto bank_width  = sizeof(T);
+    const auto num_of_bank = phy_bank_width * num_of_phy_bank / bank_width;
+    std::cout << "bank_width: " << bank_width << ", num_of_bank " << num_of_bank << std::endl;
+
+    const auto  length             = product(factors.begin(), factors.end());
+    const auto  elem_bytes         = sizeof(T);
+    const float transform_per_warp = (float)wavefront_size / threads_per_transform;
     std::cout << "transform_per_warp: " << transform_per_warp << std::endl;
 
-    int score         = 0; // the overall score, the lower the better.
-    int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2 - factors.front()
-                         - factors.back())
-                        * NUM_OF_BANK; // the idea target, hit bank once per access.
+    // The overall score, the lower the better
+    int score = 0;
+
+    // The idea target, hit bank once per access.
+    // * 2 for read and write per pass, except, no lds2reg at the 1st pass
+    // and no reg2lds at the last pass.
+    const int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2
+                               - factors.front() - factors.back())
+                              * num_of_bank;
 
     for(auto npass = 0; npass < factors.size(); ++npass)
     {
@@ -130,16 +143,16 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
         int** read_hit_counts = new int*[radix];
         for(int i = 0; i < radix; i++)
         {
-            read_hit_counts[i] = new int[NUM_OF_BANK];
+            read_hit_counts[i] = new int[num_of_bank];
         }
         int** write_hit_counts = new int*[radix];
         for(int i = 0; i < radix; i++)
         {
-            write_hit_counts[i] = new int[NUM_OF_BANK];
+            write_hit_counts[i] = new int[num_of_bank];
         }
         for(int w = 0; w < radix; ++w)
         {
-            for(auto i = 0; i < NUM_OF_BANK; i++)
+            for(auto i = 0; i < num_of_bank; i++)
                 read_hit_counts[w][i] = write_hit_counts[w][i] = 0;
         }
 
@@ -175,6 +188,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                             cumheight,
                                                             elem_bytes,
                                                             bank_width,
+                                                            num_of_bank,
                                                             debug);
                         for(auto bank_pair : bank_ranges)
                         {
@@ -203,6 +217,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                             0,
                                                             elem_bytes,
                                                             bank_width,
+                                                            num_of_bank,
                                                             debug);
                         for(auto bank_pair : bank_ranges)
                         {
@@ -216,26 +231,26 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                     }
         }
 
-        std::cout << "  W bank stats:\n  bank  ";
-        for(auto i = 0; i < NUM_OF_BANK; i++)
+        std::cout << "  W bank stats:\n  bank   ";
+        for(auto i = 0; i < num_of_bank; i++)
             std::cout << std::setw(2) << i << ",";
         std::cout << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
-            std::cout << "  step" << std::setw(2) << w;
-            for(auto i = 0; i < NUM_OF_BANK; i++)
+            std::cout << "  step" << std::setw(2) << w << " ";
+            for(auto i = 0; i < num_of_bank; i++)
                 std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
             std::cout << std::endl;
         }
 
-        std::cout << "\n  R bank stats:\n  bank  ";
-        for(auto i = 0; i < NUM_OF_BANK; i++)
+        std::cout << "\n  R bank stats:\n  bank   ";
+        for(auto i = 0; i < num_of_bank; i++)
             std::cout << std::setw(2) << i << ",";
         std::cout << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
-            std::cout << "  step" << std::setw(2) << w;
-            for(auto i = 0; i < NUM_OF_BANK; i++)
+            std::cout << "  step" << std::setw(2) << w << " ";
+            for(auto i = 0; i < num_of_bank; i++)
                 std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
             std::cout << std::endl;
         }
@@ -263,7 +278,8 @@ int main(int argc, char* argv[])
 
     int threads_per_transform;
     int wavefront_size;
-    int bank_width;
+    int bank_phy_width;
+    int num_of_phy_bank;
 
     // clang-format off
     po::options_description opdesc("lds conflict sim options");
@@ -273,7 +289,8 @@ int main(int argc, char* argv[])
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
-        ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds bank width in bytes.")
+        ("bank_phy_width,b", po::value<int>(&bank_phy_width)->default_value(4), "lds physical bank width in bytes.")
+        ("num_of_phy_bank,n", po::value<int>(&num_of_phy_bank)->default_value(32), "number of lds physical banks.")
         ("verbose,v", "Print detailed debug info.");
     // clang-format on
 
@@ -288,17 +305,33 @@ int main(int argc, char* argv[])
     }
 
     if(precision == "float")
-        st_batched_1d_lds_conflict_sim<float>(
-            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
+        st_batched_1d_lds_conflict_sim<float>(threads_per_transform,
+                                              factors,
+                                              wavefront_size,
+                                              bank_phy_width,
+                                              num_of_phy_bank,
+                                              vm.count("verbose"));
     else if(precision == "double")
-        st_batched_1d_lds_conflict_sim<double>(
-            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
+        st_batched_1d_lds_conflict_sim<double>(threads_per_transform,
+                                               factors,
+                                               wavefront_size,
+                                               bank_phy_width,
+                                               num_of_phy_bank,
+                                               vm.count("verbose"));
     if(precision == "float2")
-        st_batched_1d_lds_conflict_sim<float2>(
-            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
+        st_batched_1d_lds_conflict_sim<float2>(threads_per_transform,
+                                               factors,
+                                               wavefront_size,
+                                               bank_phy_width,
+                                               num_of_phy_bank,
+                                               vm.count("verbose"));
     else if(precision == "double2")
-        st_batched_1d_lds_conflict_sim<double2>(
-            threads_per_transform, factors, wavefront_size, bank_width, vm.count("verbose"));
+        st_batched_1d_lds_conflict_sim<double2>(threads_per_transform,
+                                                factors,
+                                                wavefront_size,
+                                                bank_phy_width,
+                                                num_of_phy_bank,
+                                                vm.count("verbose"));
 
     return 0;
 }
