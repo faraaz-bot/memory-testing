@@ -79,7 +79,7 @@ __global__ void lds_linear(T* __restrict__ data)
     extern __shared__ __align__(sizeof(T)) unsigned char shmem_ptr[];
     T*                                                   lds = reinterpret_cast<T*>(shmem_ptr);
 
-    lds[threadIdx.x] = threadIdx.x;
+    lds[threadIdx.x] = data[0];
     __syncthreads();
 
     // dummy code to avoid compiler opt
@@ -96,14 +96,14 @@ __global__ void lds_conflict_2ways(T* __restrict__ data)
 
     // thread idx: 0,  1,  2,  3,  4,  5, ...
     // lds offset: 0, 32,  1, 33,  2, 34, ...
-    lds[(threadIdx.x / 2) + (threadIdx.x % 2) * 32] = threadIdx.x;
+    lds[(threadIdx.x / 2) + (threadIdx.x % 2) * 32] = data[0];
     __syncthreads();
 
     if(threadIdx.x == (WAVE_FRONT_SIZE + 1))
         data[threadIdx.x] = lds[threadIdx.x];
 }
 
-// Every quarter waves access the same bank.
+// Every quarter of a wave access the same bank.
 // To investigate: it seems slight different on NV and AMD if the data type is not int.
 template <typename T>
 __global__ void lds_overlapping_quarter_wave(T* __restrict__ data)
@@ -116,7 +116,7 @@ __global__ void lds_overlapping_quarter_wave(T* __restrict__ data)
     const int quarter = WAVE_FRONT_SIZE / 4;
     int       offset  = (threadIdx.x / quarter) * 32 + (threadIdx.x % quarter);
 
-    lds[offset] = threadIdx.x;
+    lds[offset] = data[0];
     __syncthreads();
 
     if(threadIdx.x == (WAVE_FRONT_SIZE + 1))
@@ -127,7 +127,8 @@ template <typename T>
 void lds_access_test(const int kernel_id, const int batch)
 {
     size_t total_size = WAVE_FRONT_SIZE * batch;
-    size_t lds_bytes  = 64 * WAVE_FRONT_SIZE * sizeof(T);
+    size_t lds_bytes
+        = WAVE_FRONT_SIZE * sizeof(T) * 64; // make sure it is large enough to play with
 
     dim3 grid(batch);
     dim3 workgroup(WAVE_FRONT_SIZE);
@@ -214,6 +215,14 @@ int main()
     lds_access_test<double>(0, 1);
     lds_access_test<double>(1, 1);
     lds_access_test<double>(2, 1);
+
+    lds_access_test<float2>(0, 1);
+    lds_access_test<float2>(1, 1);
+    lds_access_test<float2>(2, 1);
+
+    lds_access_test<double2>(0, 1);
+    lds_access_test<double2>(1, 1);
+    lds_access_test<double2>(2, 1);
 
     return 0;
 }
