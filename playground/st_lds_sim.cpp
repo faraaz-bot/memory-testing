@@ -26,8 +26,6 @@
 
 namespace po = boost::program_options;
 
-#define NUM_OF_PHY_BANK 32
-
 typedef std::vector<std::pair<int, int>> bank_ranges_t;
 
 template <typename Titer>
@@ -61,6 +59,25 @@ bank_ranges_t lds2reg(int  length,
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
         ret.push_back(std::make_pair(bank_start, bank_end));
+        // switch(elem_bytes)
+        // {
+        // case 4:
+        //     ret.push_back(std::make_tuple(bank_start, 0, 0, 0));
+        //     break;
+        // case 8:
+        //     ret.push_back(std::make_tuple(bank_start, bank_start + 1, 0, 0));
+        //     break;
+        // case 12:
+        //     ret.push_back(std::make_tuple(bank_start, bank_start + 1, bank_start + 2, 0));
+        //     break;
+        // case 16:
+        //     ret.push_back(
+        //         std::make_tuple(bank_start, bank_start + 1, bank_start + 2, bank_start + 3));
+        //     break;
+        // default:
+        //     break;
+        // }
+
         if(debug)
             std::cout << "    tid " << std::setw(3) << threadIdx << " R: reg[" << std::setw(3)
                       << h * width + w << "], lds[" << std::setw(3) << idx << "], bank["
@@ -97,6 +114,24 @@ bank_ranges_t reg2lds(int  length,
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
         ret.push_back(std::make_pair(bank_start, bank_end));
+        // switch(elem_bytes)
+        // {
+        // case 4:
+        //     ret.push_back(std::make_tuple(bank_start, 0, 0, 0));
+        //     break;
+        // case 8:
+        //     ret.push_back(std::make_tuple(bank_start, bank_start + 1, 0, 0));
+        //     break;
+        // case 12:
+        //     ret.push_back(std::make_tuple(bank_start, bank_start + 1, bank_start + 2, 0));
+        //     break;
+        // case 16:
+        //     ret.push_back(
+        //         std::make_tuple(bank_start, bank_start + 1, bank_start + 2, bank_start + 3));
+        //     break;
+        // default:
+        //     break;
+        // }
         if(debug)
             std::cout << "    tid " << std::setw(3) << threadIdx << " W: lds[" << std::setw(3)
                       << idx << "], reg[" << std::setw(3) << h * width + w << "], bank["
@@ -110,12 +145,10 @@ template <typename T>
 void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     std::vector<int>& factors,
                                     int               wavefront_size,
-                                    int               phy_bank_width,
-                                    int               num_of_phy_bank,
+                                    int               bank_width,
+                                    int               num_of_bank,
                                     bool              debug)
 {
-    const auto bank_width  = sizeof(T);
-    const auto num_of_bank = phy_bank_width * num_of_phy_bank / bank_width;
     std::cout << "bank_width: " << bank_width << ", num_of_bank " << num_of_bank << std::endl;
 
     const auto  length             = product(factors.begin(), factors.end());
@@ -278,8 +311,8 @@ int main(int argc, char* argv[])
 
     int threads_per_transform;
     int wavefront_size;
-    int bank_phy_width;
-    int num_of_phy_bank;
+    int bank_width;
+    int num_of_bank;
 
     // clang-format off
     po::options_description opdesc("lds conflict sim options");
@@ -289,8 +322,8 @@ int main(int argc, char* argv[])
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
-        ("bank_phy_width,b", po::value<int>(&bank_phy_width)->default_value(4), "lds physical bank width in bytes.")
-        ("num_of_phy_bank,n", po::value<int>(&num_of_phy_bank)->default_value(32), "number of lds physical banks.")
+        ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds physical bank width in bytes.")
+        ("num_of_bank,n", po::value<int>(&num_of_bank)->default_value(32), "number of lds physical banks.")
         ("verbose,v", "Print detailed debug info.");
     // clang-format on
 
@@ -308,29 +341,29 @@ int main(int argc, char* argv[])
         st_batched_1d_lds_conflict_sim<float>(threads_per_transform,
                                               factors,
                                               wavefront_size,
-                                              bank_phy_width,
-                                              num_of_phy_bank,
+                                              bank_width,
+                                              num_of_bank,
                                               vm.count("verbose"));
     else if(precision == "double")
         st_batched_1d_lds_conflict_sim<double>(threads_per_transform,
                                                factors,
                                                wavefront_size,
-                                               bank_phy_width,
-                                               num_of_phy_bank,
+                                               bank_width,
+                                               num_of_bank,
                                                vm.count("verbose"));
     if(precision == "float2")
         st_batched_1d_lds_conflict_sim<float2>(threads_per_transform,
                                                factors,
                                                wavefront_size,
-                                               bank_phy_width,
-                                               num_of_phy_bank,
+                                               bank_width,
+                                               num_of_bank,
                                                vm.count("verbose"));
     else if(precision == "double2")
         st_batched_1d_lds_conflict_sim<double2>(threads_per_transform,
                                                 factors,
                                                 wavefront_size,
-                                                bank_phy_width,
-                                                num_of_phy_bank,
+                                                bank_width,
+                                                num_of_bank,
                                                 vm.count("verbose"));
 
     return 0;
