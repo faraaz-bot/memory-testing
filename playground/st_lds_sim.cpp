@@ -54,7 +54,10 @@ bank_ranges_t lds2reg(int  length,
     for(auto w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
-        const auto idx = offset_lds + (tid + w * length / width) * lstride;
+        auto       idx = offset_lds + (tid + w * length / width) * lstride;
+
+        // auto sdataID = threadIdx + w * 8;
+        // idx          = (sdataID / 16) * 17 + sdataID % 16;
 
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
@@ -107,9 +110,18 @@ bank_ranges_t reg2lds(int  length,
     for(auto w = 0; w < width; ++w)
     {
         const auto tid = thread + dt + h * threads_per_transform;
-        const auto idx
+        auto       idx
             = offset_lds
               + (tid / cumheight * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
+
+        // auto stageInvocationID = threadIdx + 0;
+        // auto blockInvocationID = stageInvocationID;
+        // stageInvocationID      = stageInvocationID % 1;
+        // blockInvocationID      = blockInvocationID - stageInvocationID;
+        // auto inoutID           = blockInvocationID * 8;
+        // inoutID                = inoutID + stageInvocationID;
+        // auto sdataID           = inoutID + w;
+        // idx                    = (sdataID / 16) * 17 + sdataID % 16;
 
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
@@ -159,12 +171,11 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
     // The overall score, the lower the better
     int score = 0;
 
-    // The idea target, hit bank once per access.
+    // The idea target, hit bank maximum once per access.
     // * 2 for read and write per pass, except, no lds2reg at the 1st pass
     // and no reg2lds at the last pass.
     const int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2
-                               - factors.front() - factors.back())
-                              * num_of_bank;
+                               - factors.front() - factors.back());
 
     for(auto npass = 0; npass < factors.size(); ++npass)
     {
@@ -223,14 +234,12 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                             bank_width,
                                                             num_of_bank,
                                                             debug);
-                        for(auto bank_pair : bank_ranges)
+                        for(auto i = 0; i < bank_ranges.size(); ++i)
                         {
-                            for(auto w = 0; w < width; ++w)
-                                for(auto i = bank_pair.first; i <= bank_pair.second; i++)
-                                {
-                                    write_hit_counts[w][i]++;
-                                    score++;
-                                }
+                            for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                            {
+                                write_hit_counts[i % width][b]++;
+                            }
                         }
                     }
 
@@ -252,14 +261,12 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                             bank_width,
                                                             num_of_bank,
                                                             debug);
-                        for(auto bank_pair : bank_ranges)
+                        for(auto i = 0; i < bank_ranges.size(); ++i)
                         {
-                            for(auto w = 0; w < width; ++w)
-                                for(auto i = bank_pair.first; i <= bank_pair.second; i++)
-                                {
-                                    read_hit_counts[w][i]++;
-                                    score++;
-                                }
+                            for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                            {
+                                read_hit_counts[i % width][b]++;
+                            }
                         }
                     }
         }
@@ -270,9 +277,14 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
         std::cout << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
+            auto max = write_hit_counts[w][0];
             std::cout << "  step" << std::setw(2) << w << " ";
             for(auto i = 0; i < num_of_bank; i++)
+            {
                 std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
+                max = std::max(max, write_hit_counts[w][i]);
+            }
+            score += max;
             std::cout << std::endl;
         }
 
@@ -282,9 +294,13 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
         std::cout << std::endl;
         for(auto w = 0; w < radix; ++w)
         {
+            auto max = read_hit_counts[w][0];
             std::cout << "  step" << std::setw(2) << w << " ";
             for(auto i = 0; i < num_of_bank; i++)
+            {
                 std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
+                max = std::max(max, read_hit_counts[w][i]);
+            }
             std::cout << std::endl;
         }
         std::cout << std::endl;
