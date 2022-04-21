@@ -11,7 +11,7 @@
 // Quick tests:
 //    ./st_lds_sim -t 2 -f 4 2 -w 2 -v
 //    ./st_lds_sim -t 2 -f 4 2 -w 4 -v
-//    ./st_lds_sim -t 8 -f 8 8
+//    ./st_lds_sim -t 8 -f 8 8 -m 1
 //    ./st_lds_sim -t 10 -f 5 5 4
 //
 ///////////////////////////////////////////////////////////////////////////////
@@ -35,6 +35,7 @@ typename Titer::value_type product(Titer begin, Titer end)
         begin, end, typename Titer::value_type(1), std::multiplies<typename Titer::value_type>());
 }
 
+// load_lds_generator
 bank_ranges_t lds2reg(int  length,
                       int  threads_per_transform,
                       int  offset_lds,
@@ -82,7 +83,7 @@ bank_ranges_t lds2reg(int  length,
         // }
 
         if(debug)
-            std::cout << "    tid " << std::setw(3) << threadIdx << " R: reg[" << std::setw(3)
+            std::cout << "      tid " << std::setw(3) << threadIdx << " R: reg[" << std::setw(3)
                       << h * width + w << "], lds[" << std::setw(3) << idx << "], bank["
                       << std::setw(2) << bank_start << "-" << std::setw(2) << bank_end << "]"
                       << std::endl;
@@ -90,6 +91,7 @@ bank_ranges_t lds2reg(int  length,
     return ret;
 }
 
+// store_lds_generator
 bank_ranges_t reg2lds(int  length,
                       int  threads_per_transform,
                       int  offset_lds,
@@ -145,7 +147,7 @@ bank_ranges_t reg2lds(int  length,
         //     break;
         // }
         if(debug)
-            std::cout << "    tid " << std::setw(3) << threadIdx << " W: lds[" << std::setw(3)
+            std::cout << "      tid " << std::setw(3) << threadIdx << " W: lds[" << std::setw(3)
                       << idx << "], reg[" << std::setw(3) << h * width + w << "], bank["
                       << std::setw(2) << bank_start << "-" << std::setw(2) << bank_end << "]"
                       << std::endl;
@@ -156,6 +158,7 @@ bank_ranges_t reg2lds(int  length,
 template <typename T>
 void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     std::vector<int>& factors,
+                                    int               max_transform_num,
                                     int               wavefront_size,
                                     int               bank_width,
                                     int               num_of_bank,
@@ -163,161 +166,203 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
 {
     std::cout << "bank_width: " << bank_width << ", num_of_bank " << num_of_bank << std::endl;
 
-    const auto  length             = product(factors.begin(), factors.end());
-    const auto  elem_bytes         = sizeof(T);
-    const float transform_per_warp = (float)wavefront_size / threads_per_transform;
-    std::cout << "transform_per_warp: " << transform_per_warp << std::endl;
+    const auto  length              = product(factors.begin(), factors.end());
+    const auto  elem_bytes          = sizeof(T);
+    const float transform_per_warp  = (float)wavefront_size / threads_per_transform;
+    const auto  optimal_bank_access = (float)max_transform_num * length / num_of_bank;
+    std::cout << "transform_per_warp: " << transform_per_warp << ", optimal_bank_access "
+              << optimal_bank_access << std::endl;
 
-    // The overall score, the lower the better
-    int score = 0;
-
-    // The idea target, hit bank maximum once per access.
-    // * 2 for read and write per pass, except, no lds2reg at the 1st pass
-    // and no reg2lds at the last pass.
-    const int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2
-                               - factors.front() - factors.back());
-
-    for(auto npass = 0; npass < factors.size(); ++npass)
+    for(auto group_id = 0; group_id < std::max(1, wavefront_size / num_of_bank); group_id++)
     {
-        std::cout << "Pass " << npass << std::endl;
+        // The overall score, the lower the better
+        int score = 0;
 
-        const auto radix = factors[npass];
+        // The idea target, hit bank maximum once per access.
+        // * 2 for read and write per pass, except, no lds2reg at the 1st pass
+        // and no reg2lds at the last pass.
 
-        // 2D bank stats storage for all steps in one pass
-        int** read_hit_counts = new int*[radix];
-        for(int i = 0; i < radix; i++)
+        // FIXME!!!
+        const int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2
+                                   - factors.front() - factors.back());
+        // const int optimal_score = std::min(,
+        //                                    (std::accumulate(factors.begin(), factors.end(), 0) * 2
+        //                                     - factors.front() - factors.back()));
+
+        auto group_start_thread = group_id * num_of_bank;
+        auto group_end_thread
+            = std::min((group_id + 1) * num_of_bank, max_transform_num * threads_per_transform);
+
+        if(group_start_thread < group_end_thread)
         {
-            read_hit_counts[i] = new int[num_of_bank];
-        }
-        int** write_hit_counts = new int*[radix];
-        for(int i = 0; i < radix; i++)
-        {
-            write_hit_counts[i] = new int[num_of_bank];
-        }
-        for(int w = 0; w < radix; ++w)
-        {
-            for(auto i = 0; i < num_of_bank; i++)
-                read_hit_counts[w][i] = write_hit_counts[w][i] = 0;
-        }
+            std::cout << "\nThread group " << group_id << ": [" << group_start_thread << ", "
+                      << group_end_thread - 1 << "]" << std::endl;
 
-        // simulate the first n complete transforms only for now
-        for(int transform_id = 0; transform_id < transform_per_warp; transform_id++)
-        {
-            std::cout << "    transform " << transform_id << std::endl;
-            // no any padding or strides, elementwise
-            int regular_offset_lds = transform_id * length;
+            for(auto npass = 0; npass < factors.size(); ++npass)
+            {
+                std::cout << "Pass " << npass << std::endl;
 
-            int   width     = factors[npass];
-            float height    = static_cast<float>(length) / width / threads_per_transform;
-            int   cumheight = product(factors.begin(), factors.begin() + npass);
+                const auto radix = factors[npass];
 
-            int iheight = std::floor(height);
-            if(height > iheight && threads_per_transform > length / width)
-                iheight += 1;
-            // std::cout << "iheight " << iheight << std::endl;
-            if(npass != factors.size() - 1)
-                for(auto h = 0; h < iheight; ++h)
-                    //work += generator(h, 0, width, 0);
-                    for(auto threadIdx = transform_id * threads_per_transform;
-                        threadIdx < (transform_id + 1) * threads_per_transform;
-                        ++threadIdx)
+                // 2D bank stats storage for all steps in one pass
+                int** read_hit_counts = new int*[radix];
+                for(int i = 0; i < radix; i++)
+                {
+                    read_hit_counts[i] = new int[num_of_bank];
+                }
+                int** write_hit_counts = new int*[radix];
+                for(int i = 0; i < radix; i++)
+                {
+                    write_hit_counts[i] = new int[num_of_bank];
+                }
+                for(int w = 0; w < radix; ++w)
+                {
+                    for(auto i = 0; i < num_of_bank; i++)
+                        read_hit_counts[w][i] = write_hit_counts[w][i] = 0;
+                }
+
+                if(npass != factors.size() - 1)
+                    for(auto threadIdx = group_start_thread; threadIdx < group_end_thread;
+                        threadIdx++)
                     {
-                        bank_ranges_t bank_ranges = reg2lds(length,
-                                                            threads_per_transform,
-                                                            regular_offset_lds,
-                                                            threadIdx,
-                                                            h,
-                                                            width,
-                                                            0,
-                                                            cumheight,
-                                                            elem_bytes,
-                                                            bank_width,
-                                                            num_of_bank,
-                                                            debug);
-                        for(auto i = 0; i < bank_ranges.size(); ++i)
+                        auto transform_id = threadIdx / threads_per_transform;
+                        if(debug)
+                            std::cout << "    transform " << transform_id << std::endl;
+                        // no any padding or strides, elementwise
+                        int regular_offset_lds = transform_id * length;
+
+                        int   width  = factors[npass];
+                        float height = static_cast<float>(length) / width / threads_per_transform;
+                        int   cumheight = product(factors.begin(), factors.begin() + npass);
+
+                        int iheight = std::floor(height);
+                        if(height > iheight && threads_per_transform > length / width)
+                            iheight += 1;
+                        // std::cout << "iheight " << iheight << std::endl;
+
+                        //stmts += CommentLines{"more than enough threads, some do nothing"};
+                        //stmts += If{thread < length / width, work};
+                        if((threads_per_transform == length / width)
+                           || ((threads_per_transform != length / width)
+                               && (threadIdx % threads_per_transform < length / width)))
                         {
-                            for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                            for(auto h = 0; h < iheight; ++h) //work += generator(h, 0, width, 0);
                             {
-                                write_hit_counts[i % width][b]++;
+                                bank_ranges_t bank_ranges = reg2lds(length,
+                                                                    threads_per_transform,
+                                                                    regular_offset_lds,
+                                                                    threadIdx,
+                                                                    h,
+                                                                    width,
+                                                                    0,
+                                                                    cumheight,
+                                                                    elem_bytes,
+                                                                    bank_width,
+                                                                    num_of_bank,
+                                                                    debug);
+                                for(auto i = 0; i < bank_ranges.size(); ++i)
+                                {
+                                    for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second;
+                                        ++b)
+                                    {
+                                        write_hit_counts[i % width][b]++;
+                                    }
+                                }
                             }
                         }
                     }
 
-            if(npass != 0)
-                for(auto h = 0; h < iheight; ++h)
-                    //work += generator(h, 0, width, 0);
-                    for(auto threadIdx = transform_id * threads_per_transform;
-                        threadIdx < (transform_id + 1) * threads_per_transform;
-                        ++threadIdx)
+                if(npass != 0)
+                    for(auto threadIdx = group_start_thread; threadIdx < group_end_thread;
+                        threadIdx++)
                     {
-                        bank_ranges_t bank_ranges = lds2reg(length,
-                                                            threads_per_transform,
-                                                            regular_offset_lds,
-                                                            threadIdx,
-                                                            h,
-                                                            width,
-                                                            0,
-                                                            elem_bytes,
-                                                            bank_width,
-                                                            num_of_bank,
-                                                            debug);
-                        for(auto i = 0; i < bank_ranges.size(); ++i)
+                        auto transform_id = threadIdx / threads_per_transform;
+                        if(debug)
+                            std::cout << "    transform " << transform_id << std::endl;
+                        // no any padding or strides, elementwise
+                        int regular_offset_lds = transform_id * length;
+
+                        int   width  = factors[npass];
+                        float height = static_cast<float>(length) / width / threads_per_transform;
+                        int   cumheight = product(factors.begin(), factors.begin() + npass);
+
+                        int iheight = std::floor(height);
+                        if(height > iheight && threads_per_transform > length / width)
+                            iheight += 1;
+
+                        for(auto h = 0; h < iheight; ++h) //work += generator(h, 0, width, 0);
                         {
-                            for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                            bank_ranges_t bank_ranges = lds2reg(length,
+                                                                threads_per_transform,
+                                                                regular_offset_lds,
+                                                                threadIdx,
+                                                                h,
+                                                                width,
+                                                                0,
+                                                                elem_bytes,
+                                                                bank_width,
+                                                                num_of_bank,
+                                                                debug);
+                            for(auto i = 0; i < bank_ranges.size(); ++i)
                             {
-                                read_hit_counts[i % width][b]++;
+                                for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                                {
+                                    read_hit_counts[i % width][b]++;
+                                }
                             }
                         }
                     }
-        }
 
-        std::cout << "  W bank stats:\n  bank   ";
-        for(auto i = 0; i < num_of_bank; i++)
-            std::cout << std::setw(2) << i << ",";
-        std::cout << std::endl;
-        for(auto w = 0; w < radix; ++w)
-        {
-            auto max = write_hit_counts[w][0];
-            std::cout << "  step" << std::setw(2) << w << " ";
-            for(auto i = 0; i < num_of_bank; i++)
-            {
-                std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
-                max = std::max(max, write_hit_counts[w][i]);
+                std::cout << "  W bank stats:\n  bank   ";
+                for(auto i = 0; i < num_of_bank; i++)
+                    std::cout << std::setw(2) << i << ",";
+                std::cout << std::endl;
+                for(auto w = 0; w < radix; ++w)
+                {
+                    auto max = write_hit_counts[w][0];
+                    std::cout << "  step" << std::setw(2) << w << " ";
+                    for(auto i = 0; i < num_of_bank; i++)
+                    {
+                        std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
+                        max = std::max(max, write_hit_counts[w][i]);
+                    }
+                    score += max;
+                    std::cout << std::endl;
+                }
+
+                std::cout << "\n  R bank stats:\n  bank   ";
+                for(auto i = 0; i < num_of_bank; i++)
+                    std::cout << std::setw(2) << i << ",";
+                std::cout << std::endl;
+                for(auto w = 0; w < radix; ++w)
+                {
+                    auto max = read_hit_counts[w][0];
+                    std::cout << "  step" << std::setw(2) << w << " ";
+                    for(auto i = 0; i < num_of_bank; i++)
+                    {
+                        std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
+                        max = std::max(max, read_hit_counts[w][i]);
+                    }
+                    std::cout << std::endl;
+                }
+                std::cout << std::endl;
+
+                for(int i = 0; i < radix; i++)
+                {
+                    delete[] write_hit_counts[i];
+                }
+                delete[] write_hit_counts;
+                for(int i = 0; i < radix; i++)
+                {
+                    delete[] read_hit_counts[i];
+                }
+                delete[] read_hit_counts;
             }
-            score += max;
-            std::cout << std::endl;
-        }
 
-        std::cout << "\n  R bank stats:\n  bank   ";
-        for(auto i = 0; i < num_of_bank; i++)
-            std::cout << std::setw(2) << i << ",";
-        std::cout << std::endl;
-        for(auto w = 0; w < radix; ++w)
-        {
-            auto max = read_hit_counts[w][0];
-            std::cout << "  step" << std::setw(2) << w << " ";
-            for(auto i = 0; i < num_of_bank; i++)
-            {
-                std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
-                max = std::max(max, read_hit_counts[w][i]);
-            }
-            std::cout << std::endl;
+            std::cout << "  Overall score: " << score << " vs bottom_line " << optimal_score
+                      << std::endl;
         }
-        std::cout << std::endl;
-
-        for(int i = 0; i < radix; i++)
-        {
-            delete[] write_hit_counts[i];
-        }
-        delete[] write_hit_counts;
-        for(int i = 0; i < radix; i++)
-        {
-            delete[] read_hit_counts[i];
-        }
-        delete[] read_hit_counts;
     }
-
-    std::cout << "Overall score: " << score << " vs bottom_line " << optimal_score << std::endl;
 }
 
 int main(int argc, char* argv[])
@@ -326,6 +371,7 @@ int main(int argc, char* argv[])
     std::vector<int> factors;
 
     int threads_per_transform;
+    int max_transform_num;
     int wavefront_size;
     int bank_width;
     int num_of_bank;
@@ -334,9 +380,10 @@ int main(int argc, char* argv[])
     po::options_description opdesc("lds conflict sim options");
     opdesc.add_options()
         ("help,h", "produces this help message")
-        ("precision,p",  po::value<std::string>(&precision)->default_value("float2"), "precision choices: float2, double2, float, double.")
+        ("precision,p",  po::value<std::string>(&precision)->default_value("float"), "precision choices: float2, double2, float, double.")
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
+        ("max_transform_num,m", po::value<int>(&max_transform_num)->default_value(-1), "max number of transforms.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
         ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds physical bank width in bytes.")
         ("num_of_bank,n", po::value<int>(&num_of_bank)->default_value(32), "number of lds physical banks.")
@@ -353,9 +400,14 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+    if(max_transform_num == -1)
+        max_transform_num = wavefront_size / threads_per_transform;
+    std::cout << "----------- max_transform_num " << max_transform_num << std::endl;
+
     if(precision == "float")
         st_batched_1d_lds_conflict_sim<float>(threads_per_transform,
                                               factors,
+                                              max_transform_num,
                                               wavefront_size,
                                               bank_width,
                                               num_of_bank,
@@ -363,6 +415,7 @@ int main(int argc, char* argv[])
     else if(precision == "double")
         st_batched_1d_lds_conflict_sim<double>(threads_per_transform,
                                                factors,
+                                               max_transform_num,
                                                wavefront_size,
                                                bank_width,
                                                num_of_bank,
@@ -370,6 +423,7 @@ int main(int argc, char* argv[])
     if(precision == "float2")
         st_batched_1d_lds_conflict_sim<float2>(threads_per_transform,
                                                factors,
+                                               max_transform_num,
                                                wavefront_size,
                                                bank_width,
                                                num_of_bank,
@@ -377,6 +431,7 @@ int main(int argc, char* argv[])
     else if(precision == "double2")
         st_batched_1d_lds_conflict_sim<double2>(threads_per_transform,
                                                 factors,
+                                                max_transform_num,
                                                 wavefront_size,
                                                 bank_width,
                                                 num_of_bank,
