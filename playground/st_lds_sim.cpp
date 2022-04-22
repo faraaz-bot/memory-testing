@@ -12,6 +12,7 @@
 //    ./st_lds_sim -t 2 -f 4 2 -w 2 -v
 //    ./st_lds_sim -t 2 -f 4 2 -w 4 -v
 //    ./st_lds_sim -t 8 -f 8 8 -m 1
+//    ./st_lds_sim -t 7 -f 3 7 -m 1 -v
 //    ./st_lds_sim -t 10 -f 5 5 4
 //
 ///////////////////////////////////////////////////////////////////////////////
@@ -164,14 +165,14 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     int               num_of_bank,
                                     bool              debug)
 {
-    std::cout << "bank_width: " << bank_width << ", num_of_bank " << num_of_bank << std::endl;
+    const auto  length             = product(factors.begin(), factors.end());
+    const auto  elem_bytes         = sizeof(T);
+    const float transform_per_warp = (float)wavefront_size / threads_per_transform;
 
-    const auto  length              = product(factors.begin(), factors.end());
-    const auto  elem_bytes          = sizeof(T);
-    const float transform_per_warp  = (float)wavefront_size / threads_per_transform;
-    const auto  optimal_bank_access = (float)max_transform_num * length / num_of_bank;
-    std::cout << "transform_per_warp: " << transform_per_warp << ", optimal_bank_access "
-              << optimal_bank_access << std::endl;
+    std::cout << "num_of_bank:\t\t" << num_of_bank << "\nbank_width:\t\t" << bank_width
+              << "\nwavefront_size:\t\t" << wavefront_size << "\nmax_transform_num:\t"
+              << max_transform_num << "\nthreads_per_transform:\t" << threads_per_transform
+              << "\ntransform_per_warp:\t" << transform_per_warp << std::endl;
 
     for(auto group_id = 0; group_id < std::max(1, wavefront_size / num_of_bank); group_id++)
     {
@@ -181,13 +182,8 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
         // The idea target, hit bank maximum once per access.
         // * 2 for read and write per pass, except, no lds2reg at the 1st pass
         // and no reg2lds at the last pass.
-
-        // FIXME!!!
         const int optimal_score = (std::accumulate(factors.begin(), factors.end(), 0) * 2
                                    - factors.front() - factors.back());
-        // const int optimal_score = std::min(,
-        //                                    (std::accumulate(factors.begin(), factors.end(), 0) * 2
-        //                                     - factors.front() - factors.back()));
 
         auto group_start_thread = group_id * num_of_bank;
         auto group_end_thread
@@ -226,8 +222,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                         threadIdx++)
                     {
                         auto transform_id = threadIdx / threads_per_transform;
-                        if(debug)
-                            std::cout << "    transform " << transform_id << std::endl;
+
                         // no any padding or strides, elementwise
                         int regular_offset_lds = transform_id * length;
 
@@ -246,6 +241,9 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                            || ((threads_per_transform != length / width)
                                && (threadIdx % threads_per_transform < length / width)))
                         {
+                            if(debug)
+                                std::cout << "    transform " << transform_id << std::endl;
+
                             for(auto h = 0; h < iheight; ++h) //work += generator(h, 0, width, 0);
                             {
                                 bank_ranges_t bank_ranges = reg2lds(length,
@@ -277,8 +275,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                         threadIdx++)
                     {
                         auto transform_id = threadIdx / threads_per_transform;
-                        if(debug)
-                            std::cout << "    transform " << transform_id << std::endl;
+
                         // no any padding or strides, elementwise
                         int regular_offset_lds = transform_id * length;
 
@@ -290,24 +287,33 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                         if(height > iheight && threads_per_transform > length / width)
                             iheight += 1;
 
-                        for(auto h = 0; h < iheight; ++h) //work += generator(h, 0, width, 0);
+                        if((threads_per_transform == length / width)
+                           || ((threads_per_transform != length / width)
+                               && (threadIdx % threads_per_transform < length / width)))
                         {
-                            bank_ranges_t bank_ranges = lds2reg(length,
-                                                                threads_per_transform,
-                                                                regular_offset_lds,
-                                                                threadIdx,
-                                                                h,
-                                                                width,
-                                                                0,
-                                                                elem_bytes,
-                                                                bank_width,
-                                                                num_of_bank,
-                                                                debug);
-                            for(auto i = 0; i < bank_ranges.size(); ++i)
+                            if(debug)
+                                std::cout << "    transform " << transform_id << std::endl;
+
+                            for(auto h = 0; h < iheight; ++h) //work += generator(h, 0, width, 0);
                             {
-                                for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second; ++b)
+                                bank_ranges_t bank_ranges = lds2reg(length,
+                                                                    threads_per_transform,
+                                                                    regular_offset_lds,
+                                                                    threadIdx,
+                                                                    h,
+                                                                    width,
+                                                                    0,
+                                                                    elem_bytes,
+                                                                    bank_width,
+                                                                    num_of_bank,
+                                                                    debug);
+                                for(auto i = 0; i < bank_ranges.size(); ++i)
                                 {
-                                    read_hit_counts[i % width][b]++;
+                                    for(auto b = bank_ranges[i].first; b <= bank_ranges[i].second;
+                                        ++b)
+                                    {
+                                        read_hit_counts[i % width][b]++;
+                                    }
                                 }
                             }
                         }
@@ -343,6 +349,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                         std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
                         max = std::max(max, read_hit_counts[w][i]);
                     }
+                    score += max;
                     std::cout << std::endl;
                 }
                 std::cout << std::endl;
@@ -402,7 +409,6 @@ int main(int argc, char* argv[])
 
     if(max_transform_num == -1)
         max_transform_num = wavefront_size / threads_per_transform;
-    std::cout << "----------- max_transform_num " << max_transform_num << std::endl;
 
     if(precision == "float")
         st_batched_1d_lds_conflict_sim<float>(threads_per_transform,
