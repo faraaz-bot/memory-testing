@@ -169,10 +169,12 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
     const auto  elem_bytes         = sizeof(T);
     const float transform_per_warp = (float)wavefront_size / threads_per_transform;
 
-    std::cout << "num_of_bank:\t\t" << num_of_bank << "\nbank_width:\t\t" << bank_width
-              << "\nwavefront_size:\t\t" << wavefront_size << "\nmax_transform_num:\t"
-              << max_transform_num << "\nthreads_per_transform:\t" << threads_per_transform
-              << "\ntransform_per_warp:\t" << transform_per_warp << std::endl;
+    std::cout << "-------------------------------------------------------------\n"
+              << "num_of_bank:\t\t" << num_of_bank << "\nbank_width:\t\t" << bank_width
+              << "\nwavefront_size:\t\t" << wavefront_size << "\ntransform length:\t" << length
+              << "\nmax_transform_num:\t" << max_transform_num << "\nthreads_per_transform:\t"
+              << threads_per_transform << "\ntransform_per_warp:\t" << transform_per_warp
+              << std::endl;
 
     for(auto group_id = 0; group_id < std::max(1, wavefront_size / num_of_bank); group_id++)
     {
@@ -319,24 +321,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                         }
                     }
 
-                std::cout << "  W bank stats:\n  bank   ";
-                for(auto i = 0; i < num_of_bank; i++)
-                    std::cout << std::setw(2) << i << ",";
-                std::cout << std::endl;
-                for(auto w = 0; w < radix; ++w)
-                {
-                    auto max = write_hit_counts[w][0];
-                    std::cout << "  step" << std::setw(2) << w << " ";
-                    for(auto i = 0; i < num_of_bank; i++)
-                    {
-                        std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
-                        max = std::max(max, write_hit_counts[w][i]);
-                    }
-                    score += max;
-                    std::cout << std::endl;
-                }
-
-                std::cout << "\n  R bank stats:\n  bank   ";
+                std::cout << "  R bank stats:\n  bank   ";
                 for(auto i = 0; i < num_of_bank; i++)
                     std::cout << std::setw(2) << i << ",";
                 std::cout << std::endl;
@@ -348,6 +333,23 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                     {
                         std::cout << std::setw(2) << read_hit_counts[w][i] << ",";
                         max = std::max(max, read_hit_counts[w][i]);
+                    }
+                    score += max;
+                    std::cout << std::endl;
+                }
+
+                std::cout << "\n  W bank stats:\n  bank   ";
+                for(auto i = 0; i < num_of_bank; i++)
+                    std::cout << std::setw(2) << i << ",";
+                std::cout << std::endl;
+                for(auto w = 0; w < radix; ++w)
+                {
+                    auto max = write_hit_counts[w][0];
+                    std::cout << "  step" << std::setw(2) << w << " ";
+                    for(auto i = 0; i < num_of_bank; i++)
+                    {
+                        std::cout << std::setw(2) << write_hit_counts[w][i] << ",";
+                        max = std::max(max, write_hit_counts[w][i]);
                     }
                     score += max;
                     std::cout << std::endl;
