@@ -159,7 +159,7 @@ bank_ranges_t reg2lds(int  length,
 template <typename T>
 void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     std::vector<int>& factors,
-                                    int               max_transform_num,
+                                    float             max_transform_num,
                                     int               wavefront_size,
                                     int               bank_width,
                                     int               num_of_bank,
@@ -169,12 +169,14 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
     const auto  elem_bytes         = sizeof(T);
     const float transform_per_warp = (float)wavefront_size / threads_per_transform;
 
-    std::cout << "-------------------------------------------------------------\n"
-              << "num_of_bank:\t\t" << num_of_bank << "\nbank_width:\t\t" << bank_width
-              << "\nwavefront_size:\t\t" << wavefront_size << "\ntransform length:\t" << length
-              << "\nmax_transform_num:\t" << max_transform_num << "\nthreads_per_transform:\t"
-              << threads_per_transform << "\ntransform_per_warp:\t" << transform_per_warp
-              << std::endl;
+    std::cout << "-------------------------------------------------------------"
+              << "\ntransform length:     " << length
+              << "\nmax_transform_num:    " << max_transform_num
+              << "\nthreads_per_transform:" << threads_per_transform
+              << "\ntransform_per_warp:   " << transform_per_warp
+              << "\nnum_of_bank:          " << num_of_bank
+              << "\nbank_width:           " << bank_width
+              << "\nwavefront_size:       " << wavefront_size << std::endl;
 
     for(auto group_id = 0; group_id < std::max(1, wavefront_size / num_of_bank); group_id++)
     {
@@ -189,7 +191,8 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
 
         auto group_start_thread = group_id * num_of_bank;
         auto group_end_thread
-            = std::min((group_id + 1) * num_of_bank, max_transform_num * threads_per_transform);
+            = std::min((group_id + 1) * num_of_bank,
+                       static_cast<int>(max_transform_num * threads_per_transform));
 
         if(group_start_thread < group_end_thread)
         {
@@ -379,11 +382,11 @@ int main(int argc, char* argv[])
     std::string      precision;
     std::vector<int> factors;
 
-    int threads_per_transform;
-    int max_transform_num;
-    int wavefront_size;
-    int bank_width;
-    int num_of_bank;
+    int   threads_per_transform;
+    float max_transform_num;
+    int   wavefront_size;
+    int   bank_width;
+    int   num_of_bank;
 
     // clang-format off
     po::options_description opdesc("lds conflict sim options");
@@ -392,7 +395,7 @@ int main(int argc, char* argv[])
         ("precision,p",  po::value<std::string>(&precision)->default_value("float"), "precision choices: float2, double2, float, double.")
         ("threads_per_transform,t", po::value<int>(&threads_per_transform)->default_value(4), "threads_per_transform")
         ("factors,f", po::value<std::vector<int>>(&factors)->multitoken(), "Radices to factorize the FFT.")
-        ("max_transform_num,m", po::value<int>(&max_transform_num)->default_value(-1), "max number of transforms.")
+        ("max_transform_num,m", po::value<float>(&max_transform_num)->default_value(-1), "max number of transforms.")
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
         ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds physical bank width in bytes.")
         ("num_of_bank,n", po::value<int>(&num_of_bank)->default_value(32), "number of lds physical banks.")
@@ -410,7 +413,7 @@ int main(int argc, char* argv[])
     }
 
     if(max_transform_num == -1)
-        max_transform_num = wavefront_size / threads_per_transform;
+        max_transform_num = static_cast<float>(wavefront_size) / threads_per_transform;
 
     if(precision == "float")
         st_batched_1d_lds_conflict_sim<float>(threads_per_transform,
