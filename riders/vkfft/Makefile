@@ -13,7 +13,7 @@ ROCFFT_SRC ?= $(HOME)/rocFFT
 INCLUDES = \
  -I$(VKFFT_SRC)/vkFFT \
  -I$(VKFFT_SRC)/benchmark_scripts/vkFFT_scripts/include \
- -I$(VKFFT_SRC)/glslang-master/glslang/Include \
+ -I$(VKFFT_HOME)/include/glslang/Include/ \
  -I$(ROCFFT_SRC)/clients \
  -I$(ROCFFT_SRC)/library/include
 

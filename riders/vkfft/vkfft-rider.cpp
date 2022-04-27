@@ -74,8 +74,11 @@ VkFFTResult launch_vkfft(const vkfft_params& params, std::vector<double> &gpu_ti
 
     VkBuffer buffer = {};
     VkDeviceMemory bufferDeviceMemory = {};
-    resFFT = allocateBuffer(&vkGPU, &buffer, &bufferDeviceMemory, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, bufferSize);
-    if (resFFT != VKFFT_SUCCESS) return resFFT;
+    resFFT = allocateBuffer(&vkGPU, &buffer, &bufferDeviceMemory,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                            VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, bufferSize);
+    if (resFFT != VKFFT_SUCCESS)
+        return resFFT;
     configuration.buffer = &buffer;
     configuration.bufferSize = &bufferSize;
 
@@ -143,51 +146,65 @@ VkFFTResult launch_vkfft(const vkfft_params& params, std::vector<double> &gpu_ti
 
     createInfo.pNext = &resetFeatures;
 
-    VkQueryPool_T* queryPool;
-    vkCreateQueryPool(vkGPU.device, &createInfo, nullptr, &queryPool);
-	
-    vkCmdResetQueryPool(commandBuffer, queryPool, 0, 2);
-    
-    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
-
-    std::chrono::steady_clock::time_point timeSubmit = std::chrono::steady_clock::now();
-
-
-    res = vkQueueSubmit(vkGPU.queue, 1, &submitInfo, vkGPU.fence);
-    if (res != 0)
-        return VKFFT_ERROR_FAILED_TO_SUBMIT_QUEUE;
-
-    
-    res = vkWaitForFences(vkGPU.device, 1, &vkGPU.fence, VK_TRUE, 100000000000);
-    if (res != 0)
-        return VKFFT_ERROR_FAILED_TO_WAIT_FOR_FENCES;
-    
-    std::chrono::steady_clock::time_point timeEnd = std::chrono::steady_clock::now();
-
-    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
-
-    
-    
-    VkResult result;
-    uint64_t timingRes[2]={ 0 };
-    result = vkGetQueryPoolResults(vkGPU.device, queryPool, 0, 2, sizeof(uint64_t) * 2, timingRes, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
-    if (result == VK_NOT_READY)
+    for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
     {
-        std::cout << "not ready" << std::endl;
+        
+        VkQueryPool_T* queryPool;
+        vkCreateQueryPool(vkGPU.device, &createInfo, nullptr, &queryPool);
+	
+        vkCmdResetQueryPool(commandBuffer, queryPool, 0, 2);
+    
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+
+        std::chrono::steady_clock::time_point timeSubmit = std::chrono::steady_clock::now();
+
+        res = vkQueueSubmit(vkGPU.queue, 1, &submitInfo, vkGPU.fence);
+        if (res != 0)
+            return VKFFT_ERROR_FAILED_TO_SUBMIT_QUEUE;
+    
+        res = vkWaitForFences(vkGPU.device, 1, &vkGPU.fence, VK_TRUE, 100000000000);
+        if (res != 0)
+            return VKFFT_ERROR_FAILED_TO_WAIT_FOR_FENCES;
+    
+        std::chrono::steady_clock::time_point timeEnd = std::chrono::steady_clock::now();
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
+        
+
+        uint64_t timingRes[2]={ 0 };
+        VkResult result = vkGetQueryPoolResults(vkGPU.device,
+                                                queryPool,
+                                                0,
+                                                2,
+                                                sizeof(uint64_t) * 2,
+                                                timingRes,
+                                                sizeof(uint64_t),
+                                                VK_QUERY_RESULT_64_BIT);
+        if (result == VK_NOT_READY)
+        {
+            std::cout << "not ready" << std::endl;
+        }
+        //vkResetQueryPool(vkGPU.device, queryPool, 0, 2);
+        vkDestroyQueryPool(vkGPU.device, queryPool, VK_NULL_HANDLE);
+
+        // std::cout << timingRes[0] << std::endl;
+        // std::cout << timingRes[1] << std::endl;
+    
+        double totTime = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeSubmit).count() * 0.001;
+
+        std::cout << totTime << std::endl;
+        gpu_time[itrial] = totTime + itrial;
+        
+        //std::cout << "Total time: " << totTime << std::endl;
+
+
     }
-    //vkResetQueryPool(vkGPU.device, queryPool, 0, 2);
-    vkDestroyQueryPool(vkGPU.device, queryPool, VK_NULL_HANDLE);
-
-    std::cout << timingRes[0] << std::endl;
-    std::cout << timingRes[1] << std::endl;
-
-    double totTime = std::chrono::duration_cast<std::chrono::microseconds>(timeEnd - timeSubmit).count() * 0.001;
-
-    std::cout << "Total time: " << totTime << std::endl;
 
     res = vkResetFences(vkGPU.device, 1, &vkGPU.fence);
     if (res != 0)
+    {
         return VKFFT_ERROR_FAILED_TO_RESET_FENCES;
+    }
 
     // vkFreeCommandBuffers(vkGPU.device, vkGPU.commandPool, 1, &commandBuffer);
 
@@ -213,6 +230,9 @@ int main(int argc, char* argv[])
     // // FFT parameters:
     vkfft_params params;
 
+    // Token string to fully specify fft params.
+    std::string token;
+    
     // Declare the supported options.
 
     // clang-format doesn't handle boost program options very well:
@@ -250,7 +270,8 @@ int main(int argc, char* argv[])
         ("osize", po::value<std::vector<size_t>>(&params.osize)->multitoken(),
          "Logical size of output buffer.")
         ("ioffset", po::value<std::vector<size_t>>(&params.ioffset)->multitoken(), "Input offsets.")
-        ("ooffset", po::value<std::vector<size_t>>(&params.ooffset)->multitoken(), "Output offsets.");
+        ("ooffset", po::value<std::vector<size_t>>(&params.ooffset)->multitoken(), "Output offsets.")
+        ("token", po::value<std::string>(&token));
     // clang-format on
 
     po::variables_map vm;
@@ -263,26 +284,119 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    params.placement
-        = vm.count("notInPlace") ? fft_placement_notinplace : fft_placement_inplace;
-    params.precision = vm.count("double") ? fft_precision_double : fft_precision_single;
 
-    if(!vm.count("length"))
+    if(vm.count("ntrial"))
     {
-        std::cout << "Please specify transform length!" << std::endl;
-        std::cout << opdesc << std::endl;
-        return 0;
+        std::cout << "Running profile with " << ntrial << " samples\n";
     }
 
+    if(token != "")
+    {
+        std::cout << "Reading fft params from token:\n" << token << std::endl;
+
+        try
+        {
+            params.from_token(token);
+        }
+        catch(...)
+        {
+            std::cout << "Unable to parse token." << std::endl;
+            return 1;
+        }
+    }
+    else
+    {
+        if(!vm.count("length"))
+        {
+            std::cout << "Please specify transform length!" << std::endl;
+            std::cout << opdesc << std::endl;
+            return 0;
+        }
+
+        params.placement
+            = vm.count("notInPlace") ? fft_placement_notinplace : fft_placement_inplace;
+        params.precision = vm.count("double") ? fft_precision_double : fft_precision_single;
+
+        if(vm.count("notInPlace"))
+        {
+            std::cout << "out-of-place\n";
+        }
+        else
+        {
+            std::cout << "in-place\n";
+        }
+
+        if(vm.count("length"))
+        {
+            std::cout << "length:";
+            for(auto& i : params.length)
+                std::cout << " " << i;
+            std::cout << "\n";
+        }
+
+        if(vm.count("istride"))
+        {
+            std::cout << "istride:";
+            for(auto& i : params.istride)
+                std::cout << " " << i;
+            std::cout << "\n";
+        }
+        if(vm.count("ostride"))
+        {
+            std::cout << "ostride:";
+            for(auto& i : params.ostride)
+                std::cout << " " << i;
+            std::cout << "\n";
+        }
+
+        if(params.idist > 0)
+        {
+            std::cout << "idist: " << params.idist << "\n";
+        }
+        if(params.odist > 0)
+        {
+            std::cout << "odist: " << params.odist << "\n";
+        }
+
+        if(vm.count("ioffset"))
+        {
+            std::cout << "ioffset:";
+            for(auto& i : params.ioffset)
+                std::cout << " " << i;
+            std::cout << "\n";
+        }
+        if(vm.count("ooffset"))
+        {
+            std::cout << "ooffset:";
+            for(auto& i : params.ooffset)
+                std::cout << " " << i;
+            std::cout << "\n";
+        }
+    }
+
+    std::cout << std::flush;
+    
     params.validate();
     params.valid(true);
-    std::cout << params.str() << std::endl;
 
+    
+    std::cout << "Token: " << params.token() << std::endl;
+    if(verbose)
+    {
+        std::cout << params.str(" ") << std::endl;
+    }
     
     // Run the transform several times and record the execution time:
     std::vector<double> gpu_time(ntrial);
     
     auto ret = launch_vkfft(params, gpu_time);
 
-    std::cout << ret << std::endl;
+    std::cout << "\nExecution gpu time:";
+    for(const auto& i : gpu_time)
+    {
+        std::cout << " " << i;
+    }
+    std::cout << " ms" << std::endl;
+    
+    return ret;
 }
