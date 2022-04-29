@@ -178,7 +178,7 @@ int main(int argc, char* argv[])
         throw std::runtime_error("Invalid parameters, add --verbose=1 for detail");
     }
 
-    std::cout << params.token() << std::endl;
+    std::cout << "Token: " << params.token() << std::endl;
 
     if(hipInit(0) != hipSuccess)
     {
