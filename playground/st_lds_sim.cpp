@@ -185,6 +185,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
               << "\nthreads_per_transform:" << threads_per_transform
               << "\ntransform_per_warp:   " << transform_per_warp
               << "\nnum_of_bank:          " << num_of_bank
+              << "\nbank_shift:           " << bank_shift
               << "\nbank_width:           " << bank_width
               << "\nwavefront_size:       " << wavefront_size << std::endl;
 
@@ -412,7 +413,7 @@ int main(int argc, char* argv[])
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
         ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds physical bank width in bytes.")
         ("num_of_bank,n", po::value<int>(&num_of_bank)->default_value(32), "number of lds physical banks.")
-        ("bank_shift,n", po::value<int>(&num_of_bank)->default_value(0), "shift 1 element in lds per bank_shift.")
+        ("bank_shift,s", po::value<int>(&bank_shift)->default_value(0), "shift 1 element in lds per bank_shift.")
         ("verbose,v", "Print detailed debug info.");
     // clang-format on
 
