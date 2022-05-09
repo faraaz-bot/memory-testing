@@ -15,6 +15,19 @@
 //    ./st_lds_sim -t 7 -f 3 7 -m 1 -v
 //    ./st_lds_sim -t 10 -f 5 5 4
 //
+// Notes:
+//    - Typically, lds conflict becomes non-negligible for pow-of-2 cases.
+//      There are few non-pow of 2 cases shown in this sim need to confirm.
+//    - To minimize lds conflict, there might be a few solutions:
+//      (a) lds padding based on fft length, (b) lds padding based simple bank
+//      shift 16 or 32, (c) lda padding based on radix. Unlike solution of SBCC,
+//      all these require more lds memory, in which might affect occupancy. (a)
+//      seems doesn't help, while (c) seems too complicated introducing more ALU.
+//      We only simulate (b) for now.
+//    - Besides lds confilict, the total number of issued lds instructions is also
+//      important.
+//    - We are not simulating half lds loading directly yet.
+//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <boost/program_options.hpp>
@@ -47,6 +60,7 @@ bank_ranges_t lds2reg(int  length,
                       int  elem_bytes,
                       int  bank_width,
                       int  num_of_bank,
+                      int  bank_shift,
                       bool debug)
 {
     bank_ranges_t ret;
@@ -58,8 +72,8 @@ bank_ranges_t lds2reg(int  length,
         const auto tid = thread + dt + h * threads_per_transform;
         auto       idx = offset_lds + (tid + w * length / width) * lstride;
 
-        // auto sdataID = threadIdx + w * 8;
-        // idx          = (sdataID / 16) * 17 + sdataID % 16;
+        if(bank_shift)
+            idx = idx + idx / bank_shift;
 
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
@@ -104,6 +118,7 @@ bank_ranges_t reg2lds(int  length,
                       int  elem_bytes,
                       int  bank_width,
                       int  num_of_bank,
+                      int  bank_shift,
                       bool debug)
 {
     bank_ranges_t ret;
@@ -117,14 +132,8 @@ bank_ranges_t reg2lds(int  length,
             = offset_lds
               + (tid / cumheight * (width * cumheight) + tid % cumheight + w * cumheight) * lstride;
 
-        // auto stageInvocationID = threadIdx + 0;
-        // auto blockInvocationID = stageInvocationID;
-        // stageInvocationID      = stageInvocationID % 1;
-        // blockInvocationID      = blockInvocationID - stageInvocationID;
-        // auto inoutID           = blockInvocationID * 8;
-        // inoutID                = inoutID + stageInvocationID;
-        // auto sdataID           = inoutID + w;
-        // idx                    = (sdataID / 16) * 17 + sdataID % 16;
+        if(bank_shift)
+            idx = idx + idx / bank_shift;
 
         const auto bank_start = idx * elem_bytes / bank_width % num_of_bank;
         const auto bank_end   = ((idx + 1) * elem_bytes - 1) / bank_width % num_of_bank;
@@ -163,6 +172,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                     int               wavefront_size,
                                     int               bank_width,
                                     int               num_of_bank,
+                                    int               bank_shift,
                                     bool              debug)
 {
     const auto  length             = product(factors.begin(), factors.end());
@@ -262,6 +272,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                                     elem_bytes,
                                                                     bank_width,
                                                                     num_of_bank,
+                                                                    bank_shift,
                                                                     debug);
                                 for(auto i = 0; i < bank_ranges.size(); ++i)
                                 {
@@ -311,6 +322,7 @@ void st_batched_1d_lds_conflict_sim(int               threads_per_transform,
                                                                     elem_bytes,
                                                                     bank_width,
                                                                     num_of_bank,
+                                                                    bank_shift,
                                                                     debug);
                                 for(auto i = 0; i < bank_ranges.size(); ++i)
                                 {
@@ -387,6 +399,7 @@ int main(int argc, char* argv[])
     int   wavefront_size;
     int   bank_width;
     int   num_of_bank;
+    int   bank_shift;
 
     // clang-format off
     po::options_description opdesc("lds conflict sim options");
@@ -399,6 +412,7 @@ int main(int argc, char* argv[])
         ("wavefront_size,w", po::value<int>(&wavefront_size)->default_value(64), "wavefront_size")
         ("bank_width,b", po::value<int>(&bank_width)->default_value(4), "lds physical bank width in bytes.")
         ("num_of_bank,n", po::value<int>(&num_of_bank)->default_value(32), "number of lds physical banks.")
+        ("bank_shift,n", po::value<int>(&num_of_bank)->default_value(0), "shift 1 element in lds per bank_shift.")
         ("verbose,v", "Print detailed debug info.");
     // clang-format on
 
@@ -422,6 +436,7 @@ int main(int argc, char* argv[])
                                               wavefront_size,
                                               bank_width,
                                               num_of_bank,
+                                              bank_shift,
                                               vm.count("verbose"));
     else if(precision == "double")
         st_batched_1d_lds_conflict_sim<double>(threads_per_transform,
@@ -430,6 +445,7 @@ int main(int argc, char* argv[])
                                                wavefront_size,
                                                bank_width,
                                                num_of_bank,
+                                               bank_shift,
                                                vm.count("verbose"));
     if(precision == "float2")
         st_batched_1d_lds_conflict_sim<float2>(threads_per_transform,
@@ -438,6 +454,7 @@ int main(int argc, char* argv[])
                                                wavefront_size,
                                                bank_width,
                                                num_of_bank,
+                                               bank_shift,
                                                vm.count("verbose"));
     else if(precision == "double2")
         st_batched_1d_lds_conflict_sim<double2>(threads_per_transform,
@@ -446,6 +463,7 @@ int main(int argc, char* argv[])
                                                 wavefront_size,
                                                 bank_width,
                                                 num_of_bank,
+                                                bank_shift,
                                                 vm.count("verbose"));
 
     return 0;
