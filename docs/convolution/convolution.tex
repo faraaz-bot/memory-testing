@@ -1,0 +1,85 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{bm}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Convolution Notes for rocFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+
+The convolution of two inputs $\{f\}$ and $\{g\}$ of equal length $N$ is
+\begin{dmath}
+  \(f\star{}g\)_k = \sum_{p=0}^{k}f_{k-p}g_p
+\end{dmath}
+for $n=0,\dots,N-1$.  The computational complexity is $O\(N^2\)$.
+
+This can be extended to $d$ dimensions, where the multi-index'd convolution is
+\begin{dmath}
+  \(f\star{}g\)_{\pmb{n}} = \sum_{m_0=0}^{k_0}\dots{}\sum_{m_{d-1}=0}^{k_{d-1}} f_{\pmb{n}-\pmb{m}}g_{\pmb{m}}
+\end{dmath}
+TODO: what's the complexity here?
+
+\section{Convolution via FFT}
+
+We need just one index with $-k +p +q$ modulo the length of the FFT.
+
+For $k=0$ we should only have one contribution to this sum.
+\begin{dmath}
+  k  = -k + p + q = 0 + p + q
+\end{dmath}
+where the equality is modulo the FFT length.  Clearly, $p=q=0$ is a
+solution.  The first non-zero solution, if it exists, would be
+achieved at $p=q=N-1$, making the sum equal to $2N-2$.  In order to
+suppress this second solution, the FFT must be of length at least
+$2N-1$.
+
+    
+
+\end{document}
