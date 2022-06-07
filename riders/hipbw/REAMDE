@@ -18,3 +18,5 @@ make ROCFFT_SRC=~/rocFFT
 To use the NVIDIA backend, compile with
 
 make ROCFFT_SRC=~/rocFFT RUNTIME=NVIDIA
+
+cmake -DCMAKE_CXX_COMPILER=hipcc -DROCFFT_SRC=~/repo/rocfft ..
