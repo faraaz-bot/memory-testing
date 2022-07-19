@@ -5,6 +5,11 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <mutex>
+#include <vector>
+
+#include "increment.h"
+
 #ifdef WIN32
 #define ROCFFT_DEVICE_EXPORT __declspec(dllexport)
 #else
@@ -322,5 +327,335 @@ enum DirectRegType
     FORCE_OFF_OR_NOT_SUPPORT,
     TRY_ENABLE_IF_SUPPORT, // Use the direct-to-from-reg function
 };
+
+struct VectorNorms
+{
+    double l_2 = 0.0, l_inf = 0.0;
+};
+
+// count the number of total iterations for 1-, 2-, and 3-D dimensions
+template <typename T1>
+size_t count_iters(const T1& i)
+{
+    return i;
+}
+
+template <typename T1>
+size_t count_iters(const std::tuple<T1, T1>& i)
+{
+    return std::get<0>(i) * std::get<1>(i);
+}
+
+template <typename T1>
+size_t count_iters(const std::tuple<T1, T1, T1>& i)
+{
+    return std::get<0>(i) * std::get<1>(i) * std::get<2>(i);
+}
+
+// Work out how many partitions to break our iteration problem into
+template <typename T1>
+static size_t compute_partition_count(T1 length)
+{
+#ifdef BUILD_CLIENTS_TESTS_OPENMP
+    // we seem to get contention from too many threads, which slows
+    // things down.  particularly noticeable with mix_3D tests
+    static const size_t MAX_PARTITIONS = 8;
+    size_t              iters          = count_iters(length);
+    size_t hw_threads = std::min(MAX_PARTITIONS, static_cast<size_t>(omp_get_num_procs()));
+    if(!hw_threads)
+        return 1;
+
+    // don't bother threading problem sizes that are too small. pick
+    // an arbitrary number of iterations and ensure that each thread
+    // has at least that many iterations to process
+    static const size_t MIN_ITERS_PER_THREAD = 2048;
+
+    // either use the whole CPU, or use ceil(iters/iters_per_thread)
+    return std::min(hw_threads, (iters + MIN_ITERS_PER_THREAD + 1) / MIN_ITERS_PER_THREAD);
+#else
+    return 1;
+#endif
+}
+
+// Break a scalar length into some number of pieces, returning
+// [(start0, end0), (start1, end1), ...]
+template <typename T1>
+std::vector<std::pair<T1, T1>> partition_base(const T1& length, size_t num_parts)
+{
+    static_assert(std::is_integral<T1>::value, "Integral required.");
+
+    // make sure we don't exceed the length
+    num_parts = std::min(length, num_parts);
+
+    std::vector<std::pair<T1, T1>> ret(num_parts);
+    auto                           partition_size = length / num_parts;
+    T1                             cur_partition  = 0;
+    for(size_t i = 0; i < num_parts; ++i, cur_partition += partition_size)
+    {
+        ret[i].first  = cur_partition;
+        ret[i].second = cur_partition + partition_size;
+    }
+    // last partition might not divide evenly, fix it up
+    ret.back().second = length;
+    return ret;
+}
+
+// Returns pairs of startindex, endindex, for 1D, 2D, 3D lengths
+template <typename T1>
+std::vector<std::pair<T1, T1>> partition_rowmajor(const T1& length)
+{
+    return partition_base(length, compute_partition_count(length));
+}
+
+// Partition on the leftmost part of the tuple, for row-major indexing
+template <typename T1>
+std::vector<std::pair<std::tuple<T1, T1>, std::tuple<T1, T1>>>
+    partition_rowmajor(const std::tuple<T1, T1>& length)
+{
+    auto partitions = partition_base(std::get<0>(length), compute_partition_count(length));
+    std::vector<std::pair<std::tuple<T1, T1>, std::tuple<T1, T1>>> ret(partitions.size());
+    for(size_t i = 0; i < partitions.size(); ++i)
+    {
+        std::get<0>(ret[i].first)  = partitions[i].first;
+        std::get<1>(ret[i].first)  = 0;
+        std::get<0>(ret[i].second) = partitions[i].second;
+        std::get<1>(ret[i].second) = std::get<1>(length);
+    }
+    return ret;
+}
+template <typename T1>
+std::vector<std::pair<std::tuple<T1, T1, T1>, std::tuple<T1, T1, T1>>>
+    partition_rowmajor(const std::tuple<T1, T1, T1>& length)
+{
+    auto partitions = partition_base(std::get<0>(length), compute_partition_count(length));
+    std::vector<std::pair<std::tuple<T1, T1, T1>, std::tuple<T1, T1, T1>>> ret(partitions.size());
+    for(size_t i = 0; i < partitions.size(); ++i)
+    {
+        std::get<0>(ret[i].first)  = partitions[i].first;
+        std::get<1>(ret[i].first)  = 0;
+        std::get<2>(ret[i].first)  = 0;
+        std::get<0>(ret[i].second) = partitions[i].second;
+        std::get<1>(ret[i].second) = std::get<1>(length);
+        std::get<2>(ret[i].second) = std::get<2>(length);
+    }
+    return ret;
+}
+
+// Returns pairs of startindex, endindex, for 1D, 2D, 3D lengths
+template <typename T1>
+std::vector<std::pair<T1, T1>> partition_colmajor(const T1& length)
+{
+    return partition_base(length, compute_partition_count(length));
+}
+
+// Partition on the rightmost part of the tuple, for col-major indexing
+template <typename T1>
+std::vector<std::pair<std::tuple<T1, T1>, std::tuple<T1, T1>>>
+    partition_colmajor(const std::tuple<T1, T1>& length)
+{
+    auto partitions = partition_base(std::get<1>(length), compute_partition_count(length));
+    std::vector<std::pair<std::tuple<T1, T1>, std::tuple<T1, T1>>> ret(partitions.size());
+    for(size_t i = 0; i < partitions.size(); ++i)
+    {
+        std::get<1>(ret[i].first)  = partitions[i].first;
+        std::get<0>(ret[i].first)  = 0;
+        std::get<1>(ret[i].second) = partitions[i].second;
+        std::get<0>(ret[i].second) = std::get<0>(length);
+    }
+    return ret;
+}
+template <typename T1>
+std::vector<std::pair<std::tuple<T1, T1, T1>, std::tuple<T1, T1, T1>>>
+    partition_colmajor(const std::tuple<T1, T1, T1>& length)
+{
+    auto partitions = partition_base(std::get<2>(length), compute_partition_count(length));
+    std::vector<std::pair<std::tuple<T1, T1, T1>, std::tuple<T1, T1, T1>>> ret(partitions.size());
+    for(size_t i = 0; i < partitions.size(); ++i)
+    {
+        std::get<2>(ret[i].first)  = partitions[i].first;
+        std::get<1>(ret[i].first)  = 0;
+        std::get<0>(ret[i].first)  = 0;
+        std::get<2>(ret[i].second) = partitions[i].second;
+        std::get<1>(ret[i].second) = std::get<1>(length);
+        std::get<0>(ret[i].second) = std::get<0>(length);
+    }
+    return ret;
+}
+
+// Specialized computation of index given 1-, 2-, 3- dimension length + stride
+template <typename T1, typename T2>
+size_t compute_index(T1 length, T2 stride, size_t base)
+{
+    static_assert(std::is_integral<T1>::value, "Integral required.");
+    static_assert(std::is_integral<T2>::value, "Integral required.");
+    return (length * stride) + base;
+}
+
+template <typename T1, typename T2>
+size_t
+    compute_index(const std::tuple<T1, T1>& length, const std::tuple<T2, T2>& stride, size_t base)
+{
+    static_assert(std::is_integral<T1>::value, "Integral required.");
+    static_assert(std::is_integral<T2>::value, "Integral required.");
+    return (std::get<0>(length) * std::get<0>(stride)) + (std::get<1>(length) * std::get<1>(stride))
+           + base;
+}
+
+template <typename T1, typename T2>
+size_t compute_index(const std::tuple<T1, T1, T1>& length,
+                     const std::tuple<T2, T2, T2>& stride,
+                     size_t                        base)
+{
+    static_assert(std::is_integral<T1>::value, "Integral required.");
+    static_assert(std::is_integral<T2>::value, "Integral required.");
+    return (std::get<0>(length) * std::get<0>(stride)) + (std::get<1>(length) * std::get<1>(stride))
+           + (std::get<2>(length) * std::get<2>(stride)) + base;
+}
+template <typename Tcomplex, typename Tint1, typename Tint2, typename Tint3>
+inline VectorNorms distance_1to1_complex(const Tcomplex*                         input,
+                                         const Tcomplex*                         output,
+                                         const Tint1&                            whole_length,
+                                         const size_t                            nbatch,
+                                         const Tint2&                            istride,
+                                         const size_t                            idist,
+                                         const Tint3&                            ostride,
+                                         const size_t                            odist,
+                                         std::vector<std::pair<size_t, size_t>>& linf_failures,
+                                         const double                            linf_cutoff,
+                                         const std::vector<size_t>&              ioffset,
+                                         const std::vector<size_t>&              ooffset)
+{
+    double linf = 0.0;
+    double l2   = 0.0;
+
+    std::mutex linf_failure_lock;
+
+    const bool idx_equals_odx = istride == ostride && idist == odist;
+    size_t     idx_base       = 0;
+    size_t     odx_base       = 0;
+    auto       partitions     = partition_colmajor(whole_length);
+    for(size_t b = 0; b < nbatch; b++, idx_base += idist, odx_base += odist)
+    {
+#pragma omp parallel for reduction(max : linf) reduction(+ : l2) num_threads(partitions.size())
+        for(size_t part = 0; part < partitions.size(); ++part)
+        {
+            double     cur_linf = 0.0;
+            double     cur_l2   = 0.0;
+            auto       index    = partitions[part].first;
+            const auto length   = partitions[part].second;
+
+            do
+            {
+                const auto   idx = compute_index(index, istride, idx_base);
+                const auto   odx = idx_equals_odx ? idx : compute_index(index, ostride, odx_base);
+                const double rdiff
+                    = std::abs(output[odx + ooffset[0]].real() - input[idx + ioffset[0]].real());
+                cur_linf = std::max(rdiff, cur_linf);
+                if(cur_linf > linf_cutoff)
+                {
+                    std::pair<size_t, size_t> fval(b, idx);
+                    linf_failure_lock.lock();
+                    linf_failures.push_back(fval);
+                    linf_failure_lock.unlock();
+                }
+                cur_l2 += rdiff * rdiff;
+
+                const double idiff
+                    = std::abs(output[odx + ooffset[0]].imag() - input[idx + ioffset[0]].imag());
+                cur_linf = std::max(idiff, cur_linf);
+                if(cur_linf > linf_cutoff)
+                {
+                    std::pair<size_t, size_t> fval(b, idx);
+                    linf_failure_lock.lock();
+                    linf_failures.push_back(fval);
+                    linf_failure_lock.unlock();
+                }
+                cur_l2 += idiff * idiff;
+
+            } while(increment_rowmajor(index, length));
+            linf = std::max(linf, cur_linf);
+            l2 += cur_l2;
+        }
+    }
+    return {.l_2 = sqrt(l2), .l_inf = linf};
+}
+
+// Compute the L-infinity and L-2 norm of a buffer with strides istride and
+// length idist.  Data is std::complex.
+template <typename Tcomplex, typename T1, typename T2>
+inline VectorNorms norm_complex(const Tcomplex*            input,
+                                const T1&                  whole_length,
+                                const size_t               nbatch,
+                                const T2&                  istride,
+                                const size_t               idist,
+                                const std::vector<size_t>& offset)
+{
+    double linf = 0.0;
+    double l2   = 0.0;
+
+    size_t idx_base   = 0;
+    auto   partitions = partition_rowmajor(whole_length);
+    for(size_t b = 0; b < nbatch; b++, idx_base += idist)
+    {
+#pragma omp parallel for reduction(max : linf) reduction(+ : l2) num_threads(partitions.size())
+        for(size_t part = 0; part < partitions.size(); ++part)
+        {
+            double     cur_linf = 0.0;
+            double     cur_l2   = 0.0;
+            auto       index    = partitions[part].first;
+            const auto length   = partitions[part].second;
+            do
+            {
+                const auto idx = compute_index(index, istride, idx_base);
+
+                const double rval = std::abs(input[idx + offset[0]].real());
+                cur_linf          = std::max(rval, cur_linf);
+                cur_l2 += rval * rval;
+
+                const double ival = std::abs(input[idx + offset[0]].imag());
+                cur_linf          = std::max(ival, cur_linf);
+                cur_l2 += ival * ival;
+
+            } while(increment_rowmajor(index, length));
+            linf = std::max(linf, cur_linf);
+            l2 += cur_l2;
+        }
+    }
+    return {.l_2 = sqrt(l2), .l_inf = linf};
+}
+
+// Manually specified precision cutoffs:
+double single_epsilon = 3.75e-5;
+double double_epsilon = 1e-15;
+
+// template <typename Tfloat>
+// inline double type_epsilon();
+// template <>
+// inline double type_epsilon<float>()
+// {
+//     return single_epsilon;
+// }
+// template <>
+// inline double type_epsilon<double>()
+// {
+//     return double_epsilon;
+// }
+
+// // Given a precision, return the acceptable tolerance.
+// inline double type_epsilon(const fft_precision precision)
+// {
+//     switch(precision)
+//     {
+//     case fft_precision_single:
+//         return type_epsilon<float>();
+//         break;
+//     case fft_precision_double:
+//         return type_epsilon<double>();
+//         break;
+//     default:
+//         throw std::runtime_error("Invalid precision");
+//         return 0.0;
+//     }
+// }
 
 #endif // COMMON_H

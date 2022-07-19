@@ -1,3 +1,12 @@
+//
+// build: /opt/rocm/bin/hipcc -std=c++14  64_1024_kernel.cpp -o 64_1024_kernel -lfftw3f
+//
+// run:
+//    - vkFFT: 64_1024_kernel 0
+//    - rocFFT: 64_1024_kernel 1
+//    - both: 64_1024_kernel 2
+//
+
 #include "butterfly_constant.h"
 #include "callback.h"
 #include "common.h"
@@ -10,7 +19,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <vector>
 
 __device__ int get_1d_global_idx()
 {
@@ -1890,24 +1898,99 @@ __global__
     }
 }
 
+void check_accuracy(const size_t         N,
+                    const size_t         nbatch,
+                    const fftwf_complex* ref_out,
+                    float2*              new_out,
+                    bool                 verbose)
+{
+    double max_linf_eps_single = 0.0;
+    double max_l2_eps_single   = 0.0;
+
+    VectorNorms cpu_output_norm = norm_complex<std::complex<float>, size_t, size_t>(
+        reinterpret_cast<const std::complex<float>*>(ref_out), N, nbatch, 1, 64, {0});
+
+    VectorNorms gpu_output_norm = norm_complex<std::complex<float>, size_t, size_t>(
+        reinterpret_cast<const std::complex<float>*>(new_out), N, nbatch, 1, 64, {0});
+
+    std::vector<std::pair<size_t, size_t>> linf_failures;
+    const auto                             total_length = 64;
+    const double linf_cutoff = single_epsilon * cpu_output_norm.l_inf * log(total_length);
+
+    VectorNorms diff = distance_1to1_complex<std::complex<float>, size_t, size_t, size_t>(
+        reinterpret_cast<const std::complex<float>*>(ref_out),
+        reinterpret_cast<const std::complex<float>*>(new_out),
+        N,
+        nbatch,
+        1,
+        64,
+        1,
+        64,
+        linf_failures,
+        linf_cutoff,
+        {0},
+        {0});
+
+    if(verbose)
+    {
+        std::cout << "CPU Output Linf norm: " << std::scientific << cpu_output_norm.l_inf << "\n";
+        std::cout << "CPU Output L2 norm:   " << std::scientific << cpu_output_norm.l_2 << "\n";
+        std::cout << "GPU output Linf norm: " << std::scientific << gpu_output_norm.l_inf << "\n";
+        std::cout << "GPU output L2 norm:   " << std::scientific << gpu_output_norm.l_2 << "\n";
+        std::cout << "GPU linf norm failures:";
+        std::sort(linf_failures.begin(), linf_failures.end());
+        for(const auto& i : linf_failures)
+        {
+            std::cout << " (" << i.first << "," << i.second << ")";
+        }
+        std::cout << std::endl;
+        std::cout << "L2 diff: " << diff.l_2 << "\n";
+        std::cout << "Linf diff: " << diff.l_inf << "\n";
+    }
+
+    if(diff.l_inf > linf_cutoff)
+        std::cout << "Linf test failed.  Linf:" << diff.l_inf
+                  << "\tnormalized Linf: " << diff.l_inf / cpu_output_norm.l_inf
+                  << "\tcutoff: " << linf_cutoff;
+
+    if(diff.l_2 / cpu_output_norm.l_2 >= sqrt(log2(total_length)) * single_epsilon)
+        std::cout << "L2 test failed. L2: " << diff.l_2
+                  << "\tnormalized L2: " << diff.l_2 / cpu_output_norm.l_2
+                  << "\tepsilon: " << sqrt(log2(total_length)) * single_epsilon;
+
+    max_linf_eps_single
+        = std::max(max_linf_eps_single, diff.l_inf / cpu_output_norm.l_inf / log(total_length));
+    max_l2_eps_single
+        = std::max(max_l2_eps_single, diff.l_2 / cpu_output_norm.l_2 * sqrt(log2(total_length)));
+
+    std::cout << "single precision max l-inf epsilon: " << std::scientific << max_linf_eps_single
+              << std::endl;
+    std::cout << "single precision max l2 epsilon: " << std::scientific << max_l2_eps_single
+              << std::endl;
+}
+
 template <typename scalar_type>
 int fft_64_1024(int trial, bool isOld)
 {
+    double max_linf_eps_single = 0.0;
+    double max_l2_eps_single   = 0.0;
+
     device_reset();
 
-    int n = 64 * 1024;
+    int       N      = 64;
+    const int nbatch = 1024;
 
-    int n_bytes = n * sizeof(scalar_type);
+    int n_bytes = N * nbatch * sizeof(scalar_type);
 
     scalar_type* h_a   = (scalar_type*)malloc(n_bytes);
     scalar_type* d_a   = (scalar_type*)malloc(n_bytes);
     scalar_type* h_twd = (scalar_type*)malloc(64 * sizeof(scalar_type));
 
-    scalar_type*       d_twd;
-    const size_t       dim = 1;
-    size_t*            d_lengths;
-    size_t*            d_strides;
-    const int          nbatch        = 1024;
+    scalar_type* d_twd;
+    const size_t dim = 1;
+    size_t*      d_lengths;
+    size_t*      d_strides;
+
     const unsigned int lds_padding   = 0;
     void* __restrict__ load_cb_fn    = nullptr;
     void* __restrict__ load_cb_data  = nullptr;
@@ -1920,7 +2003,7 @@ int fft_64_1024(int trial, bool isOld)
     device_malloc((void**)&d_strides, 4 * sizeof(size_t));
     device_malloc((void**)&d_a, n_bytes);
 
-    for(int i = 0; i < n; i++)
+    for(int i = 0; i < N * nbatch; i++)
     {
         h_a[i].x = h_a[i].y = i + 1;
     }
@@ -1952,14 +2035,12 @@ int fft_64_1024(int trial, bool isOld)
 
     fftwf_complex *ref_in, *ref_out;
 
-    ref_in  = new fftwf_complex[n];
-    ref_out = new fftwf_complex[n];
+    ref_in  = new fftwf_complex[N * nbatch];
+    ref_out = new fftwf_complex[N * nbatch];
     std::memcpy(ref_in, h_a, n_bytes);
 
-    int N = 64;
-
     fftwf_plan p = fftwf_plan_many_dft(
-        1, &N, 1024, ref_in, NULL, 1, 64, ref_out, NULL, 1, 64, FFTW_FORWARD, FFTW_ESTIMATE);
+        1, &N, nbatch, ref_in, NULL, 1, 64, ref_out, NULL, 1, 64, FFTW_FORWARD, FFTW_ESTIMATE);
     fftwf_execute(p);
 
     // for(int i = 0; i < 64; i++)
@@ -1967,10 +2048,6 @@ int fft_64_1024(int trial, bool isOld)
     //     std::cout << "(" << ref_out[i][0] << ", " << ref_out[i][1] << ")";
     // }
     // std::cout << std::endl;
-
-    fftwf_destroy_plan(p);
-    delete[] ref_in;
-    delete[] ref_out;
 
     device_event_create();
 
@@ -1984,6 +2061,8 @@ int fft_64_1024(int trial, bool isOld)
         VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
+
+        check_accuracy(N, nbatch, ref_out, h_a, false);
 
         // for(int i = 0; i < 128; i++)
         // {
@@ -2051,8 +2130,8 @@ int fft_64_1024(int trial, bool isOld)
         // }
         // std::cout << "verify pure copy done.\n";
 
-        // std::cout << "\n\n";
-        // device_memcpy_d2h(h_a, d_a, n_bytes);
+        device_memcpy_d2h(h_a, d_a, n_bytes);
+        check_accuracy(N, nbatch, ref_out, h_a, false);
         // for(int i = 0; i < 128; i++)
         // {
         //     std::cout << "(" << h_a[i].x << ", " << h_a[i].y << ")";
@@ -2102,14 +2181,32 @@ int fft_64_1024(int trial, bool isOld)
     free(h_twd);
     free(h_a);
 
+    fftwf_destroy_plan(p);
+    delete[] ref_in;
+    delete[] ref_out;
+
     return 0;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
-    std::cout << "vkFFT...\n";
-    fft_64_1024<float2>(100, 1);
-    std::cout << "rocFFT...\n";
-    fft_64_1024<float2>(100, 0);
+    if(argv[1][0] == '0')
+    {
+        std::cout << "vkFFT...\n";
+        fft_64_1024<float2>(1000, 1);
+    }
+    else if(argv[1][0] == '1')
+    {
+        std::cout << "rocFFT...\n";
+        fft_64_1024<float2>(1000, 0);
+    }
+    else if(argv[1][0] == '2')
+    {
+        std::cout << "vkFFT...\n";
+        fft_64_1024<float2>(1000, 1);
+        std::cout << "rocFFT...\n";
+        fft_64_1024<float2>(1000, 0);
+    }
+
     return 0;
 }
