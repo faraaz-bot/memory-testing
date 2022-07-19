@@ -6,6 +6,7 @@
 #define COMMON_H
 
 #include <mutex>
+#include <numeric>
 #include <vector>
 
 #include "increment.h"
@@ -657,5 +658,50 @@ double double_epsilon = 1e-15;
 //         return 0.0;
 //     }
 // }
+
+template <typename T>
+std::vector<T> GenerateTwiddleTable(const std::vector<size_t>& radices, size_t N)
+{
+    // cosine, sine arrays. T is float2 or double2, wc.x stores cosine,
+    // wc.y stores sine
+    size_t         length_limit = N;
+    std::vector<T> wc(length_limit);
+    const double   TWO_PI = -6.283185307179586476925286766559;
+
+    // Make sure the radices vector multiplication product up to N
+    assert(
+        N
+        == std::accumulate(
+            std::begin(radices), std::end(radices), static_cast<size_t>(1), std::multiplies<>()));
+
+    // Generate the table
+    size_t L  = 1;
+    size_t nt = 0;
+    for(auto radix : radices)
+    {
+        L *= radix;
+
+        // Twiddle factors
+        for(size_t k = 0; k < (L / radix) && nt < length_limit; k++)
+        {
+            double theta = TWO_PI * (k) / (L);
+
+            for(size_t j = 1; j < radix && nt < length_limit; j++)
+            {
+                double c = cos((j)*theta);
+                double s = sin((j)*theta);
+
+                // if (fabs(c) < 1.0E-12)    c = 0.0;
+                // if (fabs(s) < 1.0E-12)    s = 0.0;
+
+                wc[nt].x = c;
+                wc[nt].y = s;
+                nt++;
+            }
+        }
+    } // end of for radices
+
+    return wc;
+}
 
 #endif // COMMON_H

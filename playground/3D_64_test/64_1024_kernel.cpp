@@ -767,6 +767,9 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(float2* inputs, flo
     }
 }
 */
+
+//#define ROCFFT_ORG
+
 template <typename scalar_type,
           const bool lds_is_real,
           StrideBin  sb,
@@ -782,6 +785,177 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
                                              bool         write)
 {
 
+#ifdef ROCFFT_ORG
+    const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
+    unsigned int       l_offset;
+    if(!lds_is_real)
+    {
+        if(!direct_load_to_reg)
+        {
+            __syncthreads();
+        }
+
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[0];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[1];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[2];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[3];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[4];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[5];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[6];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_complex[l_offset] = R[7];
+    }
+
+    else
+    {
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[0].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[1].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[2].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[3].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[4].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[5].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[6].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[7].x;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[0].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[1].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[2].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[3].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[4].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[5].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[6].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[7].x   = lds_real[l_offset];
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[0].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[1].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[2].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[3].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[4].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[5].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[6].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        lds_real[l_offset] = R[7].y;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[0].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[1].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[2].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[3].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[4].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[5].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[6].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[7].y   = lds_real[l_offset];
+    }
+
+    // pass 1, width 8
+    // using 8 threads we need to do 8 radix-8 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[0]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[1]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[2]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[3]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[4]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[5]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[6]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+        l_offset = l_offset + l_offset / 32;
+        R[7]     = lds_complex[l_offset];
+    }
+#else
     scalar_type w;
     w.x = 0;
     w.y = 0;
@@ -974,6 +1148,7 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
     loc_0 = R[3];
     R[3]  = R[6];
     R[6]  = loc_0;
+#endif
 }
 template <typename scalar_type,
           StrideBin     sb,
@@ -1993,6 +2168,12 @@ int fft_64_1024(int trial, bool isOld)
     scalar_type* d_a   = (scalar_type*)malloc(n_bytes);
     scalar_type* h_twd = (scalar_type*)malloc(64 * sizeof(scalar_type));
 
+    std::vector<size_t>      radices;
+    std::vector<scalar_type> twd;
+    radices.push_back(8);
+    radices.push_back(8);
+    twd = GenerateTwiddleTable<scalar_type>(radices, N);
+
     scalar_type* d_twd;
     const size_t dim = 1;
     size_t*      d_lengths;
@@ -2015,9 +2196,11 @@ int fft_64_1024(int trial, bool isOld)
         h_a[i].x = h_a[i].y = i + 1;
     }
 
-    for(int i = 0; i < 64; i++)
+    //std::cout << "twd\n";
+    for(int i = 0; i < N; i++)
     {
-        h_twd[i].x = h_twd[i].y = i * 2;
+        h_twd[i] = twd[i];
+        //std::cout << "i " << i << ": " << h_twd[i].x << ", " << h_twd[i].y << std::endl;
     }
 
     size_t h_lengths[4];
@@ -2031,7 +2214,7 @@ int fft_64_1024(int trial, bool isOld)
     h_strides[3] = 0;
 
     device_memcpy_h2d(d_a, h_a, n_bytes);
-    device_memcpy_h2d(d_twd, h_twd, 64 * sizeof(scalar_type));
+    device_memcpy_h2d(d_twd, h_twd, N * sizeof(scalar_type));
     device_memcpy_h2d(d_lengths, h_lengths, 4 * sizeof(size_t));
     device_memcpy_h2d(d_strides, h_strides, 4 * sizeof(size_t));
 
@@ -2062,7 +2245,7 @@ int fft_64_1024(int trial, bool isOld)
     {
         const dim3 grid(1, 64, 1);
         const dim3 block(16, 8, 1);
-        const int  dy_lds_bytes = 64 * 16 * 8 * 2;
+        const int  dy_lds_bytes = (64 * 16 + 64) * 8;
 
         // warm up
         VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
