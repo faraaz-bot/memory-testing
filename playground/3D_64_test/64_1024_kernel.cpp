@@ -154,17 +154,17 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(const float2* input
     temp_6            = sdata[sharedStride * (threadIdx.y + 48) + threadIdx.x];
     temp_7            = sdata[sharedStride * (threadIdx.y + 56) + threadIdx.x];
 
-    if(threadIdx.x == 1 && blockIdx.y == 0)
-        printf("threadIdx.y %d, inputs: (%2d, %2d), (%2d, %2d), (%2d, %2d), (%2d, %2d)\n",
-               (int)threadIdx.y,
-               (int)temp_0.x,
-               (int)temp_0.y,
-               (int)temp_1.x,
-               (int)temp_1.y,
-               (int)temp_2.x,
-               (int)temp_2.y,
-               (int)temp_3.x,
-               (int)temp_3.y);
+    // if(threadIdx.x == 1 && blockIdx.y == 0)
+    //     printf("threadIdx.y %d, inputs: (%2d, %2d), (%2d, %2d), (%2d, %2d), (%2d, %2d)\n",
+    //            (int)threadIdx.y,
+    //            (int)temp_0.x,
+    //            (int)temp_0.y,
+    //            (int)temp_1.x,
+    //            (int)temp_1.y,
+    //            (int)temp_2.x,
+    //            (int)temp_2.y,
+    //            (int)temp_3.x,
+    //            (int)temp_3.y);
 
     w.x    = __cosf(angle);
     w.y    = __sinf(angle);
@@ -759,171 +759,431 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(float2* inputs, flo
     }
 }
 */
-__global__ void fft_64_1024_copy_kernel(float2* inputs, float2* outputs)
+template <typename scalar_type,
+          const bool lds_is_real,
+          StrideBin  sb,
+          const bool lds_linear,
+          const bool direct_load_to_reg>
+__device__ void forward_length64_SBRR_device(scalar_type* R,
+                                             real_type_t<scalar_type>* __restrict__ lds_real,
+                                             scalar_type* __restrict__ lds_complex,
+                                             const scalar_type* __restrict__ twiddles,
+                                             unsigned int stride_lds,
+                                             unsigned int offset_lds,
+                                             unsigned int thread,
+                                             bool         write)
 {
-    unsigned int sharedStride = 64;
-    //float2*      sdata        = (float2*)shared;
 
-    float2 temp_0;
-    temp_0.x = 0;
-    temp_0.y = 0;
-    float2 temp_1;
-    temp_1.x = 0;
-    temp_1.y = 0;
-    float2 temp_2;
-    temp_2.x = 0;
-    temp_2.y = 0;
-    float2 temp_3;
-    temp_3.x = 0;
-    temp_3.y = 0;
-    float2 temp_4;
-    temp_4.x = 0;
-    temp_4.y = 0;
-    float2 temp_5;
-    temp_5.x = 0;
-    temp_5.y = 0;
-    float2 temp_6;
-    temp_6.x = 0;
-    temp_6.y = 0;
-    float2 temp_7;
-    temp_7.x = 0;
-    temp_7.y = 0;
-    float2 w;
+    scalar_type w;
     w.x = 0;
     w.y = 0;
-    float2 loc_0;
+    scalar_type loc_0;
     loc_0.x = 0;
     loc_0.y = 0;
-    float2 iw;
-    iw.x                           = 0;
-    iw.y                           = 0;
+    scalar_type iw;
+    iw.x = 0;
+    iw.y = 0;
+
     unsigned int stageInvocationID = 0;
     unsigned int blockInvocationID = 0;
     unsigned int sdataID           = 0;
     unsigned int combinedID        = 0;
     unsigned int inoutID           = 0;
-    unsigned int LUTId             = 0;
-    if((((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-           + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64)
-       < 64)
-    {
-        inoutID = (1 * (threadIdx.y + 0) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        // if(blockIdx.z == 0 && threadIdx.x <= 1 && threadIdx.y <= 1)
-        //     printf("r0 threadIdx.x %d, threadIdx.y %d, inoutID %d\n",
-        //            (int)threadIdx.x,
-        //            (int)threadIdx.y,
-        //            (int)inoutID);
-        temp_0  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 8) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+    float        angle             = 0;
+    int          threadIdx_y       = threadIdx.x % 8;
+    int          threadIdx_x       = threadIdx.x / 8;
 
-        // if(blockIdx.z == 0 && threadIdx.x <= 1 && threadIdx.y <= 1)
-        //     printf("r1 threadIdx.x %d, threadIdx.y %d, inoutID %d\n",
-        //            (int)threadIdx.x,
-        //            (int)threadIdx.y,
-        //            (int)inoutID);
-        temp_1  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 16) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_2  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 24) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_3  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 32) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_4  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 40) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_5  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 48) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_6  = inputs[inoutID];
-        inoutID = (1 * (threadIdx.y + 56) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                   + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64));
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64)) + (inoutID)*64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        temp_7 = inputs[inoutID];
-    }
+    stageInvocationID = (threadIdx_y + 0) % (1);
+    angle             = stageInvocationID * -3.14159265358979312e+00f;
+
+    w.x   = __cosf(angle);
+    w.y   = __sinf(angle);
+    loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
+    R[4]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
+    R[5]  = R[1] - loc_0;
+    R[1]  = R[1] + loc_0;
+    loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
+    R[6]  = R[2] - loc_0;
+    R[2]  = R[2] + loc_0;
+    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+    R[7]  = R[3] - loc_0;
+    R[3]  = R[3] + loc_0;
+    w.x   = __cosf(0.5f * angle);
+    w.y   = __sinf(0.5f * angle);
+    loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
+    R[2]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
+    R[3]  = R[1] - loc_0;
+    R[1]  = R[1] + loc_0;
+    iw.x  = w.y;
+    iw.y  = -w.x;
+    loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
+    R[6]  = R[4] - loc_0;
+    R[4]  = R[4] + loc_0;
+    loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
+    R[7]  = R[5] - loc_0;
+    R[5]  = R[5] + loc_0;
+    w.x   = __cosf(0.25f * angle);
+    w.y   = __sinf(0.25f * angle);
+    loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
+    R[1]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    iw.x  = w.y;
+    iw.y  = -w.x;
+    loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
+    R[3]  = R[2] - loc_0;
+    R[2]  = R[2] + loc_0;
+    iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+    iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+
+    loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
+    R[5]  = R[4] - loc_0;
+    R[4]  = R[4] + loc_0;
+    w.x   = iw.y;
+    w.y   = -iw.x;
+    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+    R[7]  = R[6] - loc_0;
+    R[6]  = R[6] + loc_0;
+    loc_0 = R[1];
+    R[1]  = R[4];
+    R[4]  = loc_0;
+    loc_0 = R[3];
+    R[3]  = R[6];
+    R[6]  = loc_0;
+
     __syncthreads();
 
-    if((((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-           + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64)
-       < 64)
-    {
-        inoutID = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 0) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
+    int sharedStride     = 17;
+    stageInvocationID    = threadIdx_y + 0;
+    blockInvocationID    = stageInvocationID;
+    stageInvocationID    = stageInvocationID % 1;
+    blockInvocationID    = blockInvocationID - stageInvocationID;
+    inoutID              = blockInvocationID * 8;
+    inoutID              = inoutID + stageInvocationID;
+    sdataID              = inoutID + 0;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[0];
+    sdataID              = inoutID + 1;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[1];
+    sdataID              = inoutID + 2;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[2];
+    sdataID              = inoutID + 3;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[3];
+    sdataID              = inoutID + 4;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[4];
+    sdataID              = inoutID + 5;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[5];
+    sdataID              = inoutID + 6;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[6];
+    sdataID              = inoutID + 7;
+    sdataID              = sharedStride * sdataID;
+    sdataID              = sdataID + threadIdx_x;
+    lds_complex[sdataID] = R[7];
+    __syncthreads();
 
-        // if(blockIdx.z == 0 && threadIdx.x <= 1)
-        //     printf("w0 threadIdx.x %d, threadIdx.y %d, inoutID %d\n",
-        //            (int)threadIdx.x,
-        //            (int)threadIdx.y,
-        //            (int)inoutID);
-        outputs[inoutID] = temp_0;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 8) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        // if(blockIdx.z == 0 && threadIdx.x <= 1)
-        //     printf("w1 threadIdx.x %d, threadIdx.y %d, inoutID %d\n",
-        //            (int)threadIdx.x,
-        //            (int)threadIdx.y,
-        //            (int)inoutID);
-        outputs[inoutID] = temp_1;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 16) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_2;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 24) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_3;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 32) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_4;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 40) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_5;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 48) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_6;
-        inoutID          = (((threadIdx.x + blockIdx.x * blockDim.x)) % (64))
-                  + (1 * (threadIdx.y + 56) + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) % (1)
-                     + (((threadIdx.x + blockIdx.x * blockDim.x)) / 64) * (64))
-                        * 64
-                  + (threadIdx.z + blockIdx.z * blockDim.z) * 4096;
-        outputs[inoutID] = temp_7;
+    stageInvocationID = (threadIdx_y + 0) % (8);
+    angle             = stageInvocationID * -3.92699081698724139e-01f;
+
+    R[0] = lds_complex[sharedStride * (threadIdx_y + 0) + threadIdx_x];
+    R[1] = lds_complex[sharedStride * (threadIdx_y + 8) + threadIdx_x];
+    R[2] = lds_complex[sharedStride * (threadIdx_y + 16) + threadIdx_x];
+    R[3] = lds_complex[sharedStride * (threadIdx_y + 24) + threadIdx_x];
+    R[4] = lds_complex[sharedStride * (threadIdx_y + 32) + threadIdx_x];
+    R[5] = lds_complex[sharedStride * (threadIdx_y + 40) + threadIdx_x];
+    R[6] = lds_complex[sharedStride * (threadIdx_y + 48) + threadIdx_x];
+    R[7] = lds_complex[sharedStride * (threadIdx_y + 56) + threadIdx_x];
+
+    w.x   = __cosf(angle);
+    w.y   = __sinf(angle);
+    loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
+    R[4]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
+    R[5]  = R[1] - loc_0;
+    R[1]  = R[1] + loc_0;
+    loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
+    R[6]  = R[2] - loc_0;
+    R[2]  = R[2] + loc_0;
+    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+    R[7]  = R[3] - loc_0;
+    R[3]  = R[3] + loc_0;
+    w.x   = __cosf(0.5f * angle);
+    w.y   = __sinf(0.5f * angle);
+    loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
+    R[2]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
+    R[3]  = R[1] - loc_0;
+    R[1]  = R[1] + loc_0;
+    iw.x  = w.y;
+    iw.y  = -w.x;
+    loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
+    R[6]  = R[4] - loc_0;
+    R[4]  = R[4] + loc_0;
+    loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
+    R[7]  = R[5] - loc_0;
+    R[5]  = R[5] + loc_0;
+    w.x   = __cosf(0.25f * angle);
+    w.y   = __sinf(0.25f * angle);
+    loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
+    R[1]  = R[0] - loc_0;
+    R[0]  = R[0] + loc_0;
+    iw.x  = w.y;
+    iw.y  = -w.x;
+    loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
+    R[3]  = R[2] - loc_0;
+    R[2]  = R[2] + loc_0;
+    iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+    iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+
+    loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
+    R[5]  = R[4] - loc_0;
+    R[4]  = R[4] + loc_0;
+    w.x   = iw.y;
+    w.y   = -iw.x;
+    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+    R[7]  = R[6] - loc_0;
+    R[6]  = R[6] + loc_0;
+    loc_0 = R[1];
+    R[1]  = R[4];
+    R[4]  = loc_0;
+    loc_0 = R[3];
+    R[3]  = R[6];
+    R[6]  = loc_0;
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(128) void ip_forward_length64_SBRR_new(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    uint32_t load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    scalar_type* __restrict__ buf)
+{
+    // this kernel:
+    //   uses 8 threads per transform
+    //   does 16 transforms per thread block
+    // therefore it should be called with 128 threads per thread block
+    scalar_type R[8];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset                   = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   lds_is_real = false;
+    const bool   direct_load_to_reg
+        = drtype == DirectRegType::TRY_ENABLE_IF_SUPPORT && ebtype == EmbeddedType::NONE;
+    const bool direct_store_from_reg = direct_load_to_reg;
+    const bool lds_linear            = true;
+    auto       load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto       store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 16 + threadIdx.x / 8;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset        = offset + index_along_d * stride[d];
+    }
+    batch      = remaining;
+    offset     = offset + batch * stride[dim];
+    stride_lds = 64 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds = stride_lds * (transform % 16);
+
+    if(batch >= nbatch)
+    {
+        return;
+    }
+
+    if(direct_load_to_reg)
+    {
+        // load global into registers
+        thread = threadIdx.x % 8;
+        R[0]   = load_cb(buf, offset + (((thread + 0 + 0) + 0)) * stride0, load_cb_data, nullptr);
+        R[1]   = load_cb(buf, offset + (((thread + 0 + 0) + 8)) * stride0, load_cb_data, nullptr);
+        R[2]   = load_cb(buf, offset + (((thread + 0 + 0) + 16)) * stride0, load_cb_data, nullptr);
+        R[3]   = load_cb(buf, offset + (((thread + 0 + 0) + 24)) * stride0, load_cb_data, nullptr);
+        R[4]   = load_cb(buf, offset + (((thread + 0 + 0) + 32)) * stride0, load_cb_data, nullptr);
+        R[5]   = load_cb(buf, offset + (((thread + 0 + 0) + 40)) * stride0, load_cb_data, nullptr);
+        R[6]   = load_cb(buf, offset + (((thread + 0 + 0) + 48)) * stride0, load_cb_data, nullptr);
+        R[7]   = load_cb(buf, offset + (((thread + 0 + 0) + 56)) * stride0, load_cb_data, nullptr);
+    }
+
+    else
+    {
+        // load global into lds
+        thread = threadIdx.x % 8;
+        lds_complex[offset_lds + thread + 0]
+            = load_cb(buf, offset + (thread + 0) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 8]
+            = load_cb(buf, offset + (thread + 8) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 16]
+            = load_cb(buf, offset + (thread + 16) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 24]
+            = load_cb(buf, offset + (thread + 24) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 32]
+            = load_cb(buf, offset + (thread + 32) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 40]
+            = load_cb(buf, offset + (thread + 40) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 48]
+            = load_cb(buf, offset + (thread + 48) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + thread + 56]
+            = load_cb(buf, offset + (thread + 56) * stride0, load_cb_data, nullptr);
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 8 : threadIdx.x / 16;
+
+    // transform
+    forward_length64_SBRR_device<scalar_type,
+                                 lds_is_real,
+                                 lds_linear ? SB_UNIT : SB_NONUNIT,
+                                 lds_linear,
+                                 direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    if(direct_store_from_reg)
+    {
+        // store registers into global
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 0) * stride0,
+                 R[0],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 8) * stride0,
+                 R[1],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 16) * stride0,
+                 R[2],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 24) * stride0,
+                 R[3],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 32) * stride0,
+                 R[4],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 40) * stride0,
+                 R[5],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 48) * stride0,
+                 R[6],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 56) * stride0,
+                 R[7],
+                 store_cb_data,
+                 nullptr);
+    }
+
+    else
+    {
+        // store global
+        __syncthreads();
+        store_cb(buf,
+                 offset + (thread + 0) * stride0,
+                 lds_complex[offset_lds + thread + 0],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 8) * stride0,
+                 lds_complex[offset_lds + thread + 8],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 16) * stride0,
+                 lds_complex[offset_lds + thread + 16],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 24) * stride0,
+                 lds_complex[offset_lds + thread + 24],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 32) * stride0,
+                 lds_complex[offset_lds + thread + 32],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 40) * stride0,
+                 lds_complex[offset_lds + thread + 40],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 48) * stride0,
+                 lds_complex[offset_lds + thread + 48],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 56) * stride0,
+                 lds_complex[offset_lds + thread + 56],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 7)
+            {
+                store_cb(buf,
+                         offset + (thread + 56 + 1) * stride0,
+                         lds_complex[offset_lds + thread + 56 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
     }
 }
 
@@ -1631,7 +1891,7 @@ __global__
 }
 
 template <typename scalar_type>
-int fft_64_1024(int trial, bool isRef)
+int fft_64_1024(int trial, bool isOld)
 {
     device_reset();
 
@@ -1644,9 +1904,9 @@ int fft_64_1024(int trial, bool isRef)
     scalar_type* h_twd = (scalar_type*)malloc(64 * sizeof(scalar_type));
 
     scalar_type*       d_twd;
-    const int          dim = 3;
-    int*               d_lengths;
-    int*               d_strides;
+    const size_t       dim = 1;
+    size_t*            d_lengths;
+    size_t*            d_strides;
     const int          nbatch        = 1024;
     const unsigned int lds_padding   = 0;
     void* __restrict__ load_cb_fn    = nullptr;
@@ -1656,8 +1916,8 @@ int fft_64_1024(int trial, bool isRef)
     void* __restrict__ store_cb_data = nullptr;
 
     device_malloc((void**)&d_twd, 64 * sizeof(scalar_type));
-    device_malloc((void**)&d_lengths, 4 * sizeof(int));
-    device_malloc((void**)&d_strides, 4 * sizeof(int));
+    device_malloc((void**)&d_lengths, 4 * sizeof(size_t));
+    device_malloc((void**)&d_strides, 4 * sizeof(size_t));
     device_malloc((void**)&d_a, n_bytes);
 
     for(int i = 0; i < n; i++)
@@ -1670,52 +1930,52 @@ int fft_64_1024(int trial, bool isRef)
         h_twd[i].x = h_twd[i].y = i * 2;
     }
 
-    int h_lengths[4];
-    h_lengths[0] = h_lengths[1] = h_lengths[2] = 64;
-    h_lengths[3]                               = 1;
-    int h_strides[4];
-    h_strides[0] = 512;
-    h_strides[1] = 1;
-    h_strides[2] = 64 * 64 * 64;
-    h_strides[3] = 64 * 64 * 64;
+    size_t h_lengths[4];
+    h_lengths[0] = 64;
+    h_lengths[1] = h_lengths[2] = 0;
+    h_lengths[3]                = 0;
+    size_t h_strides[4];
+    h_strides[0] = 1;
+    h_strides[1] = 64;
+    h_strides[2] = 0;
+    h_strides[3] = 0;
 
     device_memcpy_h2d(d_a, h_a, n_bytes);
-    // device_memcpy_h2d(d_twd, h_twd, 64 * sizeof(scalar_type));
-    // device_memcpy_h2d(d_lengths, h_lengths, 4 * sizeof(int));
-    // device_memcpy_h2d(d_strides, h_strides, 4 * sizeof(int));
+    device_memcpy_h2d(d_twd, h_twd, 64 * sizeof(scalar_type));
+    device_memcpy_h2d(d_lengths, h_lengths, 4 * sizeof(size_t));
+    device_memcpy_h2d(d_strides, h_strides, 4 * sizeof(size_t));
 
     // for(int i = 0; i < n; i++)
     // {
     //     h_a[i].x = h_a[i].y = 0;
     // }
 
+    fftwf_complex *ref_in, *ref_out;
+
+    ref_in  = new fftwf_complex[n];
+    ref_out = new fftwf_complex[n];
+    std::memcpy(ref_in, h_a, n_bytes);
+
+    int N = 64;
+
+    fftwf_plan p = fftwf_plan_many_dft(
+        1, &N, 1024, ref_in, NULL, 1, 64, ref_out, NULL, 1, 64, FFTW_FORWARD, FFTW_ESTIMATE);
+    fftwf_execute(p);
+
+    // for(int i = 0; i < 64; i++)
+    // {
+    //     std::cout << "(" << ref_out[i][0] << ", " << ref_out[i][1] << ")";
+    // }
+    // std::cout << std::endl;
+
+    fftwf_destroy_plan(p);
+    delete[] ref_in;
+    delete[] ref_out;
+
     device_event_create();
 
-    if(isRef)
+    if(isOld)
     {
-
-        fftwf_complex *ref_in, *ref_out;
-
-        ref_in  = new fftwf_complex[n];
-        ref_out = new fftwf_complex[n];
-        std::memcpy(ref_in, h_a, n_bytes);
-
-        int N = 64;
-
-        fftwf_plan p = fftwf_plan_many_dft(
-            1, &N, 1024, ref_in, NULL, 1, 64, ref_out, NULL, 1, 64, FFTW_FORWARD, FFTW_ESTIMATE);
-        fftwf_execute(p);
-
-        // for(int i = 0; i < 64; i++)
-        // {
-        //     std::cout << "(" << ref_out[i][0] << ", " << ref_out[i][1] << ")";
-        // }
-        // std::cout << std::endl;
-
-        fftwf_destroy_plan(p);
-        delete[] ref_in;
-        delete[] ref_out;
-
         const dim3 grid(1, 64, 1);
         const dim3 block(16, 8, 1);
         const int  dy_lds_bytes = 64 * 16 * 8 * 2;
@@ -1724,7 +1984,8 @@ int fft_64_1024(int trial, bool isRef)
         VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
-        // for(int i = 0; i < 64; i++)
+
+        // for(int i = 0; i < 128; i++)
         // {
         //     std::cout << "(" << h_a[i].x << ", " << h_a[i].y << ")";
         // }
@@ -1743,26 +2004,30 @@ int fft_64_1024(int trial, bool isRef)
         // }
         // std::cout << "verify pure copy done.\n";
 
-        // device_event_record_start();
-        // for(int itrial = 0; itrial < trial; ++itrial)
-        // {
-        //     VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a, d_twd);
-        //     //fft_64_1024_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
-        // }
-        // device_event_record_stop();
-        // device_event_synchronize_stop();
-        // device_synchronize();
-        // std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
-        //           << device_event_elapsed_time() << " ms\n";
+        device_event_record_start();
+        for(int itrial = 0; itrial < trial; ++itrial)
+        {
+            VkFFT_main<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+            //fft_64_1024_copy_kernel<<<grid, block, dy_lds_bytes, 0>>>(d_a, d_a);
+        }
+        device_event_record_stop();
+        device_event_synchronize_stop();
+        device_synchronize();
+        std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
+                  << device_event_elapsed_time() << " ms\n";
     }
     else
     {
         const dim3 grid(64, 1, 1);
-        const dim3 block(512, 1, 1);
-        const int  dy_lds_bytes = 32768; //16384;
+        const dim3 block(128, 1, 1);
+        const int  dy_lds_bytes = 64 * 16 * 8 * 2;
 
         // warm up
-        ip_forward_length64_SBRR<scalar_type, SB_NONUNIT, EmbeddedType::NONE, CallbackType::NONE>
+        ip_forward_length64_SBRR_new<scalar_type,
+                                     SB_NONUNIT,
+                                     EmbeddedType::NONE,
+                                     CallbackType::NONE,
+                                     DirectRegType::TRY_ENABLE_IF_SUPPORT>
             <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
                                                dim,
                                                d_lengths,
@@ -1786,13 +2051,22 @@ int fft_64_1024(int trial, bool isRef)
         // }
         // std::cout << "verify pure copy done.\n";
 
+        // std::cout << "\n\n";
+        // device_memcpy_d2h(h_a, d_a, n_bytes);
+        // for(int i = 0; i < 128; i++)
+        // {
+        //     std::cout << "(" << h_a[i].x << ", " << h_a[i].y << ")";
+        // }
+        // std::cout << std::endl;
+
         device_event_record_start();
         for(int itrial = 0; itrial < trial; ++itrial)
         {
-            ip_forward_length64_SBRR<scalar_type,
-                                     SB_NONUNIT,
-                                     EmbeddedType::NONE,
-                                     CallbackType::NONE>
+            ip_forward_length64_SBRR_new<scalar_type,
+                                         SB_NONUNIT,
+                                         EmbeddedType::NONE,
+                                         CallbackType::NONE,
+                                         DirectRegType::TRY_ENABLE_IF_SUPPORT>
                 <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
                                                    dim,
                                                    d_lengths,
@@ -1834,8 +2108,8 @@ int fft_64_1024(int trial, bool isRef)
 int main()
 {
     std::cout << "vkFFT...\n";
-    fft_64_1024<float2>(20, 1);
-    //std::cout << "rocFFT...\n";
-    //fft_64_1024<float2>(20, 0);
+    fft_64_1024<float2>(100, 1);
+    std::cout << "rocFFT...\n";
+    fft_64_1024<float2>(100, 0);
     return 0;
 }

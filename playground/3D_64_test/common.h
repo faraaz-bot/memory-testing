@@ -315,4 +315,12 @@ __device__ T TWLstep4(const T* twiddles, size_t u)
         REG.y = TI;                                        \
     }
 
+enum DirectRegType
+{
+    // the direct-to-from-reg codes are not even generated from generator
+    // or is generated but we don't want to use it in some arch
+    FORCE_OFF_OR_NOT_SUPPORT,
+    TRY_ENABLE_IF_SUPPORT, // Use the direct-to-from-reg function
+};
+
 #endif // COMMON_H
