@@ -1898,7 +1898,7 @@ __global__
     }
 }
 
-void check_accuracy(const size_t         N,
+bool check_accuracy(const size_t         N,
                     const size_t         nbatch,
                     const fftwf_complex* ref_out,
                     float2*              new_out,
@@ -1949,14 +1949,20 @@ void check_accuracy(const size_t         N,
     }
 
     if(diff.l_inf > linf_cutoff)
+    {
         std::cout << "Linf test failed.  Linf:" << diff.l_inf
                   << "\tnormalized Linf: " << diff.l_inf / cpu_output_norm.l_inf
                   << "\tcutoff: " << linf_cutoff;
+        return false;
+    }
 
     if(diff.l_2 / cpu_output_norm.l_2 >= sqrt(log2(total_length)) * single_epsilon)
+    {
         std::cout << "L2 test failed. L2: " << diff.l_2
                   << "\tnormalized L2: " << diff.l_2 / cpu_output_norm.l_2
                   << "\tepsilon: " << sqrt(log2(total_length)) * single_epsilon;
+        return false;
+    }
 
     max_linf_eps_single
         = std::max(max_linf_eps_single, diff.l_inf / cpu_output_norm.l_inf / log(total_length));
@@ -1967,6 +1973,7 @@ void check_accuracy(const size_t         N,
               << std::endl;
     std::cout << "single precision max l2 epsilon: " << std::scientific << max_l2_eps_single
               << std::endl;
+    return true;
 }
 
 template <typename scalar_type>
@@ -2062,7 +2069,8 @@ int fft_64_1024(int trial, bool isOld)
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
 
-        check_accuracy(N, nbatch, ref_out, h_a, false);
+        if(!check_accuracy(N, nbatch, ref_out, h_a, false))
+            return -1;
 
         // for(int i = 0; i < 128; i++)
         // {
@@ -2131,7 +2139,8 @@ int fft_64_1024(int trial, bool isOld)
         // std::cout << "verify pure copy done.\n";
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
-        check_accuracy(N, nbatch, ref_out, h_a, false);
+        if(!check_accuracy(N, nbatch, ref_out, h_a, false))
+            return -1;
         // for(int i = 0; i < 128; i++)
         // {
         //     std::cout << "(" << h_a[i].x << ", " << h_a[i].y << ")";
