@@ -2,9 +2,8 @@
 // build: /opt/rocm/bin/hipcc -std=c++14  64_1024_kernel.cpp -o 64_1024_kernel -lfftw3f
 //
 // run:
-//    - vkFFT: 64_1024_kernel 0
-//    - rocFFT: 64_1024_kernel 1
-//    - both: 64_1024_kernel 2
+//    - all solutions: 64_1024_kernel
+//    - single solution: 64_1024_kernel #  (# can be 0, 1, 2, 3)
 //
 
 #include "butterfly_constant.h"
@@ -768,13 +767,69 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(float2* inputs, flo
 }
 */
 
-// #define ROCFFT_ORG
+template <typename scalar_type, StrideBin sb>
+__device__ void lds_to_reg_input_length64_device(scalar_type* R,
+                                                 scalar_type* __restrict__ lds_complex,
+                                                 unsigned int stride_lds,
+                                                 unsigned int offset_lds,
+                                                 unsigned int thread,
+                                                 bool         write)
+{
+    const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
+    unsigned int       l_offset;
+    __syncthreads();
+    l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+    R[0]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+    R[1]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+    R[2]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+    R[3]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+    R[4]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+    R[5]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+    R[6]     = lds_complex[l_offset];
+    l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+    R[7]     = lds_complex[l_offset];
+}
+template <typename scalar_type, StrideBin sb>
+__device__ void lds_from_reg_output_length64_device(scalar_type* R,
+                                                    scalar_type* __restrict__ lds_complex,
+                                                    unsigned int stride_lds,
+                                                    unsigned int offset_lds,
+                                                    unsigned int thread,
+                                                    bool         write)
+{
+    const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
+    unsigned int       l_offset;
+    __syncthreads();
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 0) * lstride;
+    lds_complex[l_offset] = R[0];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 8) * lstride;
+    lds_complex[l_offset] = R[1];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 16) * lstride;
+    lds_complex[l_offset] = R[2];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 24) * lstride;
+    lds_complex[l_offset] = R[3];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 32) * lstride;
+    lds_complex[l_offset] = R[4];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 40) * lstride;
+    lds_complex[l_offset] = R[5];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 48) * lstride;
+    lds_complex[l_offset] = R[6];
+    l_offset = offset_lds + (((thread + 0 + 0) / 8) * 64 + (thread + 0 + 0) % 8 + 56) * lstride;
+    lds_complex[l_offset] = R[7];
+}
 
 template <typename scalar_type,
           const bool lds_is_real,
           StrideBin  sb,
           const bool lds_linear,
-          const bool direct_load_to_reg>
+          const bool direct_load_to_reg,
+          const bool vkfft_device>
 __device__ void forward_length64_SBRR_device(scalar_type* R,
                                              real_type_t<scalar_type>* __restrict__ lds_real,
                                              scalar_type* __restrict__ lds_complex,
@@ -784,407 +839,434 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
                                              unsigned int thread,
                                              bool         write)
 {
-
-#ifdef ROCFFT_ORG
-    scalar_type        W;
-    scalar_type        t;
-    const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
-    unsigned int       l_offset;
-
-    // pass 0, width 8
-    // using 8 threads we need to do 8 radix-8 butterflies
-    // therefore each thread will do 1.000000 butterflies
-    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
-    if(!lds_is_real)
+    if(vkfft_device)
     {
-        if(!direct_load_to_reg)
-        {
-            __syncthreads();
-        }
+        scalar_type w;
+        w.x = 0;
+        w.y = 0;
+        scalar_type loc_0;
+        loc_0.x = 0;
+        loc_0.y = 0;
+        scalar_type iw;
+        iw.x = 0;
+        iw.y = 0;
 
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[0];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[1];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[2];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[3];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[4];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[5];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[6];
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_complex[l_offset] = R[7];
+        unsigned int stageInvocationID = 0;
+        unsigned int blockInvocationID = 0;
+        unsigned int sdataID           = 0;
+        unsigned int combinedID        = 0;
+        unsigned int inoutID           = 0;
+        float        angle             = 0;
+        int          threadIdx_y       = threadIdx.x % 8;
+        int          threadIdx_x       = threadIdx.x / 8;
+
+        stageInvocationID = (threadIdx_y + 0) % (1);
+        angle             = stageInvocationID * -3.14159265358979312e+00f;
+
+        w.x   = __cosf(angle);
+        w.y   = __sinf(angle);
+        loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
+        R[4]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
+        R[5]  = R[1] - loc_0;
+        R[1]  = R[1] + loc_0;
+        loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
+        R[6]  = R[2] - loc_0;
+        R[2]  = R[2] + loc_0;
+        loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+        R[7]  = R[3] - loc_0;
+        R[3]  = R[3] + loc_0;
+        w.x   = __cosf(0.5f * angle);
+        w.y   = __sinf(0.5f * angle);
+        loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
+        R[2]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
+        R[3]  = R[1] - loc_0;
+        R[1]  = R[1] + loc_0;
+        iw.x  = w.y;
+        iw.y  = -w.x;
+        loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
+        R[6]  = R[4] - loc_0;
+        R[4]  = R[4] + loc_0;
+        loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
+        R[7]  = R[5] - loc_0;
+        R[5]  = R[5] + loc_0;
+        w.x   = __cosf(0.25f * angle);
+        w.y   = __sinf(0.25f * angle);
+        loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
+        R[1]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        iw.x  = w.y;
+        iw.y  = -w.x;
+        loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
+        R[3]  = R[2] - loc_0;
+        R[2]  = R[2] + loc_0;
+        iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+        iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+
+        loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
+        R[5]  = R[4] - loc_0;
+        R[4]  = R[4] + loc_0;
+        w.x   = iw.y;
+        w.y   = -iw.x;
+        loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+        R[7]  = R[6] - loc_0;
+        R[6]  = R[6] + loc_0;
+        loc_0 = R[1];
+        R[1]  = R[4];
+        R[4]  = loc_0;
+        loc_0 = R[3];
+        R[3]  = R[6];
+        R[6]  = loc_0;
+
+        __syncthreads();
+
+        int sharedStride     = 17;
+        stageInvocationID    = threadIdx_y + 0;
+        blockInvocationID    = stageInvocationID;
+        stageInvocationID    = stageInvocationID % 1;
+        blockInvocationID    = blockInvocationID - stageInvocationID;
+        inoutID              = blockInvocationID * 8;
+        inoutID              = inoutID + stageInvocationID;
+        sdataID              = inoutID + 0;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[0];
+        sdataID              = inoutID + 1;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[1];
+        sdataID              = inoutID + 2;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[2];
+        sdataID              = inoutID + 3;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[3];
+        sdataID              = inoutID + 4;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[4];
+        sdataID              = inoutID + 5;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[5];
+        sdataID              = inoutID + 6;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[6];
+        sdataID              = inoutID + 7;
+        sdataID              = sharedStride * sdataID;
+        sdataID              = sdataID + threadIdx_x;
+        lds_complex[sdataID] = R[7];
+        __syncthreads();
+
+        stageInvocationID = (threadIdx_y + 0) % (8);
+        angle             = stageInvocationID * -3.92699081698724139e-01f;
+
+        R[0] = lds_complex[sharedStride * (threadIdx_y + 0) + threadIdx_x];
+        R[1] = lds_complex[sharedStride * (threadIdx_y + 8) + threadIdx_x];
+        R[2] = lds_complex[sharedStride * (threadIdx_y + 16) + threadIdx_x];
+        R[3] = lds_complex[sharedStride * (threadIdx_y + 24) + threadIdx_x];
+        R[4] = lds_complex[sharedStride * (threadIdx_y + 32) + threadIdx_x];
+        R[5] = lds_complex[sharedStride * (threadIdx_y + 40) + threadIdx_x];
+        R[6] = lds_complex[sharedStride * (threadIdx_y + 48) + threadIdx_x];
+        R[7] = lds_complex[sharedStride * (threadIdx_y + 56) + threadIdx_x];
+
+        w.x   = __cosf(angle);
+        w.y   = __sinf(angle);
+        loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
+        R[4]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
+        R[5]  = R[1] - loc_0;
+        R[1]  = R[1] + loc_0;
+        loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
+        R[6]  = R[2] - loc_0;
+        R[2]  = R[2] + loc_0;
+        loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+        R[7]  = R[3] - loc_0;
+        R[3]  = R[3] + loc_0;
+        w.x   = __cosf(0.5f * angle);
+        w.y   = __sinf(0.5f * angle);
+        loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
+        R[2]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
+        R[3]  = R[1] - loc_0;
+        R[1]  = R[1] + loc_0;
+        iw.x  = w.y;
+        iw.y  = -w.x;
+        loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
+        R[6]  = R[4] - loc_0;
+        R[4]  = R[4] + loc_0;
+        loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
+        R[7]  = R[5] - loc_0;
+        R[5]  = R[5] + loc_0;
+        w.x   = __cosf(0.25f * angle);
+        w.y   = __sinf(0.25f * angle);
+        loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
+        R[1]  = R[0] - loc_0;
+        R[0]  = R[0] + loc_0;
+        iw.x  = w.y;
+        iw.y  = -w.x;
+        loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
+        R[3]  = R[2] - loc_0;
+        R[2]  = R[2] + loc_0;
+        iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+        iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+
+        loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
+        R[5]  = R[4] - loc_0;
+        R[4]  = R[4] + loc_0;
+        w.x   = iw.y;
+        w.y   = -iw.x;
+        loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+        R[7]  = R[6] - loc_0;
+        R[6]  = R[6] + loc_0;
+        loc_0 = R[1];
+        R[1]  = R[4];
+        R[4]  = loc_0;
+        loc_0 = R[3];
+        R[3]  = R[6];
+        R[6]  = loc_0;
     }
-
     else
     {
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[0].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[1].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[2].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[3].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[4].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[5].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[6].x;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[7].x;
-        __syncthreads();
-        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[0].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[1].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[2].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[3].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[4].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[5].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[6].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[7].x   = lds_real[l_offset];
-        __syncthreads();
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[0].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[1].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[2].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[3].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[4].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[5].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[6].y;
-        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        lds_real[l_offset] = R[7].y;
-        __syncthreads();
-        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[0].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[1].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[2].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[3].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[4].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[5].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[6].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[7].y   = lds_real[l_offset];
+        scalar_type        W;
+        scalar_type        t;
+        const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
+        unsigned int       l_offset;
+
+        // pass 0, width 8
+        // using 8 threads we need to do 8 radix-8 butterflies
+        // therefore each thread will do 1.000000 butterflies
+        FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
+        if(!lds_is_real)
+        {
+            if(!direct_load_to_reg)
+            {
+                __syncthreads();
+            }
+
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[0];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[1];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[2];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[3];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[4];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[5];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[6];
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+            l_offset              = l_offset + l_offset / 32;
+            lds_complex[l_offset] = R[7];
+        }
+
+        else
+        {
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[0].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[1].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[2].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[3].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[4].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[5].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[6].x;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[7].x;
+            __syncthreads();
+            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[0].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[1].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[2].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[3].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[4].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[5].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[6].x   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[7].x   = lds_real[l_offset];
+            __syncthreads();
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 0) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[0].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 1) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[1].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 2) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[2].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 3) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[3].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 4) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[4].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 5) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[5].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 6) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[6].y;
+            l_offset
+                = offset_lds + (((thread + 0 + 0) / 1) * 8 + (thread + 0 + 0) % 1 + 7) * lstride;
+            l_offset           = l_offset + l_offset / 32;
+            lds_real[l_offset] = R[7].y;
+            __syncthreads();
+            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[0].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[1].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[2].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[3].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[4].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[5].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[6].y   = lds_real[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[7].y   = lds_real[l_offset];
+        }
+
+        // pass 1, width 8
+        // using 8 threads we need to do 8 radix-8 butterflies
+        // therefore each thread will do 1.000000 butterflies
+        if(!lds_is_real)
+        {
+            __syncthreads();
+            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[0]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[1]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[2]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[3]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[4]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[5]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[6]     = lds_complex[l_offset];
+            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
+            l_offset = l_offset + l_offset / 32;
+            R[7]     = lds_complex[l_offset];
+        }
+
+        W    = twiddles[0 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
+        R[1] = t;
+        W    = twiddles[1 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
+        R[2] = t;
+        W    = twiddles[2 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
+        R[3] = t;
+        W    = twiddles[3 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
+        R[4] = t;
+        W    = twiddles[4 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[5].x * W.x - R[5].y * W.y, R[5].y * W.x + R[5].x * W.y};
+        R[5] = t;
+        W    = twiddles[5 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[6].x * W.x - R[6].y * W.y, R[6].y * W.x + R[6].x * W.y};
+        R[6] = t;
+        W    = twiddles[6 + 7 * ((thread + 0 + 0) % 8)];
+        t    = {R[7].x * W.x - R[7].y * W.y, R[7].y * W.x + R[7].x * W.y};
+        R[7] = t;
+        FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
     }
-
-    // pass 1, width 8
-    // using 8 threads we need to do 8 radix-8 butterflies
-    // therefore each thread will do 1.000000 butterflies
-    if(!lds_is_real)
-    {
-        __syncthreads();
-        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[0]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 8) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[1]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 16) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[2]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[3]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 32) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[4]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 40) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[5]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[6]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-        l_offset = l_offset + l_offset / 32;
-        R[7]     = lds_complex[l_offset];
-    }
-
-    W    = twiddles[0 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
-    R[1] = t;
-    W    = twiddles[1 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
-    R[2] = t;
-    W    = twiddles[2 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
-    R[3] = t;
-    W    = twiddles[3 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
-    R[4] = t;
-    W    = twiddles[4 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[5].x * W.x - R[5].y * W.y, R[5].y * W.x + R[5].x * W.y};
-    R[5] = t;
-    W    = twiddles[5 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[6].x * W.x - R[6].y * W.y, R[6].y * W.x + R[6].x * W.y};
-    R[6] = t;
-    W    = twiddles[6 + 7 * ((thread + 0 + 0) % 8)];
-    t    = {R[7].x * W.x - R[7].y * W.y, R[7].y * W.x + R[7].x * W.y};
-    R[7] = t;
-    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
-#else
-    scalar_type w;
-    w.x = 0;
-    w.y = 0;
-    scalar_type loc_0;
-    loc_0.x = 0;
-    loc_0.y = 0;
-    scalar_type iw;
-    iw.x = 0;
-    iw.y = 0;
-
-    unsigned int stageInvocationID = 0;
-    unsigned int blockInvocationID = 0;
-    unsigned int sdataID           = 0;
-    unsigned int combinedID        = 0;
-    unsigned int inoutID           = 0;
-    float        angle             = 0;
-    int          threadIdx_y       = threadIdx.x % 8;
-    int          threadIdx_x       = threadIdx.x / 8;
-
-    stageInvocationID = (threadIdx_y + 0) % (1);
-    angle             = stageInvocationID * -3.14159265358979312e+00f;
-
-    w.x   = __cosf(angle);
-    w.y   = __sinf(angle);
-    loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
-    R[4]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
-    R[5]  = R[1] - loc_0;
-    R[1]  = R[1] + loc_0;
-    loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
-    R[6]  = R[2] - loc_0;
-    R[2]  = R[2] + loc_0;
-    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-    R[7]  = R[3] - loc_0;
-    R[3]  = R[3] + loc_0;
-    w.x   = __cosf(0.5f * angle);
-    w.y   = __sinf(0.5f * angle);
-    loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
-    R[2]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
-    R[3]  = R[1] - loc_0;
-    R[1]  = R[1] + loc_0;
-    iw.x  = w.y;
-    iw.y  = -w.x;
-    loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
-    R[6]  = R[4] - loc_0;
-    R[4]  = R[4] + loc_0;
-    loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
-    R[7]  = R[5] - loc_0;
-    R[5]  = R[5] + loc_0;
-    w.x   = __cosf(0.25f * angle);
-    w.y   = __sinf(0.25f * angle);
-    loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
-    R[1]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    iw.x  = w.y;
-    iw.y  = -w.x;
-    loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
-    R[3]  = R[2] - loc_0;
-    R[2]  = R[2] + loc_0;
-    iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
-    iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
-
-    loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
-    R[5]  = R[4] - loc_0;
-    R[4]  = R[4] + loc_0;
-    w.x   = iw.y;
-    w.y   = -iw.x;
-    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-    R[7]  = R[6] - loc_0;
-    R[6]  = R[6] + loc_0;
-    loc_0 = R[1];
-    R[1]  = R[4];
-    R[4]  = loc_0;
-    loc_0 = R[3];
-    R[3]  = R[6];
-    R[6]  = loc_0;
-
-    __syncthreads();
-
-    int sharedStride     = 17;
-    stageInvocationID    = threadIdx_y + 0;
-    blockInvocationID    = stageInvocationID;
-    stageInvocationID    = stageInvocationID % 1;
-    blockInvocationID    = blockInvocationID - stageInvocationID;
-    inoutID              = blockInvocationID * 8;
-    inoutID              = inoutID + stageInvocationID;
-    sdataID              = inoutID + 0;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[0];
-    sdataID              = inoutID + 1;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[1];
-    sdataID              = inoutID + 2;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[2];
-    sdataID              = inoutID + 3;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[3];
-    sdataID              = inoutID + 4;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[4];
-    sdataID              = inoutID + 5;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[5];
-    sdataID              = inoutID + 6;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[6];
-    sdataID              = inoutID + 7;
-    sdataID              = sharedStride * sdataID;
-    sdataID              = sdataID + threadIdx_x;
-    lds_complex[sdataID] = R[7];
-    __syncthreads();
-
-    stageInvocationID = (threadIdx_y + 0) % (8);
-    angle             = stageInvocationID * -3.92699081698724139e-01f;
-
-    R[0] = lds_complex[sharedStride * (threadIdx_y + 0) + threadIdx_x];
-    R[1] = lds_complex[sharedStride * (threadIdx_y + 8) + threadIdx_x];
-    R[2] = lds_complex[sharedStride * (threadIdx_y + 16) + threadIdx_x];
-    R[3] = lds_complex[sharedStride * (threadIdx_y + 24) + threadIdx_x];
-    R[4] = lds_complex[sharedStride * (threadIdx_y + 32) + threadIdx_x];
-    R[5] = lds_complex[sharedStride * (threadIdx_y + 40) + threadIdx_x];
-    R[6] = lds_complex[sharedStride * (threadIdx_y + 48) + threadIdx_x];
-    R[7] = lds_complex[sharedStride * (threadIdx_y + 56) + threadIdx_x];
-
-    w.x   = __cosf(angle);
-    w.y   = __sinf(angle);
-    loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
-    R[4]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
-    R[5]  = R[1] - loc_0;
-    R[1]  = R[1] + loc_0;
-    loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
-    R[6]  = R[2] - loc_0;
-    R[2]  = R[2] + loc_0;
-    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-    R[7]  = R[3] - loc_0;
-    R[3]  = R[3] + loc_0;
-    w.x   = __cosf(0.5f * angle);
-    w.y   = __sinf(0.5f * angle);
-    loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
-    R[2]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
-    R[3]  = R[1] - loc_0;
-    R[1]  = R[1] + loc_0;
-    iw.x  = w.y;
-    iw.y  = -w.x;
-    loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
-    R[6]  = R[4] - loc_0;
-    R[4]  = R[4] + loc_0;
-    loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
-    R[7]  = R[5] - loc_0;
-    R[5]  = R[5] + loc_0;
-    w.x   = __cosf(0.25f * angle);
-    w.y   = __sinf(0.25f * angle);
-    loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
-    R[1]  = R[0] - loc_0;
-    R[0]  = R[0] + loc_0;
-    iw.x  = w.y;
-    iw.y  = -w.x;
-    loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
-    R[3]  = R[2] - loc_0;
-    R[2]  = R[2] + loc_0;
-    iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
-    iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
-
-    loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
-    R[5]  = R[4] - loc_0;
-    R[4]  = R[4] + loc_0;
-    w.x   = iw.y;
-    w.y   = -iw.x;
-    loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-    R[7]  = R[6] - loc_0;
-    R[6]  = R[6] + loc_0;
-    loc_0 = R[1];
-    R[1]  = R[4];
-    R[4]  = loc_0;
-    loc_0 = R[3];
-    R[3]  = R[6];
-    R[6]  = loc_0;
-#endif
 }
 template <typename scalar_type,
           StrideBin     sb,
           EmbeddedType  ebtype,
           CallbackType  cbtype,
-          DirectRegType drtype>
+          DirectRegType drtype,
+          bool          vkfft_device>
 __global__ __launch_bounds__(128) void ip_forward_length64_SBRR_new(
     const scalar_type* __restrict__ twiddles,
     const size_t dim,
@@ -1286,13 +1368,28 @@ __global__ __launch_bounds__(128) void ip_forward_length64_SBRR_new(
     // calc the thread_in_device value once and for all device funcs
     unsigned int thread_in_device = lds_linear ? threadIdx.x % 8 : threadIdx.x / 16;
 
+    // call a pre-load from lds to registers (if necessary)
+    if(!direct_load_to_reg)
+    {
+        lds_to_reg_input_length64_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+            R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+    }
+
     // transform
     forward_length64_SBRR_device<scalar_type,
                                  lds_is_real,
                                  lds_linear ? SB_UNIT : SB_NONUNIT,
                                  lds_linear,
-                                 direct_load_to_reg>(
+                                 direct_load_to_reg,
+                                 vkfft_device>(
         R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    if(!direct_store_from_reg)
+    {
+        lds_from_reg_output_length64_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+            R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+    }
 
     if(direct_store_from_reg)
     {
@@ -2174,15 +2271,15 @@ bool check_accuracy(const size_t         N,
     max_l2_eps_single
         = std::max(max_l2_eps_single, diff.l_2 / cpu_output_norm.l_2 * sqrt(log2(total_length)));
 
-    std::cout << "single precision max l-inf epsilon: " << std::scientific << max_linf_eps_single
+    std::cout << "\tsingle precision max l-inf epsilon: " << std::scientific << max_linf_eps_single
               << std::endl;
-    std::cout << "single precision max l2 epsilon: " << std::scientific << max_l2_eps_single
+    std::cout << "\tsingle precision max l2 epsilon: " << std::scientific << max_l2_eps_single
               << std::endl;
     return true;
 }
 
 template <typename scalar_type>
-int fft_64_1024(int trial, bool isOld)
+int fft_64_1024(int trial, int option_id)
 {
     double max_linf_eps_single = 0.0;
     double max_l2_eps_single   = 0.0;
@@ -2273,8 +2370,9 @@ int fft_64_1024(int trial, bool isOld)
 
     device_event_create();
 
-    if(isOld)
+    if(option_id == 0)
     {
+        std::cout << "vkFFT - streamHPC opted\n";
         const dim3 grid(1, 64, 1);
         const dim3 block(16, 8, 1);
         const int  dy_lds_bytes = (64 * 16 + 64) * 8;
@@ -2315,8 +2413,8 @@ int fft_64_1024(int trial, bool isOld)
         device_event_record_stop();
         device_event_synchronize_stop();
         device_synchronize();
-        std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
-                  << device_event_elapsed_time() << " ms\n";
+        std::cout << "\tTotal elapsed time(ms):\t\t\t\t" << std::fixed << std::setw(8)
+                  << std::setprecision(3) << device_event_elapsed_time() << std::endl;
     }
     else
     {
@@ -2325,33 +2423,71 @@ int fft_64_1024(int trial, bool isOld)
         const int  dy_lds_bytes = 64 * 16 * 8 * 2;
 
         // warm up
-        ip_forward_length64_SBRR_new<scalar_type,
-                                     SB_NONUNIT,
-                                     EmbeddedType::NONE,
-                                     CallbackType::NONE,
-                                     DirectRegType::TRY_ENABLE_IF_SUPPORT>
-            <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
-                                               dim,
-                                               d_lengths,
-                                               d_strides,
-                                               nbatch,
-                                               lds_padding,
-                                               load_cb_fn,
-                                               load_cb_data,
-                                               load_cb_lds_bytes,
-                                               store_cb_fn,
-                                               store_cb_data,
-                                               d_a);
-        //device_memcpy_d2h(h_a, d_a, n_bytes);
-        // for(int i = 0; i < n; i++)
-        // {
-        //     if((int)h_a[i].x != (i + 1) || (int)h_a[i].y != (i + 1))
-        //     {
-        //         std::cout << "pure copy: failed at " << i << ", " << h_a[i].x << std::endl;
-        //         exit(-1);
-        //     }
-        // }
-        // std::cout << "verify pure copy done.\n";
+        switch(option_id)
+        {
+        case 1:
+            std::cout << "rocFFT - direct2reg, radix 8x8\n";
+            ip_forward_length64_SBRR_new<scalar_type,
+                                         SB_NONUNIT,
+                                         EmbeddedType::NONE,
+                                         CallbackType::NONE,
+                                         DirectRegType::TRY_ENABLE_IF_SUPPORT,
+                                         false><<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                                                  dim,
+                                                                                  d_lengths,
+                                                                                  d_strides,
+                                                                                  nbatch,
+                                                                                  lds_padding,
+                                                                                  load_cb_fn,
+                                                                                  load_cb_data,
+                                                                                  load_cb_lds_bytes,
+                                                                                  store_cb_fn,
+                                                                                  store_cb_data,
+                                                                                  d_a);
+            break;
+        case 2:
+            std::cout << "rocFFT - direct2reg, vkFFT device\n";
+            ip_forward_length64_SBRR_new<scalar_type,
+                                         SB_NONUNIT,
+                                         EmbeddedType::NONE,
+                                         CallbackType::NONE,
+                                         DirectRegType::TRY_ENABLE_IF_SUPPORT,
+                                         true><<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                                                 dim,
+                                                                                 d_lengths,
+                                                                                 d_strides,
+                                                                                 nbatch,
+                                                                                 lds_padding,
+                                                                                 load_cb_fn,
+                                                                                 load_cb_data,
+                                                                                 load_cb_lds_bytes,
+                                                                                 store_cb_fn,
+                                                                                 store_cb_data,
+                                                                                 d_a);
+            break;
+        case 3:
+            std::cout << "rocFFT - global2lds, vkFFT device\n";
+            ip_forward_length64_SBRR_new<scalar_type,
+                                         SB_NONUNIT,
+                                         EmbeddedType::NONE,
+                                         CallbackType::NONE,
+                                         DirectRegType::FORCE_OFF_OR_NOT_SUPPORT,
+                                         true><<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                                                 dim,
+                                                                                 d_lengths,
+                                                                                 d_strides,
+                                                                                 nbatch,
+                                                                                 lds_padding,
+                                                                                 load_cb_fn,
+                                                                                 load_cb_data,
+                                                                                 load_cb_lds_bytes,
+                                                                                 store_cb_fn,
+                                                                                 store_cb_data,
+                                                                                 d_a);
+            break;
+        default:
+            std::cerr << "not supported!" << std::endl;
+        }
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
         // for(int i = 0; i < 128; i++)
@@ -2363,36 +2499,86 @@ int fft_64_1024(int trial, bool isOld)
             return -1;
 
         device_event_record_start();
-        for(int itrial = 0; itrial < trial; ++itrial)
+
+        switch(option_id)
         {
-            ip_forward_length64_SBRR_new<scalar_type,
-                                         SB_NONUNIT,
-                                         EmbeddedType::NONE,
-                                         CallbackType::NONE,
-                                         DirectRegType::TRY_ENABLE_IF_SUPPORT>
-                <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
-                                                   dim,
-                                                   d_lengths,
-                                                   d_strides,
-                                                   nbatch,
-                                                   lds_padding,
-                                                   load_cb_fn,
-                                                   load_cb_data,
-                                                   load_cb_lds_bytes,
-                                                   store_cb_fn,
-                                                   store_cb_data,
-                                                   d_a);
+        case 1:
+            for(int itrial = 0; itrial < trial; ++itrial)
+                ip_forward_length64_SBRR_new<scalar_type,
+                                             SB_NONUNIT,
+                                             EmbeddedType::NONE,
+                                             CallbackType::NONE,
+                                             DirectRegType::TRY_ENABLE_IF_SUPPORT,
+                                             false>
+                    <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                       dim,
+                                                       d_lengths,
+                                                       d_strides,
+                                                       nbatch,
+                                                       lds_padding,
+                                                       load_cb_fn,
+                                                       load_cb_data,
+                                                       load_cb_lds_bytes,
+                                                       store_cb_fn,
+                                                       store_cb_data,
+                                                       d_a);
+            break;
+        case 2:
+            for(int itrial = 0; itrial < trial; ++itrial)
+                ip_forward_length64_SBRR_new<scalar_type,
+                                             SB_NONUNIT,
+                                             EmbeddedType::NONE,
+                                             CallbackType::NONE,
+                                             DirectRegType::TRY_ENABLE_IF_SUPPORT,
+                                             true>
+                    <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                       dim,
+                                                       d_lengths,
+                                                       d_strides,
+                                                       nbatch,
+                                                       lds_padding,
+                                                       load_cb_fn,
+                                                       load_cb_data,
+                                                       load_cb_lds_bytes,
+                                                       store_cb_fn,
+                                                       store_cb_data,
+                                                       d_a);
+            break;
+        case 3:
+            for(int itrial = 0; itrial < trial; ++itrial)
+                ip_forward_length64_SBRR_new<scalar_type,
+                                             SB_NONUNIT,
+                                             EmbeddedType::NONE,
+                                             CallbackType::NONE,
+                                             DirectRegType::FORCE_OFF_OR_NOT_SUPPORT,
+                                             true>
+                    <<<grid, block, dy_lds_bytes, 0>>>(d_twd,
+                                                       dim,
+                                                       d_lengths,
+                                                       d_strides,
+                                                       nbatch,
+                                                       lds_padding,
+                                                       load_cb_fn,
+                                                       load_cb_data,
+                                                       load_cb_lds_bytes,
+                                                       store_cb_fn,
+                                                       store_cb_data,
+                                                       d_a);
+            break;
+        default:
+            std::cerr << "not supported!" << std::endl;
         }
+
         device_event_record_stop();
         device_event_synchronize_stop();
         device_synchronize();
-        std::cout << "Total elapsed time:" << std::fixed << std::setw(8) << std::setprecision(3)
-                  << device_event_elapsed_time() << " ms\n";
+        std::cout << "\tTotal elapsed time(ms):\t\t\t\t" << std::fixed << std::setw(8)
+                  << std::setprecision(3) << device_event_elapsed_time() << std::endl;
     }
 
     device_synchronize();
 
-    std::cout << "Execution done.\n";
+    std::cout << "Done.\n";
 
     device_memcpy_d2h(h_a, d_a, n_bytes);
 
@@ -2414,22 +2600,16 @@ int fft_64_1024(int trial, bool isOld)
 
 int main(int argc, char* argv[])
 {
-    if(argv[1][0] == '0')
+    if(argc == 1)
     {
-        std::cout << "vkFFT...\n";
-        fft_64_1024<float2>(1000, 1);
-    }
-    else if(argv[1][0] == '1')
-    {
-        std::cout << "rocFFT...\n";
         fft_64_1024<float2>(1000, 0);
-    }
-    else if(argv[1][0] == '2')
-    {
-        std::cout << "vkFFT...\n";
         fft_64_1024<float2>(1000, 1);
-        std::cout << "rocFFT...\n";
-        fft_64_1024<float2>(1000, 0);
+        fft_64_1024<float2>(1000, 2);
+        fft_64_1024<float2>(1000, 3);
+    }
+    else //single run
+    {
+        fft_64_1024<float2>(1000, atoi(argv[1]));
     }
 
     return 0;
