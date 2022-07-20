@@ -662,9 +662,9 @@ double double_epsilon = 1e-15;
 template <typename T>
 std::vector<T> GenerateTwiddleTable(const std::vector<size_t>& radices, size_t N)
 {
+    size_t length_limit = N;
     // cosine, sine arrays. T is float2 or double2, wc.x stores cosine,
     // wc.y stores sine
-    size_t         length_limit = N;
     std::vector<T> wc(length_limit);
     const double   TWO_PI = -6.283185307179586476925286766559;
 
@@ -675,18 +675,18 @@ std::vector<T> GenerateTwiddleTable(const std::vector<size_t>& radices, size_t N
             std::begin(radices), std::end(radices), static_cast<size_t>(1), std::multiplies<>()));
 
     // Generate the table
-    size_t L  = 1;
+    size_t L  = radices.front();
     size_t nt = 0;
-    for(auto radix : radices)
+    for(auto radix = radices.begin() + 1; radix != radices.end(); ++radix)
     {
-        L *= radix;
+        L *= *radix;
 
         // Twiddle factors
-        for(size_t k = 0; k < (L / radix) && nt < length_limit; k++)
+        for(size_t k = 0; k < (L / *radix) && nt < length_limit; k++)
         {
             double theta = TWO_PI * (k) / (L);
 
-            for(size_t j = 1; j < radix && nt < length_limit; j++)
+            for(size_t j = 1; j < *radix && nt < length_limit; j++)
             {
                 double c = cos((j)*theta);
                 double s = sin((j)*theta);
@@ -700,6 +700,7 @@ std::vector<T> GenerateTwiddleTable(const std::vector<size_t>& radices, size_t N
             }
         }
     } // end of for radices
+    wc.resize(nt);
 
     return wc;
 }

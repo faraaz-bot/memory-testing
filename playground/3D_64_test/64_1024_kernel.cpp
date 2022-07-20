@@ -768,7 +768,7 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(float2* inputs, flo
 }
 */
 
-//#define ROCFFT_ORG
+// #define ROCFFT_ORG
 
 template <typename scalar_type,
           const bool lds_is_real,
@@ -786,8 +786,15 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
 {
 
 #ifdef ROCFFT_ORG
+    scalar_type        W;
+    scalar_type        t;
     const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
     unsigned int       l_offset;
+
+    // pass 0, width 8
+    // using 8 threads we need to do 8 radix-8 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
     if(!lds_is_real)
     {
         if(!direct_load_to_reg)
@@ -955,6 +962,29 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
         l_offset = l_offset + l_offset / 32;
         R[7]     = lds_complex[l_offset];
     }
+
+    W    = twiddles[0 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
+    R[1] = t;
+    W    = twiddles[1 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
+    R[2] = t;
+    W    = twiddles[2 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
+    R[3] = t;
+    W    = twiddles[3 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
+    R[4] = t;
+    W    = twiddles[4 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[5].x * W.x - R[5].y * W.y, R[5].y * W.x + R[5].x * W.y};
+    R[5] = t;
+    W    = twiddles[5 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[6].x * W.x - R[6].y * W.y, R[6].y * W.x + R[6].x * W.y};
+    R[6] = t;
+    W    = twiddles[6 + 7 * ((thread + 0 + 0) % 8)];
+    t    = {R[7].x * W.x - R[7].y * W.y, R[7].y * W.x + R[7].x * W.y};
+    R[7] = t;
+    FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
 #else
     scalar_type w;
     w.x = 0;
@@ -2166,13 +2196,14 @@ int fft_64_1024(int trial, bool isOld)
 
     scalar_type* h_a   = (scalar_type*)malloc(n_bytes);
     scalar_type* d_a   = (scalar_type*)malloc(n_bytes);
-    scalar_type* h_twd = (scalar_type*)malloc(64 * sizeof(scalar_type));
+    scalar_type* h_twd = (scalar_type*)malloc(N * sizeof(scalar_type));
 
     std::vector<size_t>      radices;
     std::vector<scalar_type> twd;
     radices.push_back(8);
     radices.push_back(8);
     twd = GenerateTwiddleTable<scalar_type>(radices, N);
+    //std::cout << "twd size " << twd.size() << std::endl;
 
     scalar_type* d_twd;
     const size_t dim = 1;
@@ -2197,10 +2228,11 @@ int fft_64_1024(int trial, bool isOld)
     }
 
     //std::cout << "twd\n";
-    for(int i = 0; i < N; i++)
+    for(int i = 0; i < 56; i++)
     {
         h_twd[i] = twd[i];
         //std::cout << "i " << i << ": " << h_twd[i].x << ", " << h_twd[i].y << std::endl;
+        //std::cout << h_twd[i].x << ", " << h_twd[i].y << std::endl;
     }
 
     size_t h_lengths[4];
@@ -2322,13 +2354,13 @@ int fft_64_1024(int trial, bool isOld)
         // std::cout << "verify pure copy done.\n";
 
         device_memcpy_d2h(h_a, d_a, n_bytes);
-        if(!check_accuracy(N, nbatch, ref_out, h_a, false))
-            return -1;
         // for(int i = 0; i < 128; i++)
         // {
         //     std::cout << "(" << h_a[i].x << ", " << h_a[i].y << ")";
         // }
         // std::cout << std::endl;
+        if(!check_accuracy(N, nbatch, ref_out, h_a, false))
+            return -1;
 
         device_event_record_start();
         for(int itrial = 0; itrial < trial; ++itrial)
