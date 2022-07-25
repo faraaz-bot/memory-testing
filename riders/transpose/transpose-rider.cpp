@@ -31,6 +31,8 @@ namespace po = boost::program_options;
 #include<hip/hip_runtime_api.h>
 #include<hip/hip_ext.h>
 
+//#define USE_LDS 0
+
 template<typename T1, typename T2>
 T1 ceildiv(T1 a, T2 b)
 {
@@ -51,7 +53,10 @@ __global__ void transpose(const Tval* __restrict__ idata,
 
     const int ix = threadIdx.x + blockIdx.x * blockDim.x;
     const int iy = threadIdx.y + blockIdx.y * blockDim.y;
-    
+
+    // LDS version
+# if USE_LDS
+   
     const int pos = threadIdx.y * (tileDim + 1) + threadIdx.x;
     
     // Contiguous read
@@ -63,8 +68,14 @@ __global__ void transpose(const Tval* __restrict__ idata,
 
     // Contiguous write
     if(ix < Nx && iy < Ny) {
-        odata[ix * Ny + iy] = lds[pos];
+      odata[ix * Ny + iy] = lds[pos];
     }
+#else
+    if(ix < Nx && iy < Ny) {
+      odata[ix * Ny + iy] = idata[iy * Nx + ix];
+    }
+#endif
+    
 }
 
 
@@ -106,8 +117,14 @@ public:
                                              std::multiplies<Tlength>());
             size_t blockSize = 32;
             size_t blocks    = length[0] / blockSize;
-            
-            
+
+#if USE_LDS
+	    size_t lds_count = (blockSize + 1) * blockSize;
+#else
+	    size_t lds_count = 0;
+#endif	    
+
+	    
             int ggl_flags = 0;
             
             switch(precision) {
@@ -119,7 +136,7 @@ public:
                                           dim3(ceildiv(length[0], blockSize),
                                                ceildiv(length[1], blockSize)),
                                           dim3(blockSize, blockSize),
-                                          sizeof(float2) * (blockSize + 1) * blockSize, // sharedMemBytes
+                                          sizeof(float2) * lds_count, // sharedMemBytes
                                           0, // stream
                                           start,
                                           stop,
@@ -136,7 +153,7 @@ public:
                                           dim3(ceildiv(length[0], blockSize),
                                                ceildiv(length[1], blockSize)),
                                           dim3(blockSize, blockSize),
-                                          sizeof(float) * (blockSize + 1) * blockSize, // sharedMemBytes
+                                          sizeof(float) * lds_count, // sharedMemBytes
                                           0, // stream
                                           start,
                                           stop,
@@ -157,7 +174,7 @@ public:
                                           dim3(ceildiv(length[0], blockSize),
                                                ceildiv(length[1], blockSize)),
                                           dim3(blockSize, blockSize),
-                                          sizeof(double2) * (blockSize + 1) * blockSize, // sharedMemBytes
+                                          sizeof(double2) * lds_count, // sharedMemBytes
                                           0, // stream
                                           start,
                                           stop,
@@ -175,7 +192,7 @@ public:
                                           dim3(ceildiv(length[0], blockSize),
                                                ceildiv(length[1], blockSize)),
                                           dim3(blockSize, blockSize),
-                                          sizeof(double) * (blockSize + 1) * blockSize, // sharedMemBytes
+                                          sizeof(double) * lds_count, // sharedMemBytes
                                           0, // stream
                                           start,
                                           stop,
