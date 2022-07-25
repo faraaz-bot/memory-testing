@@ -78,7 +78,7 @@ public:
 
     ~transpose_params(){};
 
-    virtual void compute_osize() override
+    virtual void compute_osize() 
         {
             auto   ol  = olength_cm(); // transposed output
             size_t val = compute_ptrdiff(ol, ostride, nbatch, odist);
