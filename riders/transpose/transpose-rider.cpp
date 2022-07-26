@@ -43,10 +43,10 @@ T1 ceildiv(T1 a, T2 b)
 // Tiled transpose through LDS
 template <typename Tval>
 __global__ void transpose(const Tval* __restrict__ idata,
-                              Tval* __restrict__ odata,
-                              const int Nx,
-                              const int Ny,
-                              const int tileDim)
+                          Tval* __restrict__ odata,
+                          const int Nx,
+                          const int Ny,
+                          const int tileDim)
 {
     extern __shared__ __align__(sizeof(Tval)) unsigned char shmem_ptr[];
     Tval* lds = reinterpret_cast<Tval*>(shmem_ptr);
@@ -58,20 +58,24 @@ __global__ void transpose(const Tval* __restrict__ idata,
     // LDS version
 # if USE_LDS
 
-    const int pos = iy * Nx + ix;
+    // Global indices: transpose blocks, no thread transpose.
+    const int gipos = (blockIdx.x * blockDim.x + threadIdx.x) * Nx + (blockIdx.y * blockDim.y + threadIdx.y);
+    const int gopos = (blockIdx.y * blockDim.y + threadIdx.x) * Ny + (blockIdx.x * blockDim.x + threadIdx.y);
+
+    // LDS indices: transpose threads, no block transpose.
+    const int lipos = threadIdx.x * (tileDim + 1) + threadIdx.y;
+    const int lopos = threadIdx.y * (tileDim + 1) + threadIdx.x;
     
     // Contiguous read
     if(ix < Nx && iy < Ny) {
-        const int ipos = threadIdx.y * (tileDim + 1) + threadIdx.x;
-        lds[ipos] = idata[pos];
+        lds[lipos] = idata[gipos];
     }
         
     __syncthreads();
 
     // Contiguous write
     if(ix < Nx && iy < Ny) {
-        const int opos = threadIdx.x * (tileDim + 1) + threadIdx.y;
-        odata[pos] = lds[opos];
+        odata[gopos] = lds[lopos];
     }
 #else
     if(ix < Nx && iy < Ny) {
@@ -496,7 +500,7 @@ int main(int argc, char* argv[])
     auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
     compute_input(params, gpu_input);
 
-    if(verbose > 1)
+    if(verbose > 3)
     {
         std::cout << "GPU input:\n";
         params.print_ibuffer(gpu_input);
@@ -566,7 +570,21 @@ int main(int argc, char* argv[])
                           hipMemcpyDeviceToHost) != hipSuccess)
                 throw std::runtime_error("hipMemcpy failed");
         }
-        params.print_obuffer(gpu_output);
+        if(verbose > 3)
+        {
+            params.print_obuffer(gpu_output);
+        }
+        auto pin = (std::complex<float>*)gpu_input[0].data();
+        auto pout = (std::complex<float>*)gpu_output[0].data();
+        for(int ix = 0; ix <  params.length[0]; ++ix) {
+            for(int iy = 0; iy <  params.length[1]; ++iy) {
+                if(pin[ix * params.length[0] + iy] != pout[iy * params.length[1] + ix]) {
+                    std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
+                }
+            }
+        }
+        
+        
     }
 
         
