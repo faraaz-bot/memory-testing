@@ -54,21 +54,24 @@ __global__ void transpose(const Tval* __restrict__ idata,
     const int ix = threadIdx.x + blockIdx.x * blockDim.x;
     const int iy = threadIdx.y + blockIdx.y * blockDim.y;
 
+    
     // LDS version
 # if USE_LDS
-   
-    const int pos = threadIdx.y * (tileDim + 1) + threadIdx.x;
+
+    const int pos = iy * Nx + ix;
     
     // Contiguous read
     if(ix < Nx && iy < Ny) {
-        lds[pos] = idata[iy * Nx + ix];
+        const int ipos = threadIdx.y * (tileDim + 1) + threadIdx.x;
+        lds[ipos] = idata[pos];
     }
         
     __syncthreads();
 
     // Contiguous write
     if(ix < Nx && iy < Ny) {
-      odata[ix * Ny + iy] = lds[pos];
+        const int opos = threadIdx.x * (tileDim + 1) + threadIdx.y;
+        odata[pos] = lds[opos];
     }
 #else
     if(ix < Nx && iy < Ny) {
