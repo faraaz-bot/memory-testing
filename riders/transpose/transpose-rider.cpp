@@ -49,40 +49,38 @@ __global__ void transpose(const Tval* __restrict__ idata,
                           const int tileDim,
                           const int padding)
 {
+# if USE_LDS
+
     extern __shared__ __align__(sizeof(Tval)) unsigned char shmem_ptr[];
     Tval* lds = reinterpret_cast<Tval*>(shmem_ptr);
 
-    const int ix = blockIdx.x * blockDim.x + threadIdx.x;
-    const int iy = blockIdx.y * blockDim.y + threadIdx.y;
-
-    
-    // LDS version
-# if USE_LDS
-
-    // Global indices: transpose blocks, no thread transpose.
+    // Input indices: straight copy.
     const int gipos = (blockIdx.x * blockDim.x + threadIdx.x) * Ny + (blockIdx.y * blockDim.y + threadIdx.y);
-    const int gopos = (blockIdx.y * blockDim.y + threadIdx.x) * Nx + (blockIdx.x * blockDim.x + threadIdx.y);
-   
-    // LDS indices: transpose threads, no block transpose.
-    const int lipos = threadIdx.x * (tileDim + padding) + threadIdx.y;
-    const int lopos = threadIdx.y * (tileDim + padding) + threadIdx.x;
-
+    const int lipos = threadIdx.x * (tileDim + padding)            + threadIdx.y;
+       
     // Contiguous read
-    if(ix < Nx && iy < Ny)
+    if((blockIdx.x * blockDim.x + threadIdx.x) < Nx && (blockIdx.y * blockDim.y + threadIdx.y) < Ny)
     {
         lds[lipos] = idata[gipos];
     }
-        
+
     __syncthreads();
 
+    // Output indices
+    const int lopos = threadIdx.y * (tileDim + padding)            + threadIdx.x;
+    const int gopos = (blockIdx.y * blockDim.y + threadIdx.x) * Nx + (blockIdx.x * blockDim.x + threadIdx.y);
+
     // Contiguous write
-    if(ix < Ny && iy < Nx)
+    if( (blockIdx.y * blockDim.y + threadIdx.x) < Ny && (blockIdx.x * blockDim.x + threadIdx.y) < Nx)
     {
         odata[gopos] = lds[lopos];
     }
 #else
+    const int ix = blockIdx.x * blockDim.x + threadIdx.x;
+    const int iy = blockIdx.y * blockDim.y + threadIdx.y;
+
     if(ix < Nx && iy < Ny) {
-      odata[ix * Ny + iy] = idata[iy * Nx + ix];
+        odata[ix * Ny + iy] = idata[iy * Nx + ix];
     }
 #endif
     
@@ -99,7 +97,7 @@ public:
 
     ~transpose_params(){};
 
-    virtual void compute_osize() 
+    virtual void compute_osize() override
         {
             auto   ol  = olength_cm(); // transposed output
             size_t val = compute_ptrdiff(ol, ostride, nbatch, odist);
@@ -109,7 +107,16 @@ public:
                 osize[i] = val + ooffset[i];
             }
         }
+
+    virtual std::vector<size_t> olength() const override
+        {
+            return length_cm();
+        }
     
+    virtual std::vector<size_t> obuffer_sizes() const override
+        {
+            return std::vector<size_t> {var_size<size_t>(precision, otype) * length[0] * length[1]};
+        }
     size_t vram_footprint() override
         {
             return 0;
@@ -126,7 +133,7 @@ public:
             const size_t N = std::accumulate(length.begin(), length.end(),  (Tlength)nbatch,
                                              std::multiplies<Tlength>());
             size_t blockSize = 32;
-            int padding = 1;
+            int padding = 0;
 
             auto blocks = dim3(ceildiv(length[0], blockSize), ceildiv(length[1], blockSize));
             auto threads = dim3(blockSize, blockSize);
@@ -246,8 +253,8 @@ public:
                 case fft_transform_type_complex_forward:
                 case fft_transform_type_complex_inverse:
                     hipLaunchKernelGGL(transpose<float2>,
-                                          blocks,
-                                          threads,
+                                       blocks,
+                                       threads,
                                        sizeof(float2) * lds_count, // sharedMemBytes
                                        0, // stream
                                        (float2*)in[0],
@@ -345,18 +352,18 @@ int main(int argc, char* argv[])
         ("device", po::value<int>(&deviceId)->default_value(0), "Select a specific device id")
         ("verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")
         ("ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")
-        ("notInPlace,o", "Not in-place FFT transform (default: in-place)")
-        ("double", "Double precision transform (default: single)")
-        ("transformType,t", po::value<fft_transform_type>(&params.transform_type)
-         ->default_value(fft_transform_type_complex_forward),
-         "Type of transform:\n0) complex forward\n1) complex inverse\n2) real "
-         "forward\n3) real inverse")
+            ("notInPlace,o", "Not in-place FFT transform (default: in-place)")
+            ("double", "Double precision transform (default: single)")
+            ("transformType,t", po::value<fft_transform_type>(&params.transform_type)
+             ->default_value(fft_transform_type_complex_forward),
+             "Type of transform:\n0) complex forward\n1) complex inverse\n2) real "
+             "forward\n3) real inverse")
         ( "batchSize,b", po::value<size_t>(&params.nbatch)->default_value(1),
           "If this value is greater than one, arrays will be used ")
-        ( "itype", po::value<fft_array_type>(&params.itype)
-          ->default_value(fft_array_type_unset),
-          "Array type of input data:\n0) interleaved\n1) planar\n2) real\n3) "
-          "hermitian interleaved\n4) hermitian planar")
+            ( "itype", po::value<fft_array_type>(&params.itype)
+              ->default_value(fft_array_type_unset),
+              "Array type of input data:\n0) interleaved\n1) planar\n2) real\n3) "
+              "hermitian interleaved\n4) hermitian planar")
         ( "otype", po::value<fft_array_type>(&params.otype)
           ->default_value(fft_array_type_unset),
           "Array type of output data:\n0) interleaved\n1) planar\n2) real\n3) "
@@ -573,24 +580,42 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hipEventSynchronize failed");
 
     if(verbose > 2) {
-        auto gpu_output = allocate_host_buffer(params.precision, params.otype, params.osize);
-        for(unsigned int idx = 0; idx < gpu_output.size(); ++idx)
-        {
-            if( hipMemcpy(gpu_output[idx].data(),
-                          pobuffer[idx],
-                          gpu_output[idx].size(),
-                          hipMemcpyDeviceToHost) != hipSuccess)
-                throw std::runtime_error("hipMemcpy failed");
-        }
+        auto gpu_output = std::vector<char>(var_size<size_t>(params.precision, params.otype) * params.length[0] * params.length[1]);
+        if( hipMemcpy(gpu_output.data(),
+                      pobuffer[0],
+                      gpu_output.size(),
+                      hipMemcpyDeviceToHost) != hipSuccess)
+            throw std::runtime_error("hipMemcpy failed");
+        
         if(verbose > 3)
         {
-            params.print_obuffer(gpu_output);
+            std::cout << "GPU output:\n";
+            std::vector<std::vector<char>> vgpu_output = {gpu_output};
+            params.print_obuffer(vgpu_output);
         }
+
         auto pin = (std::complex<float>*)gpu_input[0].data();
-        auto pout = (std::complex<float>*)gpu_output[0].data();
+        auto pout = (std::complex<float>*)gpu_output.data();
+
+
+        if(verbose > 4)
+        {
+            std::cout << "input:";
+            for(int i = 0; i < params.length[0] * params.length[1]; ++i) {
+                std::cout << " " << pin[i];
+            }
+            std::cout << std::endl;
+
+            std::cout << "output:";
+            for(int i = 0; i < params.length[0] * params.length[1]; ++i) {
+                std::cout << " " << pout[i];
+            }
+            std::cout << std::endl;        
+        }
+        
         for(int ix = 0; ix <  params.length[0]; ++ix) {
             for(int iy = 0; iy <  params.length[1]; ++iy) {
-                if(pin[ix * params.length[0] + iy] != pout[iy * params.length[1] + ix]) {
+                if(pin[ix * params.length[1] + iy] != pout[iy * params.length[0] + ix]) {
                     std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
                 }
             }
