@@ -1,5 +1,7 @@
 //
-// build: /opt/rocm/bin/hipcc -std=c++14  64_1024_kernel.cpp -o 64_1024_kernel -lfftw3f
+// build:
+//    hipcc -std=c++14 -D PACK_FP32 64_1024_kernel.cpp -o 64_1024_kernel -lfftw3f
+//    nvcc -x cu -std=c++14 -D CUDA  64_1024_kernel.cpp -o 64_nv -lfftw3f
 //
 // run:
 //    - all solutions: 64_1024_kernel
@@ -173,55 +175,114 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(const float2* input
     //            (int)temp_3.x,
     //            (int)temp_3.y);
 
-    w.x    = __cosf(angle);
-    w.y    = __sinf(angle);
-    loc_0  = temp_4 * w.x + float2(-temp_4.y, temp_4.x) * w.y;
+    w.x = __cosf(angle);
+    w.y = __sinf(angle);
+#ifdef PACK_FP32
+    loc_0 = temp_4 * w.x + float2(-temp_4.y, temp_4.x) * w.y;
+#endif
+    loc_0.x = temp_4.x * w.x - temp_4.y * w.y;
+    loc_0.y = temp_4.y * w.x + temp_4.x * w.y;
+
     temp_4 = temp_0 - loc_0;
     temp_0 = temp_0 + loc_0;
-    loc_0  = temp_5 * w.x + float2(-temp_5.y, temp_5.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_5 * w.x + float2(-temp_5.y, temp_5.x) * w.y;
+#else
+    loc_0.x = temp_5.x * w.x - temp_5.y * w.y;
+    loc_0.y = temp_5.y * w.x + temp_5.x * w.y;
+#endif
     temp_5 = temp_1 - loc_0;
     temp_1 = temp_1 + loc_0;
-    loc_0  = temp_6 * w.x + float2(-temp_6.y, temp_6.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_6 * w.x + float2(-temp_6.y, temp_6.x) * w.y;
+#else
+    loc_0.x = temp_6.x * w.x - temp_6.y * w.y;
+    loc_0.y = temp_6.y * w.x + temp_6.x * w.y;
+#endif
     temp_6 = temp_2 - loc_0;
     temp_2 = temp_2 + loc_0;
-    loc_0  = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#else
+    loc_0.x = temp_7.x * w.x - temp_7.y * w.y;
+    loc_0.y = temp_7.y * w.x + temp_7.x * w.y;
+#endif
     temp_7 = temp_3 - loc_0;
     temp_3 = temp_3 + loc_0;
     w.x    = __cosf(0.5f * angle);
     w.y    = __sinf(0.5f * angle);
-    loc_0  = temp_2 * w.x + float2(-temp_2.y, temp_2.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_2 * w.x + float2(-temp_2.y, temp_2.x) * w.y;
+#else
+    loc_0.x = temp_2.x * w.x - temp_2.y * w.y;
+    loc_0.y = temp_2.y * w.x + temp_2.x * w.y;
+#endif
     temp_2 = temp_0 - loc_0;
     temp_0 = temp_0 + loc_0;
-    loc_0  = temp_3 * w.x + float2(-temp_3.y, temp_3.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_3 * w.x + float2(-temp_3.y, temp_3.x) * w.y;
+#else
+    loc_0.x = temp_3.x * w.x - temp_3.y * w.y;
+    loc_0.y = temp_3.y * w.x + temp_3.x * w.y;
+#endif
     temp_3 = temp_1 - loc_0;
     temp_1 = temp_1 + loc_0;
     iw.x   = w.y;
     iw.y   = -w.x;
-    loc_0  = temp_6 * iw.x + float2(-temp_6.y, temp_6.x) * iw.y;
+#ifdef PACK_FP32
+    loc_0 = temp_6 * iw.x + float2(-temp_6.y, temp_6.x) * iw.y;
+#else
+    loc_0.x = temp_3.x * iw.x - temp_3.y * iw.y;
+    loc_0.y = temp_3.y * iw.x + temp_3.x * iw.y;
+#endif
     temp_6 = temp_4 - loc_0;
     temp_4 = temp_4 + loc_0;
-    loc_0  = temp_7 * iw.x + float2(-temp_7.y, temp_7.x) * iw.y;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * iw.x + float2(-temp_7.y, temp_7.x) * iw.y;
+#else
+    loc_0.x = temp_7.x * iw.x - temp_7.y * iw.y;
+    loc_0.y = temp_7.y * iw.x + temp_7.x * iw.y;
+#endif
     temp_7 = temp_5 - loc_0;
     temp_5 = temp_5 + loc_0;
     w.x    = __cosf(0.25f * angle);
     w.y    = __sinf(0.25f * angle);
-    loc_0  = temp_1 * w.x + float2(-temp_1.y, temp_1.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_1 * w.x + float2(-temp_1.y, temp_1.x) * w.y;
+#else
+    loc_0.x = temp_1.x * w.x - temp_1.y * w.y;
+    loc_0.y = temp_1.y * w.x + temp_1.x * w.y;
+#endif
     temp_1 = temp_0 - loc_0;
     temp_0 = temp_0 + loc_0;
     iw.x   = w.y;
     iw.y   = -w.x;
-    loc_0  = temp_3 * iw.x + float2(-temp_3.y, temp_3.x) * iw.y;
+#ifdef PACK_FP32
+    loc_0 = temp_3 * iw.x + float2(-temp_3.y, temp_3.x) * iw.y;
+#else
+    loc_0.x = temp_3.x * iw.x - temp_3.y * iw.y;
+    loc_0.y = temp_3.y * iw.x + temp_3.x * iw.y;
+#endif
     temp_3 = temp_2 - loc_0;
     temp_2 = temp_2 + loc_0;
     iw.x   = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
     iw.y   = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
-
-    loc_0        = temp_5 * iw.x + float2(-temp_5.y, temp_5.x) * iw.y;
-    temp_5       = temp_4 - loc_0;
-    temp_4       = temp_4 + loc_0;
-    w.x          = iw.y;
-    w.y          = -iw.x;
-    loc_0        = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_5 * iw.x + float2(-temp_5.y, temp_5.x) * iw.y;
+#else
+    loc_0.x = temp_5.x * iw.x - temp_5.y * iw.y;
+    loc_0.y = temp_5.y * iw.x + temp_5.x * iw.y;
+#endif
+    temp_5 = temp_4 - loc_0;
+    temp_4 = temp_4 + loc_0;
+    w.x    = iw.y;
+    w.y    = -iw.x;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#else
+    loc_0.x = temp_7.x * w.x - temp_7.y * w.y;
+    loc_0.y = temp_7.y * w.x + temp_7.x * w.y;
+#endif
     temp_7       = temp_6 - loc_0;
     temp_6       = temp_6 + loc_0;
     loc_0        = temp_1;
@@ -285,53 +346,112 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(const float2* input
     temp_7            = sdata[sharedStride * (threadIdx.y + 56) + threadIdx.x];
     w.x               = __cosf(angle);
     w.y               = __sinf(angle);
-    loc_0             = temp_4 * w.x + float2(-temp_4.y, temp_4.x) * w.y;
-    temp_4            = temp_0 - loc_0;
-    temp_0            = temp_0 + loc_0;
-    loc_0             = temp_5 * w.x + float2(-temp_5.y, temp_5.x) * w.y;
-    temp_5            = temp_1 - loc_0;
-    temp_1            = temp_1 + loc_0;
-    loc_0             = temp_6 * w.x + float2(-temp_6.y, temp_6.x) * w.y;
-    temp_6            = temp_2 - loc_0;
-    temp_2            = temp_2 + loc_0;
-    loc_0             = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
-    temp_7            = temp_3 - loc_0;
-    temp_3            = temp_3 + loc_0;
-    w.x               = __cosf(0.5f * angle);
-    w.y               = __sinf(0.5f * angle);
-    loc_0             = temp_2 * w.x + float2(-temp_2.y, temp_2.x) * w.y;
-    temp_2            = temp_0 - loc_0;
-    temp_0            = temp_0 + loc_0;
-    loc_0             = temp_3 * w.x + float2(-temp_3.y, temp_3.x) * w.y;
-    temp_3            = temp_1 - loc_0;
-    temp_1            = temp_1 + loc_0;
-    iw.x              = w.y;
-    iw.y              = -w.x;
-    loc_0             = temp_6 * iw.x + float2(-temp_6.y, temp_6.x) * iw.y;
-    temp_6            = temp_4 - loc_0;
-    temp_4            = temp_4 + loc_0;
-    loc_0             = temp_7 * iw.x + float2(-temp_7.y, temp_7.x) * iw.y;
-    temp_7            = temp_5 - loc_0;
-    temp_5            = temp_5 + loc_0;
-    w.x               = __cosf(0.25f * angle);
-    w.y               = __sinf(0.25f * angle);
-    loc_0             = temp_1 * w.x + float2(-temp_1.y, temp_1.x) * w.y;
-    temp_1            = temp_0 - loc_0;
-    temp_0            = temp_0 + loc_0;
-    iw.x              = w.y;
-    iw.y              = -w.x;
-    loc_0             = temp_3 * iw.x + float2(-temp_3.y, temp_3.x) * iw.y;
-    temp_3            = temp_2 - loc_0;
-    temp_2            = temp_2 + loc_0;
-    iw.x              = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
-    iw.y              = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
-
-    loc_0  = temp_5 * iw.x + float2(-temp_5.y, temp_5.x) * iw.y;
+#ifdef PACK_FP32
+    loc_0 = temp_4 * w.x + float2(-temp_4.y, temp_4.x) * w.y;
+#else
+    loc_0.x = temp_4.x * w.x - temp_4.y * w.y;
+    loc_0.y = temp_4.y * w.x + temp_4.x * w.y;
+#endif
+    temp_4 = temp_0 - loc_0;
+    temp_0 = temp_0 + loc_0;
+#ifdef PACK_FP32
+    loc_0 = temp_5 * w.x + float2(-temp_5.y, temp_5.x) * w.y;
+#else
+    loc_0.x = temp_5.x * w.x - temp_5.y * w.y;
+    loc_0.y = temp_5.y * w.x + temp_5.x * w.y;
+#endif
+    temp_5 = temp_1 - loc_0;
+    temp_1 = temp_1 + loc_0;
+#ifdef PACK_FP32
+    loc_0 = temp_6 * w.x + float2(-temp_6.y, temp_6.x) * w.y;
+#else
+    loc_0.x = temp_6.x * w.x - temp_6.y * w.y;
+    loc_0.y = temp_6.y * w.x + temp_6.x * w.y;
+#endif
+    temp_6 = temp_2 - loc_0;
+    temp_2 = temp_2 + loc_0;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#else
+    loc_0.x = temp_7.x * w.x - temp_7.y * w.y;
+    loc_0.y = temp_7.y * w.x + temp_7.x * w.y;
+#endif
+    temp_7 = temp_3 - loc_0;
+    temp_3 = temp_3 + loc_0;
+    w.x    = __cosf(0.5f * angle);
+    w.y    = __sinf(0.5f * angle);
+#ifdef PACK_FP32
+    loc_0 = temp_2 * w.x + float2(-temp_2.y, temp_2.x) * w.y;
+#else
+    loc_0.x = temp_2.x * w.x - temp_2.y * w.y;
+    loc_0.y = temp_2.y * w.x + temp_2.x * w.y;
+#endif
+    temp_2 = temp_0 - loc_0;
+    temp_0 = temp_0 + loc_0;
+#ifdef PACK_FP32
+    loc_0 = temp_3 * w.x + float2(-temp_3.y, temp_3.x) * w.y;
+#else
+    loc_0.x = temp_3.x * w.x - temp_3.y * w.y;
+    loc_0.y = temp_3.y * w.x + temp_3.x * w.y;
+#endif
+    temp_3 = temp_1 - loc_0;
+    temp_1 = temp_1 + loc_0;
+    iw.x   = w.y;
+    iw.y   = -w.x;
+#ifdef PACK_FP32
+    loc_0 = temp_6 * iw.x + float2(-temp_6.y, temp_6.x) * iw.y;
+#else
+    loc_0.x = temp_6.x * iw.x - temp_6.y * iw.y;
+    loc_0.y = temp_6.y * iw.x + temp_6.x * iw.y;
+#endif
+    temp_6 = temp_4 - loc_0;
+    temp_4 = temp_4 + loc_0;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * iw.x + float2(-temp_7.y, temp_7.x) * iw.y;
+#else
+    loc_0.x = temp_7.x * iw.x - temp_7.y * iw.y;
+    loc_0.y = temp_7.y * iw.x + temp_7.x * iw.y;
+#endif
+    temp_7 = temp_5 - loc_0;
+    temp_5 = temp_5 + loc_0;
+    w.x    = __cosf(0.25f * angle);
+    w.y    = __sinf(0.25f * angle);
+#ifdef PACK_FP32
+    loc_0 = temp_1 * w.x + float2(-temp_1.y, temp_1.x) * w.y;
+#else
+    loc_0.x = temp_1.x * w.x - temp_1.y * w.y;
+    loc_0.y = temp_1.y * w.x + temp_1.x * w.y;
+#endif
+    temp_1 = temp_0 - loc_0;
+    temp_0 = temp_0 + loc_0;
+    iw.x   = w.y;
+    iw.y   = -w.x;
+#ifdef PACK_FP32
+    loc_0 = temp_3 * iw.x + float2(-temp_3.y, temp_3.x) * iw.y;
+#else
+    loc_0.x = temp_3.x * w.x - temp_3.y * w.y;
+    loc_0.y = temp_3.y * w.x + temp_3.x * w.y;
+#endif
+    temp_3 = temp_2 - loc_0;
+    temp_2 = temp_2 + loc_0;
+    iw.x   = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+    iw.y   = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+#ifdef PACK_FP32
+    loc_0 = temp_5 * iw.x + float2(-temp_5.y, temp_5.x) * iw.y;
+#else
+    loc_0.x = temp_5.x * iw.x - temp_5.y * iw.y;
+    loc_0.y = temp_5.y * iw.x + temp_5.x * iw.y;
+#endif
     temp_5 = temp_4 - loc_0;
     temp_4 = temp_4 + loc_0;
     w.x    = iw.y;
     w.y    = -iw.x;
-    loc_0  = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#ifdef PACK_FP32
+    loc_0 = temp_7 * w.x + float2(-temp_7.y, temp_7.x) * w.y;
+#else
+    loc_0.x = temp_7.x * w.x - temp_7.y * w.y;
+    loc_0.y = temp_7.y * w.x + temp_7.x * w.y;
+#endif
     temp_7 = temp_6 - loc_0;
     temp_6 = temp_6 + loc_0;
     loc_0  = temp_1;
@@ -340,6 +460,7 @@ extern "C" __launch_bounds__(128) __global__ void VkFFT_main(const float2* input
     loc_0  = temp_3;
     temp_3 = temp_6;
     temp_6 = loc_0;
+
     __syncthreads();
 
     sharedStride      = 17;
@@ -824,6 +945,8 @@ __device__ void lds_from_reg_output_length64_device(scalar_type* R,
     lds_complex[l_offset] = R[7];
 }
 
+#define OFFLINE_TWD
+
 template <typename scalar_type,
           const bool lds_is_real,
           StrideBin  sb,
@@ -863,55 +986,115 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
         stageInvocationID = (threadIdx_y + 0) % (1);
         angle             = stageInvocationID * -3.14159265358979312e+00f;
 
-        w.x   = __cosf(angle);
-        w.y   = __sinf(angle);
+        w.x = __cosf(angle);
+        w.y = __sinf(angle);
+#ifdef PACK_FP32
         loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
-        R[4]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
+#else
+        loc_0.x     = R[4].x * w.x - R[4].y * w.y;
+        loc_0.y     = R[4].y * w.x + R[4].x * w.y;
+#endif
+        R[4] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
-        R[5]  = R[1] - loc_0;
-        R[1]  = R[1] + loc_0;
+#else
+        loc_0.x     = R[5].x * w.x - R[5].y * w.y;
+        loc_0.y     = R[5].y * w.x + R[5].x * w.y;
+#endif
+        R[5] = R[1] - loc_0;
+        R[1] = R[1] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
-        R[6]  = R[2] - loc_0;
-        R[2]  = R[2] + loc_0;
+#else
+        loc_0.x     = R[6].x * w.x - R[6].y * w.y;
+        loc_0.y     = R[6].y * w.x + R[6].x * w.y;
+#endif
+        R[6] = R[2] - loc_0;
+        R[2] = R[2] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-        R[7]  = R[3] - loc_0;
-        R[3]  = R[3] + loc_0;
-        w.x   = __cosf(0.5f * angle);
-        w.y   = __sinf(0.5f * angle);
+#else
+        loc_0.x     = R[7].x * w.x - R[7].y * w.y;
+        loc_0.y     = R[7].y * w.x + R[7].x * w.y;
+#endif
+        R[7] = R[3] - loc_0;
+        R[3] = R[3] + loc_0;
+        w.x  = __cosf(0.5f * angle);
+        w.y  = __sinf(0.5f * angle);
+#ifdef PACK_FP32
         loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
-        R[2]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
+#else
+        loc_0.x     = R[2].x * w.x - R[2].y * w.y;
+        loc_0.y     = R[2].y * w.x + R[2].x * w.y;
+#endif
+        R[2] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
-        R[3]  = R[1] - loc_0;
-        R[1]  = R[1] + loc_0;
-        iw.x  = w.y;
-        iw.y  = -w.x;
+#else
+        loc_0.x     = R[3].x * w.x - R[3].y * w.y;
+        loc_0.y     = R[3].y * w.x + R[3].x * w.y;
+#endif
+        R[3] = R[1] - loc_0;
+        R[1] = R[1] + loc_0;
+        iw.x = w.y;
+        iw.y = -w.x;
+#ifdef PACK_FP32
         loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
-        R[6]  = R[4] - loc_0;
-        R[4]  = R[4] + loc_0;
+#else
+        loc_0.x     = R[6].x * iw.x - R[6].y * iw.y;
+        loc_0.y     = R[6].y * iw.x + R[6].x * iw.y;
+#endif
+        R[6] = R[4] - loc_0;
+        R[4] = R[4] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
-        R[7]  = R[5] - loc_0;
-        R[5]  = R[5] + loc_0;
-        w.x   = __cosf(0.25f * angle);
-        w.y   = __sinf(0.25f * angle);
+#else
+        loc_0.x     = R[7].x * iw.x - R[7].y * iw.y;
+        loc_0.y     = R[7].y * iw.x + R[7].x * iw.y;
+#endif
+        R[7] = R[5] - loc_0;
+        R[5] = R[5] + loc_0;
+        w.x  = __cosf(0.25f * angle);
+        w.y  = __sinf(0.25f * angle);
+#ifdef PACK_FP32
         loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
-        R[1]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
-        iw.x  = w.y;
-        iw.y  = -w.x;
+#else
+        loc_0.x     = R[1].x * w.x - R[1].y * w.y;
+        loc_0.y     = R[1].y * w.x + R[1].x * w.y;
+#endif
+        R[1] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+        iw.x = w.y;
+        iw.y = -w.x;
+#ifdef PACK_FP32
         loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
-        R[3]  = R[2] - loc_0;
-        R[2]  = R[2] + loc_0;
-        iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
-        iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+#else
+        loc_0.x     = R[3].x * iw.x - R[3].y * iw.y;
+        loc_0.y     = R[3].y * iw.x + R[3].x * iw.y;
+#endif
+        R[3] = R[2] - loc_0;
+        R[2] = R[2] + loc_0;
+        iw.x = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+        iw.y = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
 
+#ifdef PACK_FP32
         loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
-        R[5]  = R[4] - loc_0;
-        R[4]  = R[4] + loc_0;
-        w.x   = iw.y;
-        w.y   = -iw.x;
+#else
+        loc_0.x     = R[5].x * iw.x - R[5].y * iw.y;
+        loc_0.y     = R[5].y * iw.x + R[5].x * iw.y;
+#endif
+        R[5] = R[4] - loc_0;
+        R[4] = R[4] + loc_0;
+        w.x  = iw.y;
+        w.y  = -iw.x;
+#ifdef PACK_FP32
         loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+#else
+        loc_0.x     = R[7].x * w.x - R[7].y * w.y;
+        loc_0.y     = R[7].y * w.x + R[7].x * w.y;
+#endif
         R[7]  = R[6] - loc_0;
         R[6]  = R[6] + loc_0;
         loc_0 = R[1];
@@ -976,55 +1159,115 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
         R[6] = lds_complex[sharedStride * (threadIdx_y + 48) + threadIdx_x];
         R[7] = lds_complex[sharedStride * (threadIdx_y + 56) + threadIdx_x];
 
-        w.x   = __cosf(angle);
-        w.y   = __sinf(angle);
+        w.x = __cosf(angle);
+        w.y = __sinf(angle);
+#ifdef PACK_FP32
         loc_0 = R[4] * w.x + scalar_type(-R[4].y, R[4].x) * w.y;
-        R[4]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
+#else
+        loc_0.x     = R[4].x * w.x - R[4].y * w.y;
+        loc_0.y     = R[4].y * w.x + R[4].x * w.y;
+#endif
+        R[4] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[5] * w.x + scalar_type(-R[5].y, R[5].x) * w.y;
-        R[5]  = R[1] - loc_0;
-        R[1]  = R[1] + loc_0;
+#else
+        loc_0.x     = R[5].x * w.x - R[5].y * w.y;
+        loc_0.y     = R[5].y * w.x + R[5].x * w.y;
+#endif
+        R[5] = R[1] - loc_0;
+        R[1] = R[1] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[6] * w.x + scalar_type(-R[6].y, R[6].x) * w.y;
-        R[6]  = R[2] - loc_0;
-        R[2]  = R[2] + loc_0;
+#else
+        loc_0.x     = R[6].x * w.x - R[6].y * w.y;
+        loc_0.y     = R[6].y * w.x + R[6].x * w.y;
+#endif
+        R[6] = R[2] - loc_0;
+        R[2] = R[2] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
-        R[7]  = R[3] - loc_0;
-        R[3]  = R[3] + loc_0;
-        w.x   = __cosf(0.5f * angle);
-        w.y   = __sinf(0.5f * angle);
+#else
+        loc_0.x     = R[7].x * w.x - R[7].y * w.y;
+        loc_0.y     = R[7].y * w.x + R[7].x * w.y;
+#endif
+        R[7] = R[3] - loc_0;
+        R[3] = R[3] + loc_0;
+        w.x  = __cosf(0.5f * angle);
+        w.y  = __sinf(0.5f * angle);
+#ifdef PACK_FP32
         loc_0 = R[2] * w.x + scalar_type(-R[2].y, R[2].x) * w.y;
-        R[2]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
+#else
+        loc_0.x     = R[2].x * w.x - R[2].y * w.y;
+        loc_0.y     = R[2].y * w.x + R[2].x * w.y;
+#endif
+        R[2] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[3] * w.x + scalar_type(-R[3].y, R[3].x) * w.y;
-        R[3]  = R[1] - loc_0;
-        R[1]  = R[1] + loc_0;
-        iw.x  = w.y;
-        iw.y  = -w.x;
+#else
+        loc_0.x     = R[3].x * w.x - R[3].y * w.y;
+        loc_0.y     = R[3].y * w.x + R[3].x * w.y;
+#endif
+        R[3] = R[1] - loc_0;
+        R[1] = R[1] + loc_0;
+        iw.x = w.y;
+        iw.y = -w.x;
+#ifdef PACK_FP32
         loc_0 = R[6] * iw.x + scalar_type(-R[6].y, R[6].x) * iw.y;
-        R[6]  = R[4] - loc_0;
-        R[4]  = R[4] + loc_0;
+#else
+        loc_0.x     = R[6].x * iw.x - R[6].y * iw.y;
+        loc_0.y     = R[6].y * iw.x + R[6].x * iw.y;
+#endif
+        R[6] = R[4] - loc_0;
+        R[4] = R[4] + loc_0;
+#ifdef PACK_FP32
         loc_0 = R[7] * iw.x + scalar_type(-R[7].y, R[7].x) * iw.y;
-        R[7]  = R[5] - loc_0;
-        R[5]  = R[5] + loc_0;
-        w.x   = __cosf(0.25f * angle);
-        w.y   = __sinf(0.25f * angle);
+#else
+        loc_0.x     = R[7].x * iw.x - R[7].y * iw.y;
+        loc_0.y     = R[7].y * iw.x + R[7].x * iw.y;
+#endif
+        R[7] = R[5] - loc_0;
+        R[5] = R[5] + loc_0;
+        w.x  = __cosf(0.25f * angle);
+        w.y  = __sinf(0.25f * angle);
+#ifdef PACK_FP32
         loc_0 = R[1] * w.x + scalar_type(-R[1].y, R[1].x) * w.y;
-        R[1]  = R[0] - loc_0;
-        R[0]  = R[0] + loc_0;
-        iw.x  = w.y;
-        iw.y  = -w.x;
+#else
+        loc_0.x     = R[1].x * w.x - R[1].y * w.y;
+        loc_0.y     = R[1].y * w.x + R[1].x * w.y;
+#endif
+        R[1] = R[0] - loc_0;
+        R[0] = R[0] + loc_0;
+        iw.x = w.y;
+        iw.y = -w.x;
+#ifdef PACK_FP32
         loc_0 = R[3] * iw.x + scalar_type(-R[3].y, R[3].x) * iw.y;
-        R[3]  = R[2] - loc_0;
-        R[2]  = R[2] + loc_0;
-        iw.x  = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
-        iw.y  = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
+#else
+        loc_0.x     = R[3].x * iw.x - R[3].y * iw.y;
+        loc_0.y     = R[3].y * iw.x + R[3].x * iw.y;
+#endif
+        R[3] = R[2] - loc_0;
+        R[2] = R[2] + loc_0;
+        iw.x = w.x * loc_SQRT1_2 + w.y * loc_SQRT1_2;
+        iw.y = w.y * loc_SQRT1_2 - w.x * loc_SQRT1_2;
 
+#ifdef PACK_FP32
         loc_0 = R[5] * iw.x + scalar_type(-R[5].y, R[5].x) * iw.y;
-        R[5]  = R[4] - loc_0;
-        R[4]  = R[4] + loc_0;
-        w.x   = iw.y;
-        w.y   = -iw.x;
+#else
+        loc_0.x     = R[5].x * iw.x - R[5].y * iw.y;
+        loc_0.y     = R[5].y * iw.x + R[5].x * iw.y;
+#endif
+        R[5] = R[4] - loc_0;
+        R[4] = R[4] + loc_0;
+        w.x  = iw.y;
+        w.y  = -iw.x;
+#ifdef PACK_FP32
         loc_0 = R[7] * w.x + scalar_type(-R[7].y, R[7].x) * w.y;
+#else
+        loc_0.x     = R[7].x * w.x - R[7].y * w.y;
+        loc_0.y     = R[7].y * w.x + R[7].x * w.y;
+#endif
         R[7]  = R[6] - loc_0;
         R[6]  = R[6] + loc_0;
         loc_0 = R[1];
@@ -1237,25 +1480,72 @@ __device__ void forward_length64_SBRR_device(scalar_type* R,
             R[7]     = lds_complex[l_offset];
         }
 
-        W    = twiddles[0 + 7 * ((thread + 0 + 0) % 8)];
+#ifdef OFFLINE_TWD
+        W = twiddles[0 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        float theta = -6.283185307179586476925286766559 * thread / 64;
+        W.x         = __cosf(1 * theta);
+        W.y         = __sinf(1 * theta);
+#endif
+        // if(blockIdx.x == 0)
+        //     printf("threadIdx.x %d, thread %d, twd_idx %d\n",
+        //            (int)threadIdx.x,
+        //            (int)thread,
+        //            (int)(0 + 7 * ((thread + 0 + 0) % 8)));
         t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
         R[1] = t;
-        W    = twiddles[1 + 7 * ((thread + 0 + 0) % 8)];
+#ifdef OFFLINE_TWD
+        W = twiddles[1 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(2 * theta);
+        W.y         = __sinf(2 * theta);
+#endif
         t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
         R[2] = t;
-        W    = twiddles[2 + 7 * ((thread + 0 + 0) % 8)];
+
+#ifdef OFFLINE_TWD
+        W = twiddles[2 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(3 * theta);
+        W.y         = __sinf(3 * theta);
+#endif
         t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
         R[3] = t;
-        W    = twiddles[3 + 7 * ((thread + 0 + 0) % 8)];
+
+#ifdef OFFLINE_TWD
+        W = twiddles[3 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(4 * theta);
+        W.y         = __sinf(4 * theta);
+#endif
         t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
         R[4] = t;
-        W    = twiddles[4 + 7 * ((thread + 0 + 0) % 8)];
+
+#ifdef OFFLINE_TWD
+        W = twiddles[4 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(5 * theta);
+        W.y         = __sinf(5 * theta);
+#endif
         t    = {R[5].x * W.x - R[5].y * W.y, R[5].y * W.x + R[5].x * W.y};
         R[5] = t;
-        W    = twiddles[5 + 7 * ((thread + 0 + 0) % 8)];
+
+#ifdef OFFLINE_TWD
+        W = twiddles[5 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(6 * theta);
+        W.y         = __sinf(6 * theta);
+#endif
         t    = {R[6].x * W.x - R[6].y * W.y, R[6].y * W.x + R[6].x * W.y};
         R[6] = t;
-        W    = twiddles[6 + 7 * ((thread + 0 + 0) % 8)];
+
+#ifdef OFFLINE_TWD
+        W = twiddles[6 + 7 * ((thread + 0 + 0) % 8)];
+#else
+        W.x         = __cosf(7 * theta);
+        W.y         = __sinf(7 * theta);
+#endif
+
         t    = {R[7].x * W.x - R[7].y * W.y, R[7].y * W.x + R[7].x * W.y};
         R[7] = t;
         FwdRad8B1(&R[0], &R[1], &R[2], &R[3], &R[4], &R[5], &R[6], &R[7]);
@@ -2281,9 +2571,6 @@ bool check_accuracy(const size_t         N,
 template <typename scalar_type>
 int fft_64_1024(int trial, int option_id)
 {
-    double max_linf_eps_single = 0.0;
-    double max_l2_eps_single   = 0.0;
-
     device_reset();
 
     int       N      = 64;

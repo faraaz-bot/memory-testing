@@ -5,6 +5,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <assert.h>
 #include <mutex>
 #include <numeric>
 #include <vector>
@@ -696,6 +697,8 @@ std::vector<T> GenerateTwiddleTable(const std::vector<size_t>& radices, size_t N
 
                 wc[nt].x = c;
                 wc[nt].y = s;
+                //std::cout << "nt " << nt << ", k " << k << ", j " << j << ", L " << L << ", theta "
+                //          << theta << std::endl;
                 nt++;
             }
         }
