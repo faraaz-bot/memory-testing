@@ -1,0 +1,149 @@
+\documentclass[twocolumn,10pt,notitlepage]{article}
+\usepackage{bm}
+\usepackage{breqn}
+\usepackage{diagbox}
+\usepackage{float}
+\usepackage{xcolor}
+
+
+\title{A Fast and Space-Efficient Algorithm for Validating Pointer Array Formats}
+\date{2022-07-27}
+\author{Malcolm Roberts, \texttt{malcolm.roberts@amd.com}}
+
+\begin{document}
+
+\maketitle
+
+\section{Abstract}
+Pointer arithmetic lies at the heart of high-performance numerical
+algorithms on CPUs and GPUs.  A $d$-dimensional array is specified by
+providing a length $\bm{\ell}=\left(\ell_0, \dots, \ell_{d-1}\right)$,
+and strides $\bm{s}=\left(s_0, \dots, s_{d-1}\right)$. Data at
+multi-index $\bm{a}=\left(a_0,\dots,a_{d-1} \right)$, with
+$0\leq{}a_i<\ell_i$, is stored at pointer offset $\bm{a}\cdot\bm{s}$.
+A data format is considered invalid if two different indices point to
+the same memory location.  That is, we require that the map from
+multi-index to memory address be injective.  This can be verified
+using a hash table, but the complexity is
+$\mathcal{O}\left(\ell^d\right)$ in time and space, which can be
+prohibitively expensive.  In this paper, we present an algorithm which
+reduces the time complexity to $\mathcal{O}\left(\ell^{d-1}\right)$
+and the space complexity to $\mathcal{O}\left(\ell^{d-2}\right)$.  We
+demonstrate how this can be used in ROCm math libraries to produce
+tests parameters and validate user input data.
+
+
+\section{Introduction}
+
+Data management is at the heart of high-performance computing.  On the
+GPU, kernels access data via pointers passed as arguments.  The
+pointer refers to an the address of a buffer in some flat memory
+space; structure is aded to this data by passing additional
+parameters.  From the programmer's perspective, all data buffers are
+one-dimensional.  In the case of single- or multi-dimensional arrays,
+the data pointer is accompanied by length and stride information.
+
+\subsection{Scalar and 1D}
+Let $\texttt{p}$ be a pointer to the address of a data buffer in
+memory. If we wish to interpret the data in this buffer as a
+one-dimensional array, we associate a integer length $\ell$ and an
+integer stride $s$ to the pointer $\texttt{p}$.
+
+If $\ell=0$, the data is scalar, and we can access the data at
+$\texttt{p[0]}$ without any restrictions on the stride $s$.  
+
+If $\ell>0$ then we wish to access the data at index $a$ with
+$a\in\left[0,\dots,\ell-1\right)$.  The data corresponding to index
+  $a$ is stored in memory at $\texttt{p[}a \times{} s\texttt{]}$.  The
+  data format for a one-dimensional array is given by pair
+  $\left(\ell, s\right)$, and we consider this data format to be valid
+  if and only if the map
+\begin{dmath}
+  \label{onedmap}
+  a \rightarrow a \times s
+\end{dmath}
+is injective for $a\in\left[0,\dots,\ell-1\right)$.  That is, each
+  unique index $a$ must refer to a distinct memory address.  If this
+  map is not injective, then two different indices will address the
+  same memory location, resulting in data loss.
+  
+The one-dimensional is quite simple: we are guaranteed that the map in
+equation~\eqref{onedmap} is injective if and only if $s$ is non-zero.
+However, this becomes more complicated in multiple dimensions.
+
+
+\subsection{Higher dimensions}
+For $d$-dimensional arrays, the length and stride are given by
+length-$d$ vectors, $\bm{\ell}=\left(\ell_0, \dots, \ell_{d-1}\right)$
+and $\bm{s}=\left(s_0, \dots, s_{d-1}\right)$.  We take all of these
+values to be strictly positive; lengths are always non-negative, and
+if any $\ell_i=0$ then we can kick out that index and consider the
+$(d-1)$-dimensional case.  Moreover, we insist that $s_i>0$; while
+negative strides can be useful, we will treat them separately.  The
+multi-index $\bm{a}=\left(a_0,\dots,a_{d-1}\right)$, with
+$0\leq{}a_i<\ell_i$, references data at
+$\texttt{p[}\bm{a}\cdot{}\bm{s}\texttt{]}$.
+
+Consider a 2D array with strides $\bm{s}=(3,5)$.  For length
+$\bm{\ell}=\left(5,4\right)$, the address offsets are given in
+Table~\ref{tab:2dok}, and it can be easily seen that all memory
+addresses are unique.  Increasing the length to
+$\bm{\ell}=\left(6,4\right)$, we have a memory address collision, as
+shown in Table~\ref{tab:2dbad}.  In particular,
+$(5,0)\rightarrow{}5\times{}3 + 0 \times{}5=15$ and
+$(0,3)\rightarrow{}0\times{}3 + 3 \times{}5=15$ coincide. At first
+glance, it's not immediately obvious that $\left((5,4),(3,5)\right)$
+would lead to a valid array format, and that
+$\left((6,4),(3,5)\right)$ would not.  Tellingly, the collision occurs
+at the edge of the table, which we will demonstrate to be the case in
+general.
+
+\begin{table}
+  \centering
+  \begin{tabular}{|l|l|l|l|l|l|l|}
+    \hline
+    \backslashbox{$a_1$}{$a_0$}& 0  & 1  & 2  & 3  & 4 \\
+    \hline 0 & 0  & 3  & 6  & 9  & 12 \\
+    \hline 1 & 5  & 8  & 11 & 14 & 17 \\
+    \hline 2 & 10 & 13 & 16 & 19 & 22 \\
+    \hline 3 & 15 & 18 & 21 & 24 & 27 \\
+    \hline 
+  \end{tabular}
+  \caption{\label{tab:2dok}2D array with
+    $(\bm{\ell},\bm{s})=\left((5,4),(3,5)\right)$.}
+\end{table}
+\begin{table}
+  \centering
+  \begin{tabular}{|l|l|l|l|l|l|l|l|}
+    \hline
+    \backslashbox{$a_1$}{$a_0$}& 0  & 1  & 2  & 3  & 4 & 5\\
+    \hline 0 & 0  & 3  & 6  & 9  & 12 & {\color{red}15} \\
+    \hline 1 & 5  & 8  & 11 & 14 & 17 & 20 \\
+    \hline 2 & 10 & 13 & 16 & 19 & 22 & 25 \\
+    \hline 3 & {\color{red}15} & 18 & 21 & 24 & 27 & 30 \\
+    \hline 
+  \end{tabular}
+  \caption{\label{tab:2dbad}2D array with
+    $(\bm{\ell},\bm{s})=\left((6,4),(3,5)\right)$.}
+\end{table}
+
+\section{Validation algorithms}
+
+Given a pair $(\bm{\ell},\bm{s})$, the direct computation of all
+allowble indices has involves computing $N\doteq{}\prod_i \ell_i$ dot
+producs, which requires $\mathcal{O}(dN)$ multiplications.  The
+required storage is of size $N$.  A direct search for duplicates
+requires $\mathcal{O}(N^2)$ operations; this can be improved to
+$\mathcal{O}(N)$ by using a hash table.  The cost of computing and
+storing all of the memory offsets is prohibitive: $N$ may be of the
+order of a few billion, and the validation of the data format may be
+as expensive as the the actual operation to be performed on the data!
+
+Approaching the validation problem from a number-theoretic perspective
+allows us to avoid most of this cost.
+
+\subsection{2D coprime case}
+
+
+
+\end{document}
