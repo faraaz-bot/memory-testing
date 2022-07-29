@@ -38,13 +38,21 @@ tests parameters and validate user input data.
 
 \section{Introduction}
 
-Data management is at the heart of high-performance computing.  On the
-GPU, kernels access data via pointers passed as arguments.  The
+Kernels access data via pointers passed as arguments on the GPU.  The
 pointer refers to an the address of a buffer in some flat memory
 space; structure is added to this data by passing additional
 parameters.  From the programmer's perspective, all data buffers are
 one-dimensional.  In the case of single- or multi-dimensional arrays,
-the data pointer is accompanied by length and stride information.
+the data pointer is accompanied by length and stride information.  Not
+all paramter choices lead to valid data structures; different indices
+may refer to the same space in memory.  This is a problem for
+application developers, library developers, and test infrastructure.
+In this article, we present a number-theoretic algorithm for determing
+the validity of multi-dimensional arrays.  As far as we are able to
+determine, the results in this article are new\footnote{Though it's
+  always possible that Ramanujan did it already!}.
+
+
 
 \subsection{Scalar and 1D}
 Let $\texttt{p}$ be a pointer to the address of a data buffer in
@@ -70,9 +78,10 @@ is injective for $a\in\left[0,\dots,\ell-1\right)$.  That is, each
   map is not injective, then two different indices will address the
   same memory location, resulting in data loss.
   
-The one-dimensional is quite simple: we are guaranteed that the map in
-equation~\eqref{onedmap} is injective if and only if $s$ is non-zero.
-However, this becomes more complicated in multiple dimensions.
+The one-dimensional case is quite simple: we are guaranteed that the
+map in equation~\eqref{onedmap} is injective if and only if $s$ is
+non-zero.  However, this becomes more complicated in multiple
+dimensions.
 
 
 \subsection{Higher dimensions}
@@ -112,7 +121,7 @@ general.
     \hline 3 & 15 & 18 & 21 & 24 & 27 \\
     \hline 
   \end{tabular}
-  \caption{\label{tab:2dok}2D array with
+  \caption{\label{tab:2dok}Memory offsets for a 2D array with
     $(\bm{\ell},\bm{s})=\left((5,4),(3,5)\right)$.}
 \end{table}
 \begin{table}
@@ -126,7 +135,7 @@ general.
     \hline 3 & {\color{red}15} & 18 & 21 & 24 & 27 & 30 \\
     \hline 
   \end{tabular}
-  \caption{\label{tab:2dbad}2D array with
+  \caption{\label{tab:2dbad}Memory offsets for a 2D array with
     $(\bm{\ell},\bm{s})=\left((6,4),(3,5)\right)$.}
 \end{table}
 
@@ -234,6 +243,14 @@ remaining $(d-2)$, and so on, including all permutations, which
 results in $\mathcal{O}(d^3)$ cases.  The maximum storage will be in
 the one-versus-many case, for $\mathcal{O}(\ell^{d-1})$ values.  The
 computational complexity is $\mathcal{O}(d^4 \ell^{d-1})$.
+
+In the case where the stride is negative, this is equivalent to the
+data being addressed in reverse order.  While the order of access is
+important for performance and algorithmic reasons, this isn't a
+concern for determining format validity: the memory locations still
+need to be unique.  In order to deal with this case, we can simply
+take the index to be positive and change the memory address
+$\texttt{p}$ to be the lowest addressed memory location.
 
 \section{Conclusion}
 
