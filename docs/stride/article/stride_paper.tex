@@ -244,6 +244,11 @@ results in $\mathcal{O}(d^3)$ cases.  The maximum storage will be in
 the one-versus-many case, for $\mathcal{O}(\ell^{d-1})$ values.  The
 computational complexity is $\mathcal{O}(d^4 \ell^{d-1})$.
 
+This algorithm has been verified for 1, 2, and 3 dimensions on the
+\texttt{rocFFT} accuracy test suite.  This covers several thousand
+different cases.  The time required for validating the data format
+was not noticable compared to the test suite time.
+
 In the case where the stride is negative, this is equivalent to the
 data being addressed in reverse order.  While the order of access is
 important for performance and algorithmic reasons, this isn't a
@@ -262,6 +267,10 @@ generate valid data structures for test infrastructure.  We hope to
 use this in \texttt{rocFFT} to randomly sample the very large
 parameter space for both performance and accuracy tests.
 
+As future work, we suspect that the algorithm for the
+higher-dimensional cases may be improved.  We are also hoping to put
+the tests in the main $\texttt{rocFFT}$ branch, and use it to validate
+randomly-selected parameters for data formats for FFT tests.
 
 \end{document}
 
