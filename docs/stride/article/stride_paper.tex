@@ -1,10 +1,13 @@
-\documentclass[twocolumn,10pt,notitlepage]{article}
+\documentclass[twocolumn,12pt,notitlepage]{article}
 \usepackage{bm}
 \usepackage{breqn}
 \usepackage{diagbox}
 \usepackage{float}
 \usepackage{xcolor}
-
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\newtheorem{theorem}{Theorem}[section]
+\DeclareMathOperator{\lcm}{lcm}
 
 \title{A Fast and Space-Efficient Algorithm for Validating Pointer Array Formats}
 \date{2022-07-27}
@@ -28,7 +31,7 @@ using a hash table, but the complexity is
 $\mathcal{O}\left(\ell^d\right)$ in time and space, which can be
 prohibitively expensive.  In this paper, we present an algorithm which
 reduces the time complexity to $\mathcal{O}\left(\ell^{d-1}\right)$
-and the space complexity to $\mathcal{O}\left(\ell^{d-2}\right)$.  We
+and the space complexity to $\mathcal{O}\left(\ell^{d-1}\right)$.  We
 demonstrate how this can be used in ROCm math libraries to produce
 tests parameters and validate user input data.
 
@@ -142,30 +145,105 @@ as expensive as the the actual operation to be performed on the data!
 Approaching the validation problem from a number-theoretic perspective
 allows us to avoid most of this cost.
 
-\subsection{2D coprime case}
+\subsection{2D case}
 
-FIXME: TODO
+\begin{theorem}{}
+\label{2dcoprime}
+  Given positive integers $(s_0,s_1)$ with $\gcd(s_0,s_1)=1$, the
+  linear diophantine equation
+  \begin{dmath}
+    \label{2dioph}
+    s_0  a_0 + s_1 a_1 = c
+  \end{dmath}
+  with $a_0\geq{}0$ and $a_1\geq{}0$ has unique solutions if and only
+  if $c < s_0s_1$.
+\end{theorem}
+\begin{proof}
+  Suppose a solution to equation~\eqref{2dioph} exists with
+  $c<s_0s_1$.  Then,  $\forall t\in\mathbb{Z}$, we have
+  \begin{dmath}
+    \label{2ddiopht}
+    s_0  (a_0 -t s_1) + s_1 (a_1 + t s_0) = c.
+  \end{dmath}
+  Any new solution $\left((a_0-t s_1),(a_1 + t s_0)\right)$ is
+  required to be positive.  But, if $t\neq{}0$, then either $(a_0 -t
+  s_1)<0$ or $(a_1 + t s_0)<0$.  Therefore the solution is unique.
+  
+  Moreover, if $c=s_0s_1$, then $(0, s_0)$ and $(s_1, 0)$ both satisfy
+  equation~\eqref{2dioph}, which completes the proof.
+\end{proof}
 
-\subsection{2D general case}
+\begin{theorem}{}
+\label{2dgeneral}
+Given positive integers $(s_0,s_1)$, the linear diophantine
+equation~\eqref{2dioph} with $a_0\geq{}0$ and $a_1\geq{}0$ has unique
+solutions if and only if $c < \lcm(s_0,s_1)$.
+\end{theorem}
+\begin{proof}
+  Theorem~\ref{2dcoprime} can be extended to the non-coprime case by
+  using Bézout's identity, which states that $c$ in
+  equation~\eqref{2dioph} is always a multiple of
+  $d\doteq{}\gcd(s_0,s_1)$.  This implies that we can just divide
+  $s_0$, $s_1$, and $c$ by $d$, thus reducing the general case to the
+  coprime case.  Thus, we reqiure that
+  \begin{dmath}
+    \frac{c}{d} < \frac{s_0}{d} \frac{s_1}{d},
+  \end{dmath}
+  which is to say that $c < \lcm(s_0,s_1)$.
+\end{proof}
+  
+Using theorem~\ref{2dgeneral} we can trivially check that a the 2D
+array format $(\bm{\ell},\bm{s})=((\ell_0,\ell_1),(s_0,s_1)) $is valid
+by determining if $\ell_0 < \lcm(s_0,s_1)$ and $\ell_1 <
+\lcm(s_0,s_1)$ are both true.  This has $\mathcal{O}(1)$ complexity in
+both space and time.
 
-FIXME: TODO
 
 \subsection{General-dimensional case}
 
-FIXME: TODO
+Higher dimensional arrays are also of importance; 3D is a more general
+use case, and plasma simulations using the Vlasov equation may require
+6D data structures.  The 2D case gives us an idea of how to deal with
+the higher-dimensional case.  Extending equation~\eqref{2ddiopht} to
+$d$ dimensions with solutions parametrized in $\mathbb{Z}^{d-1}$
+doesn't allow us to use the positivity constraints in the same
+fashion.  However, we can instead interpret the multi-index $\bm{a}$
+as having two multi-indices, which allows us to apply the 2D algorithm.
 
-Idea here is that we can reduce this to the 2D case.  For example, in
-3D, the first dimension is paired off with the last two dimensions,
-(and then the other combinations).
+For example, in 3D, we can consider whether we have any collisions
+from $a_0s_0$ with $a_1s_1 + a_2s_2$.  By using Bézout's indentity, we
+know that $a_1s_1 + a_2s_2$ will always be a multiple of
+$\gcd(s_1,s_2)$, which allows us to use a similar technique as in
+Theorem~\ref{2dgeneral} to reduce the problem to reduce the problem to
+the co-prime case.  Thus, we can look at the 2D problem $((\ell_0,
+\gcd(s1,s2)\ell_1\ell_2),(s_0,\lcm(s_1,s_2))$, which is necessary for
+a collision to occur in 3D. However, the map from
+$((\ell_1,\ell_2)\times{}(s_1,s_2)$ to memory space may not be dense,
+so it is necessary to verify that the addresses in
+$((\ell_0)\times{}(s_0)$ and $((\ell_1,\ell_2)\times{}(s_1,s_2)$ are
+unique.  This requires $\mathcal{O}(\ell_0 +\ell_1\ell_2)$ of storage
+and $\mathcal{O}(3(\ell_0 +\ell_1\ell_2))$ integer multiplies.
+Moreover, this must be done in each direction.  We can also check that
+the 3 index-$0$ faces are valid 2D data structures, which will allow
+one to detect invalid data formats more quickly in the case where a
+sub-arrays is already invalid.
+
+In the general $d$-dimensional case we have to compare the first
+dimension with the remaining $(d-1)$, the first 2 dimensions with the
+remaining $(d-2)$, and so on, including all permutations, which
+results in $\mathcal{O}(d^3)$ cases.  The maximum storage will be in
+the one-versus-many case, for $\mathcal{O}(\ell^{d-1})$ values.  The
+computational complexity is $\mathcal{O}(d^4 \ell^{d-1})$.
 
 \section{Conclusion}
 
-FIXME
+In this article, we presented the proof for a new algorithm for
+validating pointer-based multi-dimensional array formats.  These
+methods can be used to check correctness in software libraries for
+user input, temporary work buffer formats, and allows developers to
+generate valid data structures for test infrastructure.  We hope to
+use this in \texttt{rocFFT} to randomly sample the very large
+parameter space for both performance and accuracy tests.
 
-Application: check test and intermediary data structures input,
-generate random points in parameter space, validate user input.
-
-TODO: mention that this is a constrained linear diophantine equation,
-and we're looking for the existence of non-unique solutions.
 
 \end{document}
