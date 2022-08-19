@@ -321,6 +321,128 @@ public:
     
 };
 
+
+template<typename Tval, typename Tvlength>
+void Tprint_result(const void* vin, const void* vout, const Tvlength& length)
+{
+    const auto pin = (Tval*)vin;
+    const auto pout = (Tval*)vout;
+
+   
+    std::cout << "input:";
+    for(int i = 0; i < length[0] * length[1]; ++i) {
+        std::cout << " " << pin[i];
+    }
+    std::cout << std::endl;
+
+    std::cout << "output:";
+    for(int i = 0; i < length[0] * length[1]; ++i) {
+        std::cout << " " << pout[i];
+    }
+    std::cout << std::endl;        
+    
+}
+
+void print_result(const void* vin, const void* vout, const fft_params& params)
+{
+    switch(params.precision)
+    {
+    case fft_precision_single:
+    {
+                
+        switch(params.transform_type) {
+        case fft_transform_type_complex_forward:
+        case fft_transform_type_complex_inverse:
+            Tprint_result<std::complex<float>>(vin, vout, params.length);
+            break;
+                    
+        case fft_transform_type_real_forward:
+        case fft_transform_type_real_inverse:
+            Tprint_result<float>(vin, vout, params.length);
+            break;
+        default:
+            throw std::runtime_error("invalid transform type");
+        }
+        break;
+    }
+    case fft_precision_double:
+        switch(params.transform_type) {
+        case fft_transform_type_complex_forward:
+        case fft_transform_type_complex_inverse:
+            Tprint_result<std::complex<double>>(vin, vout, params.length);
+            break;
+                    
+        case fft_transform_type_real_forward:
+        case fft_transform_type_real_inverse:
+            Tprint_result<double>(vin, vout, params.length);
+            break;
+        default:
+            throw std::runtime_error("invalid transform type");
+        }
+        break;
+    default:
+        throw std::runtime_error("invalid precision");                
+    }
+}
+
+template<typename Tval, typename Tvlength>
+void Tcheck_result(const void* vin, const void* vout, const Tvlength& length)
+{
+    const auto pin = (Tval*)vin;
+    const auto pout = (Tval*)vout;
+    
+    for(int ix = 0; ix <  length[0]; ++ix) {
+        for(int iy = 0; iy <  length[1]; ++iy) {
+            if(pin[ix * length[1] + iy] != pout[iy * length[0] + ix]) {
+                std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
+            }
+        }
+    }
+        
+}
+
+void check_result(const void* vin, const void* vout, const fft_params& params)
+{
+    switch(params.precision)
+    {
+    case fft_precision_single:
+    {
+                
+        switch(params.transform_type) {
+        case fft_transform_type_complex_forward:
+        case fft_transform_type_complex_inverse:
+            Tcheck_result<std::complex<float>>(vin, vout, params.length);
+            break;
+                    
+        case fft_transform_type_real_forward:
+        case fft_transform_type_real_inverse:
+            Tcheck_result<float>(vin, vout, params.length);
+            break;
+        default:
+            throw std::runtime_error("invalid transform type");
+        }
+        break;
+    }
+    case fft_precision_double:
+        switch(params.transform_type) {
+        case fft_transform_type_complex_forward:
+        case fft_transform_type_complex_inverse:
+            Tcheck_result<std::complex<double>>(vin, vout, params.length);
+            break;
+                    
+        case fft_transform_type_real_forward:
+        case fft_transform_type_real_inverse:
+            Tcheck_result<double>(vin, vout, params.length);
+            break;
+        default:
+            throw std::runtime_error("invalid transform type");
+        }
+        break;
+    default:
+        throw std::runtime_error("invalid precision");                
+    }
+}
+    
 int main(int argc, char* argv[])
 {
     // This helps with mixing output of both wide and narrow characters to the screen
@@ -594,34 +716,15 @@ int main(int argc, char* argv[])
             params.print_obuffer(vgpu_output);
         }
 
-        auto pin = (std::complex<float>*)gpu_input[0].data();
-        auto pout = (std::complex<float>*)gpu_output.data();
-
-
+        auto vin = (void*)gpu_input[0].data();
+        auto vout = (void*)gpu_output.data();
+            
         if(verbose > 4)
         {
-            std::cout << "input:";
-            for(int i = 0; i < params.length[0] * params.length[1]; ++i) {
-                std::cout << " " << pin[i];
-            }
-            std::cout << std::endl;
-
-            std::cout << "output:";
-            for(int i = 0; i < params.length[0] * params.length[1]; ++i) {
-                std::cout << " " << pout[i];
-            }
-            std::cout << std::endl;        
+            print_result(vin, vout, params);
         }
         
-        for(int ix = 0; ix <  params.length[0]; ++ix) {
-            for(int iy = 0; iy <  params.length[1]; ++iy) {
-                if(pin[ix * params.length[1] + iy] != pout[iy * params.length[0] + ix]) {
-                    std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
-                }
-            }
-        }
-        
-        
+        check_result(vin, vout, params);
     }
 
         
