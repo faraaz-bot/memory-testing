@@ -42,7 +42,9 @@ T1 ceildiv(T1 a, T2 b)
 
 // Tiled transpose through LDS
 template <typename Tval>
-__global__ void transpose(const Tval* __restrict__ idata,
+__global__ void
+__launch_bounds__(1024,1)
+transpose(const Tval* __restrict__ idata,
                           Tval* __restrict__ odata,
                           const int Nx,
                           const int Ny,
@@ -386,22 +388,26 @@ void print_result(const void* vin, const void* vout, const fft_params& params)
 }
 
 template<typename Tval, typename Tvlength>
-void Tcheck_result(const void* vin, const void* vout, const Tvlength& length)
+int Tcheck_result(const void* vin, const void* vout, const Tvlength& length, const int verbose)
 {
     const auto pin = (Tval*)vin;
     const auto pout = (Tval*)vout;
+
+    int nbad = 0;
     
     for(int ix = 0; ix <  length[0]; ++ix) {
         for(int iy = 0; iy <  length[1]; ++iy) {
             if(pin[ix * length[1] + iy] != pout[iy * length[0] + ix]) {
-                std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
+                nbad++;
+                if(verbose)
+                    std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
             }
         }
     }
-        
+    return nbad;
 }
 
-void check_result(const void* vin, const void* vout, const fft_params& params)
+int check_result(const void* vin, const void* vout, const fft_params& params, const int verbose)
 {
     switch(params.precision)
     {
@@ -411,12 +417,12 @@ void check_result(const void* vin, const void* vout, const fft_params& params)
         switch(params.transform_type) {
         case fft_transform_type_complex_forward:
         case fft_transform_type_complex_inverse:
-            Tcheck_result<std::complex<float>>(vin, vout, params.length);
+            return Tcheck_result<std::complex<float>>(vin, vout, params.length, verbose);
             break;
                     
         case fft_transform_type_real_forward:
         case fft_transform_type_real_inverse:
-            Tcheck_result<float>(vin, vout, params.length);
+            return Tcheck_result<float>(vin, vout, params.length, verbose);
             break;
         default:
             throw std::runtime_error("invalid transform type");
@@ -427,12 +433,12 @@ void check_result(const void* vin, const void* vout, const fft_params& params)
         switch(params.transform_type) {
         case fft_transform_type_complex_forward:
         case fft_transform_type_complex_inverse:
-            Tcheck_result<std::complex<double>>(vin, vout, params.length);
+            return Tcheck_result<std::complex<double>>(vin, vout, params.length, verbose);
             break;
                     
         case fft_transform_type_real_forward:
         case fft_transform_type_real_inverse:
-            Tcheck_result<double>(vin, vout, params.length);
+            return Tcheck_result<double>(vin, vout, params.length, verbose);
             break;
         default:
             throw std::runtime_error("invalid transform type");
@@ -441,6 +447,7 @@ void check_result(const void* vin, const void* vout, const fft_params& params)
     default:
         throw std::runtime_error("invalid precision");                
     }
+    return 0;
 }
     
 int main(int argc, char* argv[])
@@ -621,6 +628,12 @@ int main(int argc, char* argv[])
 
     params.validate();
 
+    if(params.placement == fft_placement_inplace)
+    {
+        std::cout << "in-place transpose not implemented; please call with -o\n";
+        exit(1);
+    }
+    
     if(!params.valid(verbose))
     {
         throw std::runtime_error("Invalid parameters, add --verbose=1 for detail");
@@ -701,32 +714,34 @@ int main(int argc, char* argv[])
     if(hipEventSynchronize(stop) != hipSuccess)
         throw std::runtime_error("hipEventSynchronize failed");
 
-    if(verbose > 2) {
-        auto gpu_output = std::vector<char>(var_size<size_t>(params.precision, params.otype) * params.length[0] * params.length[1]);
-        if( hipMemcpy(gpu_output.data(),
-                      pobuffer[0],
-                      gpu_output.size(),
-                      hipMemcpyDeviceToHost) != hipSuccess)
-            throw std::runtime_error("hipMemcpy failed");
+    auto gpu_output = std::vector<char>(var_size<size_t>(params.precision, params.otype) * params.length[0] * params.length[1]);
+    if( hipMemcpy(gpu_output.data(),
+                  pobuffer[0],
+                  gpu_output.size(),
+                  hipMemcpyDeviceToHost) != hipSuccess)
+        throw std::runtime_error("hipMemcpy failed");
         
-        if(verbose > 3)
-        {
-            std::cout << "GPU output:\n";
-            std::vector<std::vector<char>> vgpu_output = {gpu_output};
-            params.print_obuffer(vgpu_output);
-        }
-
-        auto vin = (void*)gpu_input[0].data();
-        auto vout = (void*)gpu_output.data();
-            
-        if(verbose > 4)
-        {
-            print_result(vin, vout, params);
-        }
-        
-        check_result(vin, vout, params);
+    if(verbose > 3)
+    {
+        std::cout << "GPU output:\n";
+        std::vector<std::vector<char>> vgpu_output = {gpu_output};
+        params.print_obuffer(vgpu_output);
     }
 
+    auto vin = (void*)gpu_input[0].data();
+    auto vout = (void*)gpu_output.data();
+            
+    if(verbose > 4)
+    {
+        print_result(vin, vout, params);
+    }
+
+    int nbad = check_result(vin, vout, params, verbose);
+    if(verbose)
+        std::cout << "number of incorrect values: " << nbad << std::endl;
+    if(nbad > 0)
+        std::cerr << "TRANSPOSE FAILED" << std::endl;
+        
         
     // Run the transform several times and record the execution time:1
     std::vector<double> gpu_time(ntrial);
