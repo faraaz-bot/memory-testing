@@ -92,6 +92,8 @@ transpose(const Tval* __restrict__ idata,
 class transpose_params : public fft_params
 {
 public:
+    size_t blockSize = 32;
+    int padding = 1;
     transpose_params(){};
 
     transpose_params(const fft_params& p)
@@ -117,7 +119,7 @@ public:
     
     virtual std::vector<size_t> obuffer_sizes() const override
         {
-            return std::vector<size_t> {var_size<size_t>(precision, otype) * length[0] * length[1]};
+            return std::vector<size_t> {::var_size<size_t>(precision, otype) * length[0] * length[1]};
         }
     size_t vram_footprint() override
         {
@@ -128,36 +130,114 @@ public:
         {
             return fft_status_success;
         }
+
+    dim3 blocks() {
+        return dim3(ceildiv(length[0], blockSize), ceildiv(length[1], blockSize));
+    }
+    
+    dim3 threads() {
+        return dim3(blockSize, blockSize);
+    }
+    
+    int occupancy() {
+        int         max_blocks_per_sm{};
+        hipError_t  ret{};
+
+        switch(precision) {
+        case fft_precision_single:
+            switch(transform_type) {
+            case fft_transform_type_complex_forward:
+            case fft_transform_type_complex_inverse:
+                ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
+                                                                   transpose<float2>,
+                                                                   threads().x * threads().y * threads().z,         
+                                                                   lds_bytes());
+                break;
+            case fft_transform_type_real_forward:
+            case fft_transform_type_real_inverse:
+                ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
+                                                                   transpose<float>,
+                                                                   threads().x * threads().y * threads().z,         
+                                                                   lds_bytes());
+                break;
+            }
+            break;
+        case fft_precision_double:
+            switch(transform_type)  {
+            case fft_transform_type_complex_forward:
+            case fft_transform_type_complex_inverse:
+                ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
+                                                                   transpose<double2>,             
+                                                                   threads().x * threads().y * threads().z,         
+                                                                   lds_bytes());
+                break;
+            case fft_transform_type_real_forward:
+            case fft_transform_type_real_inverse:
+                ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
+                                                                   transpose<double>,             
+                                                                   threads().x * threads().y * threads().z,         
+                                                                   lds_bytes());
+                break;
+            }
+            break;
+        }
+        return max_blocks_per_sm;
+    }
+
+    size_t var_size()
+        {
+
+        switch(precision) {
+        case fft_precision_single:
+            switch(transform_type) {
+            case fft_transform_type_complex_forward:
+            case fft_transform_type_complex_inverse:
+                return sizeof(float2);
+                break;
+            case fft_transform_type_real_forward:
+            case fft_transform_type_real_inverse:
+                return sizeof(float);
+                break;
+            }
+            break;
+        case fft_precision_double:
+            switch(transform_type)  {
+            case fft_transform_type_complex_forward:
+            case fft_transform_type_complex_inverse:
+                return sizeof(double2);
+                break;
+            case fft_transform_type_real_forward:
+            case fft_transform_type_real_inverse:
+                return sizeof(double);
+                break;
+            }
+            break;
+        }
+        return 0;
+        }
+    
+    size_t lds_bytes() {
+#if USE_LDS
+        size_t lds_count = (blockSize + padding) * blockSize;
+#else
+        size_t lds_count = 0;
+#endif
+        return lds_count * var_size();
+    }
     
     virtual fft_status ext_execute(void** in, void** out, hipEvent_t start, hipEvent_t stop) 
         {
-            using Tlength = decltype(length)::value_type;
-            const size_t N = std::accumulate(length.begin(), length.end(),  (Tlength)nbatch,
-                                             std::multiplies<Tlength>());
-            size_t blockSize = 32;
-            int padding = 0;
-
-            auto blocks = dim3(ceildiv(length[0], blockSize), ceildiv(length[1], blockSize));
-            auto threads = dim3(blockSize, blockSize);
-            
-            
-#if USE_LDS
-	    size_t lds_count = (blockSize + padding) * blockSize;
-#else
-	    size_t lds_count = 0;
-#endif	    
-
             int ggl_flags = 0;
-            
+
             switch(precision) {
             case fft_precision_single:
                 switch(transform_type) {
                 case fft_transform_type_complex_forward:
                 case fft_transform_type_complex_inverse:
                     hipExtLaunchKernelGGL(transpose<float2>,
-                                          blocks,
-                                          threads,
-                                          sizeof(float2) * lds_count, // sharedMemBytes
+                                          blocks(),
+                                          threads(),
+                                          lds_bytes(),
                                           0, // stream
                                           start,
                                           stop,
@@ -172,9 +252,9 @@ public:
                 case fft_transform_type_real_forward:
                 case fft_transform_type_real_inverse:
                     hipExtLaunchKernelGGL(transpose<float>,
-                                          blocks,
-                                          threads,
-                                          sizeof(float) * lds_count, // sharedMemBytes
+                                          blocks(),
+                                          threads(),
+                                          lds_bytes(),
                                           0, // stream
                                           start,
                                           stop,
@@ -193,9 +273,9 @@ public:
                 case fft_transform_type_complex_forward:
                 case fft_transform_type_complex_inverse:
                     hipExtLaunchKernelGGL(transpose<double2>,
-                                          blocks,
-                                          threads,
-                                          sizeof(double2) * lds_count, // sharedMemBytes
+                                          blocks(),
+                                          threads(),
+                                          lds_bytes(),
                                           0, // stream
                                           start,
                                           stop,
@@ -211,9 +291,9 @@ public:
                 case fft_transform_type_real_forward:
                 case fft_transform_type_real_inverse:
                     hipExtLaunchKernelGGL(transpose<double>,
-                                          blocks,
-                                          threads,
-                                          sizeof(double) * lds_count, // sharedMemBytes
+                                          blocks(),
+                                          threads(),
+                                          lds_bytes(),
                                           0, // stream
                                           start,
                                           stop,
@@ -234,30 +314,15 @@ public:
 
     virtual fft_status execute(void** in, void** out) override
         {
-            using Tlength = decltype(length)::value_type;
-            const size_t N = std::accumulate(length.begin(), length.end(),  (Tlength)nbatch,
-                                             std::multiplies<Tlength>());
-            size_t blockSize = 32;
-            int padding = 1;
-            
-#if USE_LDS
-	    size_t lds_count = (blockSize + padding) * blockSize;
-#else
-	    size_t lds_count = 0;
-#endif
-            
-            auto blocks = dim3(ceildiv(length[0], blockSize), ceildiv(length[1], blockSize));
-            auto threads = dim3(blockSize, blockSize);
-
             switch(precision) {
             case fft_precision_single:
                 switch(transform_type) {
                 case fft_transform_type_complex_forward:
                 case fft_transform_type_complex_inverse:
                     hipLaunchKernelGGL(transpose<float2>,
-                                       blocks,
-                                       threads,
-                                       sizeof(float2) * lds_count, // sharedMemBytes
+                                       blocks(),
+                                       threads(),
+                                       lds_bytes(),
                                        0, // stream
                                        (float2*)in[0],
                                        (float2*)out[0],
@@ -269,9 +334,9 @@ public:
                 case fft_transform_type_real_forward:
                 case fft_transform_type_real_inverse:
                     hipLaunchKernelGGL(transpose<float>,
-                                       blocks,
-                                       threads,
-                                       sizeof(float) * lds_count, // sharedMemBytes
+                                       blocks(),
+                                       threads(),
+                                       lds_bytes(),
                                        0, // stream
                                        (float*)in[0],
                                        (float*)out[0],
@@ -287,9 +352,9 @@ public:
                 case fft_transform_type_complex_forward:
                 case fft_transform_type_complex_inverse:
                     hipLaunchKernelGGL(transpose<double2>,
-                                       blocks,
-                                       threads,
-                                       sizeof(double2) * lds_count, // sharedMemBytes
+                                       blocks(),
+                                       threads(),
+                                       lds_bytes(),
                                        0, // stream
                                        (double2*)in[0],
                                        (double2*)out[0],
@@ -302,9 +367,9 @@ public:
                 case fft_transform_type_real_forward:
                 case fft_transform_type_real_inverse:
                     hipLaunchKernelGGL(transpose<double>,
-                                       blocks,
-                                       threads,
-                                       sizeof(double) * lds_count, // sharedMemBytes
+                                       blocks(),
+                                       threads(),
+                                       lds_bytes(),
                                        0, // stream
                                        (double*)in[0],
                                        (double*)out[0],
@@ -316,11 +381,8 @@ public:
                 }
                 break;
             }
-
             return fft_status_success;
         };
-
-    
 };
 
 
@@ -649,6 +711,8 @@ int main(int argc, char* argv[])
     {
         std::cout << params.str() << std::endl;
     }
+
+    std::cout << "occupancy: " << params.occupancy() << std::endl;
 
     // Input data:
     auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);

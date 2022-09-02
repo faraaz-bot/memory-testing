@@ -12,7 +12,7 @@ include_directories( "${ROCFFT_SRC}" )
 find_package( Boost COMPONENTS program_options REQUIRED)
 
 add_executable( transpose-rider transpose-rider.cpp)
-set_property(TARGET transpose-rider PROPERTY CXX_STANDARD 14 )
+set_property(TARGET transpose-rider PROPERTY CXX_STANDARD 17 )
 
 
 IF( USE_LDS )
