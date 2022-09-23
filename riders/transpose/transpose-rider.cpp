@@ -386,68 +386,6 @@ public:
 };
 
 
-template<typename Tval, typename Tvlength>
-void Tprint_result(const void* vin, const void* vout, const Tvlength& length)
-{
-    const auto pin = (Tval*)vin;
-    const auto pout = (Tval*)vout;
-
-   
-    std::cout << "input:";
-    for(int i = 0; i < length[0] * length[1]; ++i) {
-        std::cout << " " << pin[i];
-    }
-    std::cout << std::endl;
-
-    std::cout << "output:";
-    for(int i = 0; i < length[0] * length[1]; ++i) {
-        std::cout << " " << pout[i];
-    }
-    std::cout << std::endl;        
-    
-}
-
-void print_result(const void* vin, const void* vout, const fft_params& params)
-{
-    switch(params.precision)
-    {
-    case fft_precision_single:
-    {
-                
-        switch(params.transform_type) {
-        case fft_transform_type_complex_forward:
-        case fft_transform_type_complex_inverse:
-            Tprint_result<std::complex<float>>(vin, vout, params.length);
-            break;
-                    
-        case fft_transform_type_real_forward:
-        case fft_transform_type_real_inverse:
-            Tprint_result<float>(vin, vout, params.length);
-            break;
-        default:
-            throw std::runtime_error("invalid transform type");
-        }
-        break;
-    }
-    case fft_precision_double:
-        switch(params.transform_type) {
-        case fft_transform_type_complex_forward:
-        case fft_transform_type_complex_inverse:
-            Tprint_result<std::complex<double>>(vin, vout, params.length);
-            break;
-                    
-        case fft_transform_type_real_forward:
-        case fft_transform_type_real_inverse:
-            Tprint_result<double>(vin, vout, params.length);
-            break;
-        default:
-            throw std::runtime_error("invalid transform type");
-        }
-        break;
-    default:
-        throw std::runtime_error("invalid precision");                
-    }
-}
 
 template<typename Tval, typename Tvlength>
 int Tcheck_result(const void* vin, const void* vout, const Tvlength& length, const int verbose)
@@ -534,7 +472,7 @@ int main(int argc, char* argv[])
     // Declare the supported options.
 
     bool extLaunch = false;
-    
+
     // clang-format doesn't handle boost program options very well:
     // clang-format off
     po::options_description opdesc("transpose rider command line options");
@@ -714,17 +652,6 @@ int main(int argc, char* argv[])
 
     std::cout << "occupancy: " << params.occupancy() << std::endl;
 
-    // Input data:
-    auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
-    compute_input(params, gpu_input);
-
-    if(verbose > 3)
-    {
-        std::cout << "GPU input:\n";
-        params.print_ibuffer(gpu_input);
-    }
-
-    
     auto hip_ret = hipSuccess;
 
     // GPU input and output buffers:
@@ -733,12 +660,34 @@ int main(int argc, char* argv[])
     std::vector<void*>  pibuffer(ibuffer_sizes.size());
     for(unsigned int i = 0; i < ibuffer.size(); ++i)
     {
-        auto ret = ibuffer[i].alloc(ibuffer_sizes[i]);
-        if(ret != hipSuccess)
+        auto hip_ret = ibuffer[i].alloc(ibuffer_sizes[i]);
+        if(hip_ret != hipSuccess)
             throw std::runtime_error("alloc failed");
         pibuffer[i] = ibuffer[i].data();
     }
+    
+    // Input data:
+    compute_input(params, ibuffer);
 
+    if(verbose > 1)
+    {
+        // Copy input to CPU
+        auto cpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
+        for(unsigned int idx = 0; idx < ibuffer.size(); ++idx)
+        {
+            auto hip_ret = hipMemcpy(cpu_input.at(idx).data(),
+                                     ibuffer[idx].data(),
+                                     ibuffer_sizes[idx],
+                                     hipMemcpyDeviceToHost);
+            if(hip_ret != hipSuccess)
+                throw std::runtime_error("hipMemcpy failed");
+            
+        }
+
+        std::cout << "GPU input:\n";
+        params.print_ibuffer(cpu_input);
+    }
+    
     std::vector<gpubuf>  obuffer_data;
     std::vector<gpubuf>* obuffer = &obuffer_data;
     if(params.placement == fft_placement_inplace)
@@ -768,17 +717,20 @@ int main(int argc, char* argv[])
     if(hipEventCreate(&stop) != hipSuccess)
         throw std::runtime_error("hipEventCreate failed");
     
-    // Warm up once:
-    for(int idx = 0; idx < gpu_input.size(); ++idx) {
-        if(hipMemcpy(pibuffer[idx], gpu_input[idx].data(), gpu_input[idx].size(), hipMemcpyHostToDevice) != hipSuccess)
-            throw std::runtime_error("hipMemcpy failed");
-    }
-    
     params.ext_execute(pibuffer.data(), pobuffer.data(), start, stop);
     if(hipEventSynchronize(stop) != hipSuccess)
         throw std::runtime_error("hipEventSynchronize failed");
 
-    auto gpu_output = std::vector<char>(var_size<size_t>(params.precision, params.otype) * params.length[0] * params.length[1]);
+    auto gpu_input = std::vector<char>(var_size<size_t>(params.precision, params.otype)
+                                        * params.length[0] * params.length[1]);
+    auto gpu_output = std::vector<char>(var_size<size_t>(params.precision, params.otype)
+                                        * params.length[0] * params.length[1]);
+    if( hipMemcpy(gpu_input.data(),
+                  pibuffer[0],
+                  gpu_input.size(),
+                  hipMemcpyDeviceToHost) != hipSuccess)
+        throw std::runtime_error("hipMemcpy failed");
+        
     if( hipMemcpy(gpu_output.data(),
                   pobuffer[0],
                   gpu_output.size(),
@@ -792,15 +744,7 @@ int main(int argc, char* argv[])
         params.print_obuffer(vgpu_output);
     }
 
-    auto vin = (void*)gpu_input[0].data();
-    auto vout = (void*)gpu_output.data();
-            
-    if(verbose > 4)
-    {
-        print_result(vin, vout, params);
-    }
-
-    int nbad = check_result(vin, vout, params, verbose);
+    const int nbad = check_result(gpu_input.data(), gpu_output.data(), params, verbose);
     if(verbose)
         std::cout << "number of incorrect values: " << nbad << std::endl;
     if(nbad > 0)
@@ -812,17 +756,8 @@ int main(int argc, char* argv[])
 
     for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
     {
-        // Copy the input data to the GPU:
-        for(int idx = 0; idx < gpu_input.size(); ++idx)
-        {
-            if(hipMemcpy(pibuffer[idx],
-                         gpu_input[idx].data(),
-                         gpu_input[idx].size(),
-                         hipMemcpyHostToDevice) != hipSuccess)
-                throw std::runtime_error("hipMemcpy failed");
-
-        }
-
+        compute_input(params, ibuffer);
+        
         if(extLaunch) {
             params.ext_execute(pibuffer.data(), pobuffer.data(), start, stop);
         } else {

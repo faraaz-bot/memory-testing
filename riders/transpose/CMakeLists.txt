@@ -11,6 +11,9 @@ include_directories( "${ROCFFT_SRC}" )
 
 find_package( Boost COMPONENTS program_options REQUIRED)
 
+find_package( rocrand REQUIRED )
+
+
 add_executable( transpose-rider transpose-rider.cpp)
 set_property(TARGET transpose-rider PROPERTY CXX_STANDARD 17 )
 
@@ -25,9 +28,11 @@ endif( USE_LDS)
 target_include_directories( transpose-rider
     PRIVATE
     $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
+    roc::rocrand
     )
 
 target_link_libraries( transpose-rider
     PRIVATE
     ${Boost_LIBRARIES}
+    roc::rocrand
     )
