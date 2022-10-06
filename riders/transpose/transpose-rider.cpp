@@ -598,7 +598,7 @@ int main(int argc, char* argv[])
     if(nbad > 0)
         std::cerr << "TRANSPOSE FAILED" << std::endl;
         
-    // Run the transform several times and record the execution time:1
+    // Run the transform several times and record the execution time:
     std::vector<double> gpu_time(ntrial);
 
     for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
