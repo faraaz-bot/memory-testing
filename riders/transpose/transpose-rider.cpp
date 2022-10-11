@@ -488,7 +488,7 @@ int main(int argc, char* argv[])
         ("verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")
         ("ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")
         ("length",  po::value<std::vector<size_t>>(&params.length)->multitoken(), "Lengths.")
-        ("ext,e", "Not in-place FFT transform (default: in-place)");
+        ("ext,e", "Use hipExtLaunchKernelGGL for launch and time kernels.");
     //clang-format on
 
     po::variables_map vm;
