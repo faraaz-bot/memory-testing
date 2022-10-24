@@ -18,7 +18,7 @@ void readbarfiles(string[] filelist, bardata[][] data)
 //      write(filename);
       
       file fin = input(filename).line().word();
-      string[] hdr = fin;
+      //string[] hdr = fin;
 
       while(!eof(fin)) {
      
@@ -191,5 +191,5 @@ drawbargraph(data, legs, legends);
 xaxis(BottomTop);
 yaxis("Time (ms)", LeftRight, RightTicks);
 
-attach(legend(),point(plain.E),  20*plain.E);
+//attach(legend(),point(plain.E),  20*plain.E);
 
