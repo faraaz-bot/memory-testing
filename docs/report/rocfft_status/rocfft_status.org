@@ -17,12 +17,15 @@ MI250 A1 with rocm 5.3 base:
 
 cholla_mi200.dat
 
-
 * horizontal tasting:
 ./clients/staging/rocfft-rider --double --length 8192 -b 8192 -N 10
 ./clients/staging/rocfft-rider --double --length 16384 -b 16384 -N 10
 ./clients/staging/rocfft-rider --double --length 32768 -b 32768 -N 10
 
+1dbatch_mi50.dat
+1dbatch_mi100.dat
+1dbatch_mi200.dat
 
 
 * General benchmark test:
+run the "all" suite.

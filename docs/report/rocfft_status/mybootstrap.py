@@ -20,7 +20,6 @@ def confidence_interval(vals, alpha=0.95, nboot=2000):
     return low, high
 
 def main(argv):
-    print("hi")
     inputfile = ''
     outputfile = ''
     try:
