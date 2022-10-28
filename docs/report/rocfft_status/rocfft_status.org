@@ -37,3 +37,8 @@ mv bargraph.pdf horizontal.pdf
 
 * General benchmark test:
 run the "all" suite.
+
+suites:
+dsp ->unbatched_1d
+distribbuted transforms -> batched_1d
+molecular dynamics -> md
