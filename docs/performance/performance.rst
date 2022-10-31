@@ -210,6 +210,18 @@ performance, and a discussion with Leopold Grinberg indicates that
 there is a large number of small 3D ffts.
 
   
+GESTS
+^^^^
+
+JIRA tickets
+
+* `https://ontrack-internal.amd.com/browse/SWDEV-348588`_
+
+Representative transforms:
+
+* 1D C2C: ``rocfft-rider --length 8192 -b 2048 -t 0 --itype 0 --otype 0 --istride 2048 --ostride 2048 --idist 1 --odist 1``
+* 1D C2C: ``rocfft-rider --length 16384 -b 4096 -t 0 --itype 0 --otype 0 --istride 4096 --ostride 4096 --idist 1 --odist 1``
+
 HACC
 ^^^^
 
