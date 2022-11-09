@@ -133,6 +133,7 @@ string legendlist = "";
 // Graph formatting
 string xlabel = "Problem size type";
 string ylabel = "Time [s]";
+bool dolabel=true;
 
 string primaryaxis = "time";
 string secondaryaxis = "speedup";
@@ -191,5 +192,6 @@ drawbargraph(data, legs, legends);
 xaxis(BottomTop);
 yaxis("Time (ms)", LeftRight, RightTicks);
 
-//attach(legend(),point(plain.E),  20*plain.E);
+if(dolabel)
+  attach(legend(),point(plain.E),  20*plain.E);
 

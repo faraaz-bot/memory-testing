@@ -22,10 +22,23 @@ cholla_mi200.dat
 ./clients/staging/rocfft-rider --double --length 16384 -b 16384 -N 10
 ./clients/staging/rocfft-rider --double --length 32768 -b 32768 -N 10
 
+input files:
 1dbatch_mi50.dat
 1dbatch_mi100.dat
 1dbatch_mi200.dat
 
+commands:
+./mybootstrap.py -i 1dbatch_mi50.dat -o 1dbatch_mi50.mdat
+./mybootstrap.py -i 1dbatch_mi100.dat -o 1dbatch_mi100.mdat
+./mybootstrap.py -i 1dbatch_mi200.dat -o 1dbatch_mi200.mdat
+asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi100.mdat,1dbatch_mi200.mdat';legendlist='MI50,MI100,MI250X'"
+mv bargraph.pdf horizontal.pdf
+./pdf2emf horizontal.pdf
 
 * General benchmark test:
 run the "all" suite.
+
+suites:
+dsp ->unbatched_1d
+distribbuted transforms -> batched_1d
+molecular dynamics -> md
