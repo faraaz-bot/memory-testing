@@ -1,6 +1,10 @@
+// hipcc rtc.cpp -fopenmp  && time ./a.out
+
+
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <omp.h>
 
 #include <hip/hiprtc.h>
 #include <hip/hip_runtime.h>
@@ -19,10 +23,21 @@ void cosine_kernel(float* x, size_t n)
 }
 )"};
 
+struct cosine_kernel_args
+{
+    hipDeviceptr_t a_;
+    size_t b_;
+};
+
+    
 int main()
 {
     std::cout << "RTC test code" << std::endl;
 
+    const size_t n = 1<<20;
+    const size_t nthread = 16;
+    const size_t nrepeat = 1<<14;
+    
     hiprtcProgram prog;
   
     int num_headers = 0;
@@ -53,8 +68,8 @@ int main()
         if (logSize) {
             std::string log(logSize, '\0');
             hiprtcGetProgramLog(prog, &log[0]);
-            // Corrective action with logs
             std::cout << log << std::endl;
+            throw std::runtime_error("hiprtcCompileProgram");
         }
     }
 
@@ -90,10 +105,9 @@ int main()
         throw std::runtime_error("hipModuleGetFunction");
     }
 
-    const size_t n = 1<<8;
 
     // Number of data points that we will output:
-    const size_t nshow = std::min(n, (size_t)16);
+    const size_t nshow = std::min(n, (size_t)8);
     
     std::vector<float> hX(n);
     for(size_t i = 0; i < hX.size(); ++i) {
@@ -107,51 +121,65 @@ int main()
     std::cout << std::endl;
     
     const size_t bufferSize = hX.size() * sizeof(float);
+    auto size = sizeof(cosine_kernel_args);
     
-    hipDeviceptr_t dX;
-    hip_ret = hipMalloc((void **)&dX, bufferSize);
-    if(hip_ret != hipSuccess) {
-        throw std::runtime_error("hipMalloc");
+    std::vector<hipDeviceptr_t> dX(nthread);
+    std::vector<cosine_kernel_args> args(nthread);
+
+    for(size_t ithread = 0; ithread < nthread; ++ithread) {
+        hip_ret = hipMalloc((void **)&dX[ithread], bufferSize);
+        if(hip_ret != hipSuccess) {
+            throw std::runtime_error("hipMalloc");
+        }
+
+        hip_ret = hipMemcpyHtoD(dX[ithread], hX.data(), bufferSize);
+        if(hip_ret != hipSuccess) {
+            throw std::runtime_error("hipMemcpyHtoD");
+        }    
+
+        args[ithread].a_ = dX[ithread];
+        args[ithread].b_ = n;
     }
 
-    hip_ret = hipMemcpyHtoD(dX, hX.data(), bufferSize);
-    if(hip_ret != hipSuccess) {
-        throw std::runtime_error("hipMemcpyHtoD");
-    }    
-
-    struct {
-        hipDeviceptr_t a_;
-        size_t b_;
-    } args{dX, n};
-
-    auto size = sizeof(args);
-    void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, &args,
-                      HIP_LAUNCH_PARAM_BUFFER_SIZE, &size,
-                      HIP_LAUNCH_PARAM_END};
-
-    size_t nthreads = 1024;
-    size_t nblocks = (n + nthreads) / nthreads;
-    
-    hip_ret = hipModuleLaunchKernel(kernel, nblocks, 1, 1, nthreads, 1, 1,
-                                    0, nullptr, nullptr, config);
-    if(hip_ret != hipSuccess) {
-        throw std::runtime_error("hipModuleLaunchKernel");
-    }
-
-    hip_ret = hipMemcpyDtoH(hX.data(), dX, bufferSize);
-    if(hip_ret != hipSuccess) {
-        throw std::runtime_error("hipMemcpyDtoH");
-    }    
-
-    std::cout << "output:";
-    for(size_t i = 0; i < nshow; ++i) {
-        std::cout << " " << hX[i];
-    }
-    std::cout << std::endl;
+#pragma omp parallel for num_threads(nthread)
+    for(size_t ithread = 0; ithread < nthread; ++ithread) {
+        int tid = omp_get_thread_num();
+        std::cout << "thread " << tid << std::endl;
         
+        void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, &args[ithread],
+            HIP_LAUNCH_PARAM_BUFFER_SIZE, &size,
+            HIP_LAUNCH_PARAM_END};
+
+        size_t nthreads = 1024;
+        size_t nblocks = (n + nthreads) / nthreads;
+
+        for(size_t irepeat = 0; irepeat < nrepeat; ++irepeat) {
+            hip_ret = hipModuleLaunchKernel(kernel, nblocks, 1, 1, nthreads, 1, 1,
+                                            0, nullptr, nullptr, config);
+            if(hip_ret != hipSuccess) {
+                throw std::runtime_error("hipModuleLaunchKernel");
+            }
+        }
+    }
+    
+    for(size_t ithread = 0; ithread < nthread; ++ithread) {
+        hip_ret = hipMemcpyDtoH(hX.data(), dX[ithread], bufferSize);
+        if(hip_ret != hipSuccess) {
+            throw std::runtime_error("hipMemcpyDtoH");
+        }    
+
+        std::cout << "output " << ithread << ":";
+        for(size_t i = 0; i < nshow; ++i) {
+            std::cout << " " << hX[i];
+        }
+        std::cout << std::endl;
+    }
+    
     // Clean up
-    hipFree((void *)dX);
     hipModuleUnload(module);
+    for(size_t ithread = 0; ithread < nthread; ++ithread) {
+        hipFree((void *)dX[ithread]);
+    }
   
     return 0;
 }
