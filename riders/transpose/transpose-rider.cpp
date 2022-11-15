@@ -20,6 +20,7 @@
 
 
 #include <iostream>
+
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
@@ -139,7 +140,23 @@ public:
             return sizeof(std::complex<double>);
         }
     }
+
+  std::string print_var_type() const {
+    switch(get_var_type())
+      {
+      case real_single:
+	return "float";
+      case real_double:
+	return "double";
+      case complex_single:
+	return "std::complex<float>";
+      case complex_double:
+	return "std::complex<double>";
+      }
+  }
     
+  
+  
     transpose_params(){};
     ~transpose_params(){};
 
@@ -534,7 +551,8 @@ int main(int argc, char* argv[])
             std::cout << "You must provide exactly two lengths; exiting.\n";
         }
     }
-
+    std::cout << "variable type: " << params.print_var_type() << std::endl;
+    
     if(vm.count("ext"))
     {
         std::cout << "using ext kernel launcher\n";
