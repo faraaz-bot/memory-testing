@@ -94,8 +94,8 @@ transpose(const Tval* __restrict__ idata,
     const int ix = blockIdx.x * blockDim.x + threadIdx.x;
     const int iy = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if(ix < Nx && iy < Ny) {
-        odata[ix * Ny + iy] = idata[iy * Nx + ix];
+    if(ix < Ny && iy < Nx) {
+        odata[ix * Nx + iy] = idata[iy * Ny + ix];
     }
 #endif
 }
@@ -430,7 +430,7 @@ void Tprint_buffer(const Tval* buf, const size_t Nx, const size_t Ny)
 {
     for(size_t i = 0; i < Nx; ++i) {
         for(size_t j = 0; j < Ny; ++j) {
-            std::cout << buf[i * Nx + j];
+            std::cout << buf[i * Ny + j];
             if(j != 0)
                 std::cout << "\t";
         }
