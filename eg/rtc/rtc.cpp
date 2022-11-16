@@ -1,10 +1,10 @@
-// hipcc rtc.cpp -fopenmp  && time ./a.out
-
-
 #include <iostream>
 #include <vector>
 #include <algorithm>
 #include <omp.h>
+
+#include <boost/program_options.hpp>
+namespace po = boost::program_options;
 
 #include <hip/hiprtc.h>
 #include <hip/hip_runtime.h>
@@ -30,13 +30,41 @@ struct cosine_kernel_args
 };
 
     
-int main()
+int main(int argc, char* argv[])
 {
     std::cout << "RTC test code" << std::endl;
 
-    const size_t n = 1<<20;
-    const size_t nthread = 16;
-    const size_t nrepeat = 1<<14;
+    size_t n = 1<<20;
+
+
+    size_t nthread = 1;
+    size_t nrepeat = 1<<14;
+    int deviceId = 0;
+    bool segfault = false;
+    
+    po::options_description opdesc("rtc sample command line options");
+    opdesc.add_options()("help,h", "produces this help message")
+      ("n", po::value<size_t>(&n)->default_value(1<<20), "data laneght")
+      ("nthread", po::value<size_t>(&nthread)->default_value(1), "Number of omp threads")
+      ("nrepeat", po::value<size_t>(&nrepeat)->default_value(1), "Number of omp threads")
+      ("d", po::value<int>(&deviceId)->default_value(0), "HIP device ID.")
+      ("segfault", "Call hipSetDevice in between module load and execution.");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, opdesc), vm);
+    po::notify(vm);
+    
+    if(vm.count("help"))
+    {
+        std::cout << opdesc << std::endl;
+        return EXIT_SUCCESS;
+    }
+
+    
+    if(vm.count("segfault"))
+    {
+      segfault = true;
+    }
     
     hiprtcProgram prog;
   
@@ -95,6 +123,14 @@ int main()
         throw std::runtime_error("hiprtcDestroyProgram");
     }
 
+    if(!segfault) {
+      // Calling here is OK.
+      if(hipSetDevice(deviceId)  != hipSuccess) {
+        throw std::runtime_error("hipSetDevice");
+      }
+    }
+  
+    
     auto hip_ret = hipModuleLoadData(&module, kernel_binary.data());
     if(hip_ret != hipSuccess) {
         throw std::runtime_error("hipModuleLoadData");
@@ -105,6 +141,12 @@ int main()
         throw std::runtime_error("hipModuleGetFunction");
     }
 
+    if(segfault) {
+      // Calling here produces a segfault.
+      if(hipSetDevice(deviceId)  != hipSuccess) {
+        throw std::runtime_error("hipSetDevice");
+      }
+    }   
 
     // Number of data points that we will output:
     const size_t nshow = std::min(n, (size_t)8);
@@ -176,9 +218,16 @@ int main()
     }
     
     // Clean up
-    hipModuleUnload(module);
+    hip_ret = hipModuleUnload(module);
+    if(hip_ret != hipSuccess) {
+      throw std::runtime_error("hipModuleUnload");
+    }
+    
     for(size_t ithread = 0; ithread < nthread; ++ithread) {
-        hipFree((void *)dX[ithread]);
+      hip_ret = hipFree((void *)dX[ithread]);
+      if(hip_ret != hipSuccess) {
+	throw std::runtime_error("hipFree");
+      }
     }
   
     return 0;

@@ -1,0 +1,9 @@
+cmake -DCMAKE_CXX_COMPILER=hipcc ..
+
+On a multi-gpu system, calling
+
+./rtc --d 1 --segfault
+
+will set the hip device ID to 1 after calling hipModuleLoadData, but
+before launching the kernel.  As for 5.3, this produces a segfault
+in the HIP runtime.
