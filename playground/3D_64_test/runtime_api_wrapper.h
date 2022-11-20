@@ -69,6 +69,15 @@ inline void device_reset()
 #endif
 }
 
+inline void device_mem_set(void* dst, int value, size_t bytes)
+{
+#ifdef CUDA
+    GPU_ERR_CHECK(cudaMemset(dst, value, bytes));
+#else
+    GPU_ERR_CHECK(hipMemset(dst, value, bytes));
+#endif
+}
+
 inline void device_synchronize()
 {
 #ifdef CUDA
