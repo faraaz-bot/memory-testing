@@ -51,7 +51,60 @@
 
 These are notes on distritubed implementations for rocFFT.
 
-\section{Decompositions}
+\section{2D Decompositions}
+
+There are basically two decompositions for 2D data of size $N^2$ over
+$P$ procs; either block or pencil.  Block decompositions have dimensions
+\begin{dmath}
+  \label{brick2d}
+  \left(\frac{N}{P^{1/2}}, \frac{N}{P^{1/2}} \right)
+\end{dmath}
+and pencil has dimensions
+\begin{dmath}
+  \label{pencil2d}
+  \left(N, \frac{N}{P} \right).
+\end{dmath}
+
+\subsection{Brick-pencil}
+Each of the $P$ procs has to send $\sqrt{P}-1$ messages with dimension
+\begin{dmath}
+  \left(\frac{N}{P^{1/2}}, \frac{N}{P} \right)
+\end{dmath}
+for a message size of $N^2/P^{3/2}$.  The total communication size is
+\begin{dmath}
+  P \(\sqrt{P}-1\) N^2/P^{3/2} \approx N^2
+\end{dmath}
+
+\subsection{Pencil-pencil}
+Each of the $P$ procs has to send $P-1$ messages with dimension
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P} \right)
+\end{dmath}
+for a message size of $N^2/P^2$.  The total communication size is
+\begin{dmath}
+  P \(P-1\) N^2/P^2\approx N^2.
+\end{dmath}
+
+
+\subsection{2D transform summary}
+
+\begin{centering}
+  \begin{table}[htbp]
+    \begin{tabular}{|l|l|l|}
+      \hline
+      Type          & Message size  & Messages per proc \\
+      \hline
+      Brick-pencil  & $N^3/P^{3/2}$ & $\sqrt{P}$          \\
+      Pencil-pencil & $N^3/P^2$ & $P$        \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{centering}
+
+
+
+
+\section{3D Decompositions}
 
 \url{https://www.osti.gov/servlets/purl/1483229}
 
@@ -128,7 +181,7 @@ for a message size of $N^3/P^2$. The total communication size is
   P \(P-1\) \frac{N^3}{P^2} \approx N^3.
 \end{dmath}
 
-\subsection{Transform summary}
+\subsection{3D transform summary}
 
 \begin{centering}
   \begin{table}[htbp]
