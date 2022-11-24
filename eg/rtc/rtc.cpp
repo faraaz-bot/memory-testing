@@ -9,9 +9,15 @@ namespace po = boost::program_options;
 #include <hip/hiprtc.h>
 #include <hip/hip_runtime.h>
 
+#define XSTR(x) STR(x)
+#define STR(x) #x
+#pragma message "__clang_version__: " XSTR(__clang_version__)
 
 static constexpr auto kernel{
     R"(
+#define XSTR(x) STR(x)
+#define STR(x) #x
+#pragma message "__clang_version__: " XSTR(__clang_version__)
 extern "C"
 __global__
 void cosine_kernel(float* x, size_t n)
@@ -90,14 +96,18 @@ int main(int argc, char* argv[])
   
     if(rtc_ret != HIPRTC_SUCCESS) {
         std::cout << "compile failed" << std::endl;
+        throw std::runtime_error("hiprtcCompileProgram");
+    }
+    {
         size_t logSize;
         hiprtcGetProgramLogSize(prog, &logSize);
-
+        std::cout << "compilation log:\n";
+        
         if (logSize) {
             std::string log(logSize, '\0');
             hiprtcGetProgramLog(prog, &log[0]);
             std::cout << log << std::endl;
-            throw std::runtime_error("hiprtcCompileProgram");
+
         }
     }
 
