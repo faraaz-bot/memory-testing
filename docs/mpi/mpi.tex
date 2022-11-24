@@ -1,0 +1,149 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{MPI with rocFFT}
+\author{rocFFT}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+These are notes on distritubed implementations for rocFFT.
+
+\section{Decompositions}
+
+\url{https://www.osti.gov/servlets/purl/1483229}
+
+Given data of size $N^3$ with $P$ mpi procs, the brick layout has
+each process having
+\begin{dmath}
+  \label{brick3d}
+  \left(\frac{N}{P^{1/3}}, \frac{N}{P^{1/3}}, \frac{N}{P^{1/3}} \right)
+\end{dmath}
+and this must be transformed into either a pencil decomposition
+\begin{dmath}
+  \label{pencil3d}
+  \left(N, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+or a slab decomposition,
+\begin{dmath}
+  \label{slab3d}
+  \left(N, N, \frac{N}{P} \right)
+\end{dmath}
+
+\subsection{Brick-Pencil}
+Going from distribution~\eqref{brick3d} to~\eqref{pencil3d}, each of
+the $P$ procs need to receive $P^{1/3}-1$ messages of dimensions 
+\begin{dmath}
+  \left(\frac{N}{P^{1/3}}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+for message size of $\frac{N^3}{P^{4/3}}$.  There are therefore
+$P(P^{1/3}-1)$ messages, for a total communication size of
+\begin{dmath}
+  \frac{N^3}{P^{4/3}} P(P^{1/3}-1) \approx N^3.
+\end{dmath}
+
+\subsection{Brick-Slab}
+Going from distribution~\eqref{brick3d} to~\eqref{slab3d}, each of the
+$P$ procs needs to receive $P^{2/3}-1$ messages of dimension
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P^{1/3}}, \frac{N}{P^{1/3}} \right)
+\end{dmath}
+which has message size $\frac{N^2}{P^{5/3}}$.  The total communication
+  size is
+\begin{dmath}
+  P\(P^{2/3}-1\) \frac{N^2}{P^{5/3}} \approx N^3.
+\end{dmath}
+
+\subsection{Pencil-Pencil}
+A pencil-to-pencil transpose requires all $P$ procs to send
+$\sqrt{P}-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+which has message size $\frac{N^3}{P^{3/2}}$.  The total communication
+size is
+\begin{dmath}
+  P \(\sqrt{P}-1\) \frac{N^3}{P^{3/2}} \approx N^3.
+\end{dmath}
+
+\subsection{Pencil-Slab}
+All $P$ procs send $P-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+for a message size of $N^3/P^2$.  The total communication size is
+\begin{dmath}
+  P \(P-1\) \frac{N^3}{P^2} \approx N^3.
+\end{dmath}
+
+\subsection{Slab-Slab}
+All $P$ procs send $P-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P}, N \right)
+\end{dmath}
+for a message size of $N^3/P^2$. The total communication size is
+\begin{dmath}
+  P \(P-1\) \frac{N^3}{P^2} \approx N^3.
+\end{dmath}
+
+\subsection{Transform summary}
+
+\begin{centering}
+  \begin{table}[htbp]
+    \begin{tabular}{|l|l|l|}
+      \hline
+      Type          & Message size  & Messages per proc \\
+      \hline
+      Brick-pencil  & $N^3/P^{5/3}$ & $P^{1/3}$          \\
+      Brick-slab    & $N^3/P^{5/3}$ & $P^{1/3}$          \\
+      Pencil-pencil & $N^3/P^{3/2}$ & $\sqrt{P}$        \\
+      Pencil-slab   & $N^3/P^2$    & $P$               \\
+      Slab-slab     & $N^3/P^2$    & $P$               \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{centering}
+
+\end{document}
