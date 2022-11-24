@@ -11,7 +11,6 @@ namespace po = boost::program_options;
 
 #define XSTR(x) STR(x)
 #define STR(x) #x
-#pragma message "__clang_version__: " XSTR(__clang_version__)
 
 static constexpr auto kernel{
     R"(
@@ -99,6 +98,7 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hiprtcCompileProgram");
     }
     {
+      std::cout << "Host clang version: " <<  __clang_version__ << "\n";
         size_t logSize;
         hiprtcGetProgramLogSize(prog, &logSize);
         std::cout << "compilation log:\n";
