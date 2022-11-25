@@ -1,1 +1,10 @@
-cmake -DUSE_LDS=ON -DCMAKE_CXX_COMPILER=hipcc  ..
+# This example needs access to a rocFFT repository.  Use commit
+# a7fd5f90adc8 of rocFFT to avoid pulling in extra dependencies.
+
+# The transpose kernel may be runtime-compiled using hipRTC by
+# passing -DTRANSPOSE_RUNTIME_COMPILE=ON to cmake.
+#
+# In that case, transpose-rider expects to find transpose-kernel.h in
+# the parent directory when it runs.
+
+cmake -DROCFFT_SRC=/path/to/rocFFT -DUSE_LDS=ON -DCMAKE_CXX_COMPILER=hipcc  ..

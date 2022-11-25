@@ -7,6 +7,8 @@ option( ROCFFT_SRC "rocFFT source dir" )
 
 option( USE_LDS "LDS version or naive version"  ON )
 
+option( TRANSPOSE_RUNTIME_COMPILE "Runtime-compile the transpose kernel with hipRTC"  OFF )
+
 find_package( Boost COMPONENTS program_options REQUIRED)
 
 add_executable( transpose-rider transpose-rider.cpp)
@@ -19,6 +21,9 @@ else()
   target_compile_definitions( transpose-rider PUBLIC USE_LDS=0 )
 endif( USE_LDS)
 
+if( TRANSPOSE_RUNTIME_COMPILE )
+  target_compile_definitions( transpose-rider PUBLIC TRANSPOSE_RUNTIME_COMPILE=1 )
+endif()
 
 target_include_directories( transpose-rider
     PRIVATE

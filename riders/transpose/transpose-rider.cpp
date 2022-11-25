@@ -18,107 +18,133 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-
 #include <iostream>
 
 #include <boost/program_options.hpp>
+#include <iostream>
 namespace po = boost::program_options;
 
-#include<hip/hip_runtime.h>
-#include<hip/hip_runtime_api.h>
-#include<hip/hip_ext.h>
+#include <hip/hip_ext.h>
+#include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
 
-template<typename T1, typename T2>
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+#include <hip/hiprtc.h>
+
+#include <fstream>
+#include <string>
+#include <vector>
+
+// Helper class that handles alignment of kernel arguments
+class RTCKernelArgs
+{
+public:
+    RTCKernelArgs() = default;
+    void append_ptr(void* ptr)
+    {
+        append(&ptr, sizeof(void*));
+    }
+    void append_size_t(size_t s)
+    {
+        append(&s, sizeof(size_t));
+    }
+    void append_unsigned_int(unsigned int i)
+    {
+        append(&i, sizeof(unsigned int));
+    }
+    void append_int(int i)
+    {
+        append(&i, sizeof(int));
+    }
+    void append_double(double d)
+    {
+        append(&d, sizeof(double));
+    }
+    void append_float(float f)
+    {
+        append(&f, sizeof(float));
+    }
+
+    size_t size_bytes() const
+    {
+        return buf.size();
+    }
+    void* data()
+    {
+        return buf.data();
+    }
+
+private:
+    void append(void* src, size_t nbytes)
+    {
+        // values need to be aligned to their width (i.e. 8-byte values
+        // need 8-byte alignment, 4-byte needs 4-byte alignment)
+        size_t oldsize = buf.size();
+        size_t padding = oldsize % nbytes ? nbytes - (oldsize % nbytes) : 0;
+        buf.resize(oldsize + padding + nbytes);
+        std::copy_n(static_cast<const char*>(src), nbytes, buf.begin() + oldsize + padding);
+    }
+    std::vector<char> buf;
+};
+
+hipModule_t   module = nullptr;
+hipFunction_t kernel = nullptr;
+#else
+#include "transpose-kernel.h"
+#endif
+
+template <typename T1, typename T2>
 T1 ceildiv(T1 a, T2 b)
 {
     return (a + b - 1) / b;
 }
 
 // Enum for user-specified variable type.
-enum var_type{ real_single, real_double, complex_single, complex_double };
+enum var_type
+{
+    real_single,
+    real_double,
+    complex_single,
+    complex_double
+};
 
 // Buffer initialization kernel
 template <typename Tval>
-__global__ void
-__launch_bounds__(1024,1)
-init_buffer(Tval* __restrict__ idata,
-            const int Nx,
-            const int Ny)
+__global__ void __launch_bounds__(1024, 1)
+    init_buffer(Tval* __restrict__ idata, const int Nx, const int Ny)
 {
     const int ix = blockIdx.x * blockDim.x + threadIdx.x;
     const int iy = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if(ix < Nx && iy < Ny) {
+    if(ix < Nx && iy < Ny)
+    {
         idata[iy * Nx + ix] = (Tval)cos(iy * Nx + ix);
         //idata[iy * Nx + ix] = (Tval)(iy * Nx + ix);
     }
-}
-
-// Transpose kernel optionally using LDS
-template <typename Tval>
-__global__ void
-__launch_bounds__(1024,1)
-transpose(const Tval* __restrict__ idata,
-                          Tval* __restrict__ odata,
-                          const int Nx,
-                          const int Ny,
-                          const int tileDim,
-                          const int padding)
-{
-# if USE_LDS
-
-    extern __shared__ __align__(sizeof(Tval)) unsigned char shmem_ptr[];
-    Tval* lds = reinterpret_cast<Tval*>(shmem_ptr);
-
-    // Input indices: straight copy.
-    const int gipos = (blockIdx.x * blockDim.x + threadIdx.x) * Ny + (blockIdx.y * blockDim.y + threadIdx.y);
-    const int lipos = threadIdx.x * (tileDim + padding)            + threadIdx.y;
-       
-    // Contiguous read
-    if((blockIdx.x * blockDim.x + threadIdx.x) < Nx && (blockIdx.y * blockDim.y + threadIdx.y) < Ny)
-    {
-        lds[lipos] = idata[gipos];
-    }
-
-    __syncthreads();
-
-    // Output indices
-    const int lopos = threadIdx.y * (tileDim + padding)            + threadIdx.x;
-    const int gopos = (blockIdx.y * blockDim.y + threadIdx.x) * Nx + (blockIdx.x * blockDim.x + threadIdx.y);
-
-    // Contiguous write
-    if( (blockIdx.y * blockDim.y + threadIdx.x) < Ny && (blockIdx.x * blockDim.x + threadIdx.y) < Nx)
-    {
-        odata[gopos] = lds[lopos];
-    }
-#else
-    const int ix = blockIdx.x * blockDim.x + threadIdx.x;
-    const int iy = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if(ix < Ny && iy < Nx) {
-        odata[ix * Nx + iy] = idata[iy * Ny + ix];
-    }
-#endif
 }
 
 class transpose_params
 {
 public:
     size_t blockSize = 32;
-    int padding = 1;
+    int    padding   = 1;
 
-    bool complex = true;
-    bool double_precision = true;
+    bool                complex          = true;
+    bool                double_precision = true;
     std::vector<size_t> length;
 
     // Get the enum for the data type from the type parameters.
-    var_type get_var_type() const {
-        if(double_precision) {
+    var_type get_var_type() const
+    {
+        if(double_precision)
+        {
             if(complex)
                 return complex_double;
             else
                 return real_double;
-        } else {
+        }
+        else
+        {
             if(complex)
                 return complex_single;
             else
@@ -127,7 +153,8 @@ public:
     }
 
     // sizeof for the user-specified data type.
-    size_t var_size() const {
+    size_t var_size() const
+    {
         switch(get_var_type())
         {
         case real_single:
@@ -141,41 +168,45 @@ public:
         }
     }
 
-  std::string print_var_type() const {
-    switch(get_var_type())
-      {
-      case real_single:
-	return "float";
-      case real_double:
-	return "double";
-      case complex_single:
-	return "std::complex<float>";
-      case complex_double:
-	return "std::complex<double>";
-      }
-  }
-    
-  
-  
+    std::string print_var_type() const
+    {
+        switch(get_var_type())
+        {
+        case real_single:
+            return "float";
+        case real_double:
+            return "double";
+        case complex_single:
+            return "std::complex<float>";
+        case complex_double:
+            return "std::complex<double>";
+        }
+    }
+
     transpose_params(){};
     ~transpose_params(){};
 
     // Device buffer size computation.
-    size_t buffer_size()  {
+    size_t buffer_size()
+    {
         return var_size() * length[0] * length[1];
     }
 
     // Launch bound computation.
-    dim3 blocks() {
+    dim3 blocks()
+    {
         return dim3(ceildiv(length[0], blockSize), ceildiv(length[1], blockSize));
     }
-    dim3 threads() {
+    dim3 threads()
+    {
         return dim3(blockSize, blockSize);
     }
-    
+
     // Initialize the device buffer with data.
-    void compute_input(void* in) {
-        switch(get_var_type()) {
+    void compute_input(void* in)
+    {
+        switch(get_var_type())
+        {
         case real_single:
             hipLaunchKernelGGL(init_buffer<float>,
                                blocks(),
@@ -220,44 +251,56 @@ public:
     }
 
     // Compute occupancy from hip API.
-    int occupancy() {
-        int         max_blocks_per_sm{};
-        hipError_t  ret{};
-       
-        switch(get_var_type()) {
+    int occupancy()
+    {
+        int        max_blocks_per_sm{};
+        hipError_t ret{};
+
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+        ret = hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+            &max_blocks_per_sm, kernel, threads().x * threads().y * threads().z, lds_bytes());
+#else
+        switch(get_var_type())
+        {
         case real_single:
             ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
                                                                transpose<float>,
-                                                               threads().x * threads().y * threads().z,         
+                                                               threads().x * threads().y
+                                                                   * threads().z,
                                                                lds_bytes());
             break;
         case complex_single:
             ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
                                                                transpose<float2>,
-                                                               threads().x * threads().y * threads().z,         
+                                                               threads().x * threads().y
+                                                                   * threads().z,
                                                                lds_bytes());
             break;
         case real_double:
             ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
                                                                transpose<double>,
-                                                               threads().x * threads().y * threads().z,         
+                                                               threads().x * threads().y
+                                                                   * threads().z,
                                                                lds_bytes());
             break;
         case complex_double:
             ret = hipOccupancyMaxActiveBlocksPerMultiprocessor(&max_blocks_per_sm,
                                                                transpose<double2>,
-                                                               threads().x * threads().y * threads().z,         
+                                                               threads().x * threads().y
+                                                                   * threads().z,
                                                                lds_bytes());
             break;
         }
+#endif
         if(ret != hipSuccess)
             throw std::runtime_error("hipOccupancyMaxActiveBlocksPerMultiprocessor failed");
-            
+
         return max_blocks_per_sm;
     }
 
     // Compute shared memory requirement
-    size_t lds_bytes() {
+    size_t lds_bytes()
+    {
 #if USE_LDS
         size_t lds_count = (blockSize + padding) * blockSize;
 #else
@@ -267,81 +310,120 @@ public:
     }
 
     // hipExtLaunch execution path.
-    void ext_execute(void* in, void* out, hipEvent_t start, hipEvent_t stop) {
+    void ext_execute(void* in, void* out, hipEvent_t start, hipEvent_t stop)
+    {
         int ggl_flags = 0;
-        
-        switch(get_var_type()) {
+
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+        // just do normal execute for now
+        execute(in, out);
+#else
+        switch(get_var_type())
+        {
         case real_single:
-                hipExtLaunchKernelGGL(transpose<float>,
-                                      blocks(),
-                                      threads(),
-                                      lds_bytes(),
-                                      0, // stream
-                                      start,
-                                      stop,
-                                      ggl_flags,
-                                      (float*)in,
-                                      (float*)out,
-                                      length[0],
-                                      length[1],
-                                      blockSize,
-                                      padding);
-                break;
+            hipExtLaunchKernelGGL(transpose<float>,
+                                  blocks(),
+                                  threads(),
+                                  lds_bytes(),
+                                  0, // stream
+                                  start,
+                                  stop,
+                                  ggl_flags,
+                                  (float*)in,
+                                  (float*)out,
+                                  length[0],
+                                  length[1],
+                                  blockSize,
+                                  padding);
+            break;
 
         case complex_single:
-                hipExtLaunchKernelGGL(transpose<float2>,
-                                      blocks(),
-                                      threads(),
-                                      lds_bytes(),
-                                      0, // stream
-                                      start,
-                                      stop,
-                                      ggl_flags,
-                                      (float2*)in,
-                                      (float2*)out,
-                                      length[0],
-                                      length[1],
-                                      blockSize,
-                                      padding);
-                break;
+            hipExtLaunchKernelGGL(transpose<float2>,
+                                  blocks(),
+                                  threads(),
+                                  lds_bytes(),
+                                  0, // stream
+                                  start,
+                                  stop,
+                                  ggl_flags,
+                                  (float2*)in,
+                                  (float2*)out,
+                                  length[0],
+                                  length[1],
+                                  blockSize,
+                                  padding);
+            break;
         case real_double:
-                hipExtLaunchKernelGGL(transpose<double>,
-                                      blocks(),
-                                      threads(),
-                                      lds_bytes(),
-                                      0, // stream
-                                      start,
-                                      stop,
-                                      ggl_flags,
-                                      (double*)in,
-                                      (double*)out,
-                                      length[0],
-                                      length[1],
-                                      blockSize,
-                                      padding);
-                break;
+            hipExtLaunchKernelGGL(transpose<double>,
+                                  blocks(),
+                                  threads(),
+                                  lds_bytes(),
+                                  0, // stream
+                                  start,
+                                  stop,
+                                  ggl_flags,
+                                  (double*)in,
+                                  (double*)out,
+                                  length[0],
+                                  length[1],
+                                  blockSize,
+                                  padding);
+            break;
         case complex_double:
-                hipExtLaunchKernelGGL(transpose<double2>,
-                                      blocks(),
-                                      threads(),
-                                      lds_bytes(),
-                                      0, // stream
-                                      start,
-                                      stop,
-                                      ggl_flags,
-                                      (double2*)in,
-                                      (double2*)out,
-                                      length[0],
-                                      length[1],
-                                      blockSize,
-                                      padding);
-                break;
+            hipExtLaunchKernelGGL(transpose<double2>,
+                                  blocks(),
+                                  threads(),
+                                  lds_bytes(),
+                                  0, // stream
+                                  start,
+                                  stop,
+                                  ggl_flags,
+                                  (double2*)in,
+                                  (double2*)out,
+                                  length[0],
+                                  length[1],
+                                  blockSize,
+                                  padding);
+            break;
         }
+#endif
     };
 
     // Normal execution path.
-    void execute(void* in, void* out) {
-        switch(get_var_type()) {
+    void execute(void* in, void* out)
+    {
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+        RTCKernelArgs kargs;
+        kargs.append_ptr(in);
+        kargs.append_ptr(out);
+        kargs.append_int(length[0]);
+        kargs.append_int(length[1]);
+        kargs.append_int(blockSize);
+        kargs.append_int(padding);
+
+        auto  size     = kargs.size_bytes();
+        void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER,
+                          kargs.data(),
+                          HIP_LAUNCH_PARAM_BUFFER_SIZE,
+                          &size,
+                          HIP_LAUNCH_PARAM_END};
+
+        auto gridDim  = blocks();
+        auto blockDim = threads();
+        (void)hipModuleLaunchKernel(kernel,
+                                    gridDim.x,
+                                    gridDim.y,
+                                    gridDim.z,
+                                    blockDim.x,
+                                    blockDim.y,
+                                    blockDim.z,
+                                    lds_bytes(),
+                                    0,
+                                    nullptr,
+                                    config);
+#else
+        switch(get_var_type())
+        {
         case real_single:
             hipLaunchKernelGGL(transpose<float>,
                                blocks(),
@@ -395,22 +477,91 @@ public:
                                padding);
             break;
         }
+#endif
     };
-    
 };
 
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+void rtc_transpose(const transpose_params& params)
+{
+    std::string src;
+    switch(params.get_var_type())
+    {
+    case real_single:
+        src += "typedef float Tval;\n";
+        break;
+    case complex_single:
+        src += "typedef float2 Tval;\n";
+        break;
+    case real_double:
+        src += "typedef double Tval;\n";
+        break;
+    case complex_double:
+        src += "typedef double2 Tval;\n";
+        break;
+    }
+    std::ifstream header_file("../transpose-kernel.h");
+    std::string   header_str;
+    std::getline(header_file, header_str, static_cast<char>(0));
+    src += header_str;
 
-template<typename Tval, typename Tvlength>
+    hiprtcProgram prog;
+    if(hiprtcCreateProgram(&prog, src.c_str(), "rtc.cu", 0, nullptr, nullptr) != HIPRTC_SUCCESS)
+    {
+        throw std::runtime_error("unable to create program");
+    }
+    std::vector<const char*> options;
+#ifdef USE_LDS
+    options.push_back("-DUSE_LDS=1");
+#endif
+    options.push_back("-DTRANSPOSE_RUNTIME_COMPILE=1");
+
+    auto compileResult = hiprtcCompileProgram(prog, options.size(), options.data());
+    if(compileResult != HIPRTC_SUCCESS)
+    {
+        size_t logSize = 0;
+        hiprtcGetProgramLogSize(prog, &logSize);
+
+        if(logSize)
+        {
+            std::vector<char> log(logSize, '\0');
+            if(hiprtcGetProgramLog(prog, log.data()) == HIPRTC_SUCCESS)
+                throw std::runtime_error(log.data());
+        }
+        throw std::runtime_error("compile failed without log");
+    }
+
+    size_t codeSize;
+    if(hiprtcGetCodeSize(prog, &codeSize) != HIPRTC_SUCCESS)
+        throw std::runtime_error("failed to get code size");
+
+    std::vector<char> code(codeSize);
+    if(hiprtcGetCode(prog, code.data()) != HIPRTC_SUCCESS)
+        throw std::runtime_error("failed to get code");
+    hiprtcDestroyProgram(&prog);
+
+    if(hipModuleLoadData(&module, code.data()) != hipSuccess)
+        throw std::runtime_error("failed to load module");
+
+    if(hipModuleGetFunction(&kernel, module, "transpose") != hipSuccess)
+        throw std::runtime_error("failed to get function");
+}
+#endif
+
+template <typename Tval, typename Tvlength>
 int Tcheck_result(const void* vin, const void* vout, const Tvlength& length, const int verbose)
 {
-    const auto pin = (Tval*)vin;
+    const auto pin  = (Tval*)vin;
     const auto pout = (Tval*)vout;
 
     int nbad = 0;
-    
-    for(int ix = 0; ix <  length[0]; ++ix) {
-        for(int iy = 0; iy <  length[1]; ++iy) {
-            if(pin[ix * length[1] + iy] != pout[iy * length[0] + ix]) {
+
+    for(int ix = 0; ix < length[0]; ++ix)
+    {
+        for(int iy = 0; iy < length[1]; ++iy)
+        {
+            if(pin[ix * length[1] + iy] != pout[iy * length[0] + ix])
+            {
                 nbad++;
                 if(verbose)
                     std::cout << "incorrect result at (" << ix << "," << iy << ")\n";
@@ -421,9 +572,13 @@ int Tcheck_result(const void* vin, const void* vout, const Tvlength& length, con
 }
 
 // After having copied the data to the host, check that it's a transpose.
-int check_result(const void* vin, const void* vout, const transpose_params& params, const int verbose)
+int check_result(const void*             vin,
+                 const void*             vout,
+                 const transpose_params& params,
+                 const int               verbose)
 {
-    switch(params.get_var_type()) {
+    switch(params.get_var_type())
+    {
     case real_single:
         return Tcheck_result<float>(vin, vout, params.length, verbose);
         break;
@@ -441,12 +596,14 @@ int check_result(const void* vin, const void* vout, const transpose_params& para
     }
     return 0;
 }
-    
-template<typename Tval>
+
+template <typename Tval>
 void Tprint_buffer(const Tval* buf, const size_t Nx, const size_t Ny)
 {
-    for(size_t i = 0; i < Nx; ++i) {
-        for(size_t j = 0; j < Ny; ++j) {
+    for(size_t i = 0; i < Nx; ++i)
+    {
+        for(size_t j = 0; j < Ny; ++j)
+        {
             std::cout << buf[i * Ny + j];
             if(j != 0)
                 std::cout << "\t";
@@ -457,9 +614,13 @@ void Tprint_buffer(const Tval* buf, const size_t Nx, const size_t Ny)
 }
 
 // Print a host buffer.
-void print_buffer(const transpose_params& params, const std::vector<char>& buf, const size_t nx, const size_t ny)
+void print_buffer(const transpose_params&  params,
+                  const std::vector<char>& buf,
+                  const size_t             nx,
+                  const size_t             ny)
 {
-    switch(params.get_var_type()) {
+    switch(params.get_var_type())
+    {
     case real_single:
         Tprint_buffer<float>((float*)buf.data(), nx, ny);
         break;
@@ -476,7 +637,7 @@ void print_buffer(const transpose_params& params, const std::vector<char>& buf, 
         throw std::runtime_error("invalid data type");
     }
 }
-    
+
 int main(int argc, char* argv[])
 {
     // This helps with mixing output of both wide and narrow characters to the screen
@@ -490,13 +651,13 @@ int main(int argc, char* argv[])
 
     // Number of performance trial samples
     int ntrial{};
-    
+
     // Use hipExtLaunch function for kernel launch and timing:
     bool extLaunch = false;
 
     // Paramter structure for doing a transpose.
     transpose_params params;
-    
+
     // clang-format doesn't handle boost program options very well:
     // clang-format off
     po::options_description opdesc("transpose rider command line options");
@@ -505,7 +666,8 @@ int main(int argc, char* argv[])
         ("verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")
         ("ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")
         ("length",  po::value<std::vector<size_t>>(&params.length)->multitoken(), "Lengths.")
-        ("ext,e", "Use hipExtLaunchKernelGGL for launch and time kernels.");
+        ("ext,e", "Use hipExtLaunchKernelGGL for launch and time kernels.")
+        ("double", "Double precision transpose (default: single).");
     //clang-format on
 
     po::variables_map vm;
@@ -525,8 +687,6 @@ int main(int argc, char* argv[])
 #endif
     std::cout << "LDS bytes: " << params.lds_bytes() << std::endl;
 
-    std::cout << "occupancy: " << params.occupancy() << std::endl;
-    
     if(vm.count("ntrial"))
     {
         std::cout << "Running profile with " << ntrial << " samples\n";
@@ -558,7 +718,13 @@ int main(int argc, char* argv[])
         std::cout << "using ext kernel launcher\n";
         extLaunch = true;
     }
-            
+
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+    rtc_transpose(params);
+#endif
+    
+    std::cout << "occupancy: " << params.occupancy() << std::endl;
+    
     std::cout << std::endl;
 
     auto hip_ret = hipSuccess;
@@ -657,6 +823,12 @@ int main(int argc, char* argv[])
     hip_ret = hipFree(out);
     if(hip_ret != hipSuccess)
         throw std::runtime_error("hipFree failed");
+
+#ifdef TRANSPOSE_RUNTIME_COMPILE
+    kernel = nullptr;
+    (void)hipModuleUnload(module);
+    module = nullptr;
+#endif
     
     return 0;
 } 
