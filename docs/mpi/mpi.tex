@@ -51,10 +51,67 @@
 
 These are notes on distritubed implementations for rocFFT.
 
-\section{2D Decompositions}
+\section{Strategy}
+
+The majority of user feedback for rocFFT is from users in a cluster
+environment.  As such, and particularly with introduction of cuFFTMp,
+NVIDIA's distributed FFT library, there is interest in developing a
+distributed version of rocFFT.
+
+Many cluster applications which use FFTs developed their own
+distributed version.  For example, GESTS and gromacs.  In order for a
+distributed rocFFT to be succesful, it needs to be faster / more
+reliable / simpler to use / more feature complete than the application
+implementation.  That said, we have had interest from several
+applications for an AMD version.
+
+cuFFTMp uses NVSHMEM for communication.  ROCSHMEM is an AMD research
+project which doesn't have release-level support.  As such, MPI is
+probably the best solution for a distributed rocFFT.
+
+Distributed FFTs need to have data transposed so that 1D FFTs can be
+computed with all the relevant data on a single device.  This
+transpose is very expensive, and distributed FFTs are severely
+bandwidth-limited.  Optimizing this stage is the key to producing a
+good distributed FFT.  In section~\ref{section_data_decomp}, we
+introduce the standard data decompositions and the associated
+transpose costs.
+
+In addition, we can look at using MPI sub-communicators, FFTW's
+various algorithms for transpose, and FFTW++'s recursive transpose.
+In addition, it may be possible to do some passes on distributed data
+in order to get as much work done as possible when the data is
+contiguous, as well as allowing us to separate data dependencies so as
+to allow for computation/communication overlap.  See
+section~\ref{subpasses}.
+
+Compressing data may be a useful strategy.  zfp is available on the
+GPU.  Lossy compression may also be appropriate if we can effectively
+control the loss of precision.  In addition, the fast multipole method
+may be worth considering, as this has generally better communication
+properties than a transpose.  However, this requires the user to
+specify a precision tolerance.
+
+Since one of the main uses of the FFT is for convolutions (eg GESTS,
+gromacs), we can design an distributed FFT that is faster for this
+operation.  At the most basic level, FFT-based convolutions need to be
+zero-padded.  For the normal $1/2$ padding case, a 3D convolution
+requires a buffer that is $87.5\%$ zeros; the first transpose can skip
+the $75\%$ of the buffer that is just zero.  Furthermore, implicitly
+dealiased convolutions can further reduce computation cost and allow
+for better communication patterns.
+
+
+
+\section{Data Decompositions}
+\label{section_data_decomp}
+
+
+\subsection{2D Decompositions}
 
 There are basically two decompositions for 2D data of size $N^2$ over
-$P$ procs; either block or pencil.  Block decompositions have dimensions
+$P$ procs; either block or pencil.  Block decompositions have
+dimensions
 \begin{dmath}
   \label{brick2d}
   \left(\frac{N}{P^{1/2}}, \frac{N}{P^{1/2}} \right)
@@ -65,7 +122,7 @@ and pencil has dimensions
   \left(N, \frac{N}{P} \right).
 \end{dmath}
 
-\subsection{Brick-pencil}
+\subsubsection{Brick-pencil}
 Each of the $P$ procs has to send $\sqrt{P}-1$ messages with dimension
 \begin{dmath}
   \left(\frac{N}{P^{1/2}}, \frac{N}{P} \right)
@@ -75,7 +132,7 @@ for a message size of $N^2/P^{3/2}$.  The total communication size is
   P \(\sqrt{P}-1\) N^2/P^{3/2} \approx N^2
 \end{dmath}
 
-\subsection{Pencil-pencil}
+\subsubsection{Pencil-pencil}
 Each of the $P$ procs has to send $P-1$ messages with dimension
 \begin{dmath}
   \left(\frac{N}{P}, \frac{N}{P} \right)
@@ -86,7 +143,7 @@ for a message size of $N^2/P^2$.  The total communication size is
 \end{dmath}
 
 
-\subsection{2D transform summary}
+\subsubsection{2D transform summary}
 
 \begin{centering}
   \begin{table}[htbp]
@@ -104,7 +161,7 @@ for a message size of $N^2/P^2$.  The total communication size is
 
 
 
-\section{3D Decompositions}
+\subsection{3D Decompositions}
 
 \url{https://www.osti.gov/servlets/purl/1483229}
 
@@ -125,7 +182,7 @@ or a slab decomposition,
   \left(N, N, \frac{N}{P} \right)
 \end{dmath}
 
-\subsection{Brick-Pencil}
+\subsubsection{Brick-Pencil}
 Going from distribution~\eqref{brick3d} to~\eqref{pencil3d}, each of
 the $P$ procs need to receive $P^{1/3}-1$ messages of dimensions 
 \begin{dmath}
@@ -137,7 +194,7 @@ $P(P^{1/3}-1)$ messages, for a total communication size of
   \frac{N^3}{P^{4/3}} P(P^{1/3}-1) \approx N^3.
 \end{dmath}
 
-\subsection{Brick-Slab}
+\subsubsection{Brick-Slab}
 Going from distribution~\eqref{brick3d} to~\eqref{slab3d}, each of the
 $P$ procs needs to receive $P^{2/3}-1$ messages of dimension
 \begin{dmath}
@@ -149,7 +206,7 @@ which has message size $\frac{N^2}{P^{5/3}}$.  The total communication
   P\(P^{2/3}-1\) \frac{N^2}{P^{5/3}} \approx N^3.
 \end{dmath}
 
-\subsection{Pencil-Pencil}
+\subsubsection{Pencil-Pencil}
 A pencil-to-pencil transpose requires all $P$ procs to send
 $\sqrt{P}-1$ messages of size
 \begin{dmath}
@@ -161,7 +218,7 @@ size is
   P \(\sqrt{P}-1\) \frac{N^3}{P^{3/2}} \approx N^3.
 \end{dmath}
 
-\subsection{Pencil-Slab}
+\subsubsection{Pencil-Slab}
 All $P$ procs send $P-1$ messages of size
 \begin{dmath}
   \left(\frac{N}{P}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
@@ -171,7 +228,7 @@ for a message size of $N^3/P^2$.  The total communication size is
   P \(P-1\) \frac{N^3}{P^2} \approx N^3.
 \end{dmath}
 
-\subsection{Slab-Slab}
+\subsubsection{Slab-Slab}
 All $P$ procs send $P-1$ messages of size
 \begin{dmath}
   \left(\frac{N}{P}, \frac{N}{P}, N \right)
@@ -181,7 +238,7 @@ for a message size of $N^3/P^2$. The total communication size is
   P \(P-1\) \frac{N^3}{P^2} \approx N^3.
 \end{dmath}
 
-\subsection{3D transform summary}
+\subsubsection{3D transform summary}
 
 \begin{centering}
   \begin{table}[htbp]
@@ -198,5 +255,16 @@ for a message size of $N^3/P^2$. The total communication size is
     \end{tabular}
   \end{table}
 \end{centering}
+
+\section{Sub-passes on fat slabs and pencils}
+\label{subpasses}
+
+FIXME: explain this.
+
+
+\section{Convolution and other pointwise applications}
+\label{conv}
+
+FIXME: explain this.
 
 \end{document}
