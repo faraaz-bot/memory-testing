@@ -263,6 +263,27 @@ results in $\mathcal{O}(d^3)$ cases.  The maximum storage will be in
 the one-versus-many case, for $\mathcal{O}(\ell^{d-1})$ values.  The
 computational complexity is $\mathcal{O}(d^4 \ell^{d-1})$.
 
+One may wonder if this extra work is necessary - can we just check
+pairs of 1D vertices using the 2D algorithm?  It's relatively easy to
+find a counter-example for this case: if
+$\left(\bm\ell,\bm{s}\right)=\left(\left( 307, 299, 495 \right), \left(
+50, 1006, 674 \right)\right)$, then we get a collision at
+\begin{dmath}
+  5050
+  = 50 \times 11
+  = 1 \times 1006 + 6 \times 674.
+\end{dmath}
+So we can't just search vertices; we do need to check for collisiions
+between all combinations of hypersurfaces.
+
+TODO: can we find 5050 by the solving the linear diophantine equation?
+
+% https://www.math.uwaterloo.ca/~snburris/htdocs/linear.html
+
+TODO: happy-path quick-return.
+
+TODO: sorted and binary search.
+
 This algorithm has been verified for 1, 2, and 3 dimensions on the
 \texttt{rocFFT} accuracy test suite.  This covers several thousand
 different cases.  The time required for validating the data format
