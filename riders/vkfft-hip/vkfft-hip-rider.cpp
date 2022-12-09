@@ -19,6 +19,27 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
+inline void
+    hip_V_Throw(hipError_t res, const std::string& msg, size_t lineno, const std::string& fileName)
+{
+    if(res != hipSuccess)
+    {
+        std::stringstream tmp;
+        tmp << "HIP_V_THROWERROR< ";
+        tmp << res;
+        tmp << " > (";
+        tmp << fileName;
+        tmp << " Line: ";
+        tmp << lineno;
+        tmp << "): ";
+        tmp << msg;
+        std::string errorm(tmp.str());
+        std::cout << errorm << std::endl;
+        throw std::runtime_error(errorm);
+    }
+}
+#define HIP_V_THROW(_status, _message) hip_V_Throw(_status, _message, __LINE__, __FILE__)
+
 
 int main(int argc, char* argv[])
 {
@@ -171,6 +192,8 @@ int main(int argc, char* argv[])
             std::cout << "\n";
         }
     }
+
+    std::cout << std::flush;
     
     params.validate();
     if(!params.valid(verbose))
@@ -190,27 +213,44 @@ int main(int argc, char* argv[])
         throw std::runtime_error("plan creation failed");
     }
     
-    // Input data:
-    auto gpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
-    compute_input(params, gpu_input);
-    if(verbose > 1)
-    {
-        std::cout << "GPU input:\n";
-        params.print_ibuffer(gpu_input);
-    }
-    
-    // GPU input and output buffers:
+
+
+
+
+
+
+
+    // GPU input buffer:
     auto                ibuffer_sizes = params.ibuffer_sizes();
     std::vector<gpubuf> ibuffer(ibuffer_sizes.size());
     std::vector<void*>  pibuffer(ibuffer_sizes.size());
     for(unsigned int i = 0; i < ibuffer.size(); ++i)
     {
-        if( ibuffer[i].alloc(ibuffer_sizes[i]) != hipSuccess)
-        {
-            throw std::runtime_error("ibuffer alloc failed");
-        }
+        HIP_V_THROW(ibuffer[i].alloc(ibuffer_sizes[i]), "Creating input Buffer failed");
         pibuffer[i] = ibuffer[i].data();
     }
+
+    // Input data:
+    params.compute_input(ibuffer);
+
+    if(verbose > 1)
+    {
+        // Copy input to CPU
+        auto cpu_input = allocate_host_buffer(params.precision, params.itype, params.isize);
+        for(unsigned int idx = 0; idx < ibuffer.size(); ++idx)
+        {
+            HIP_V_THROW(hipMemcpy(cpu_input.at(idx).data(),
+                                  ibuffer[idx].data(),
+                                  ibuffer_sizes[idx],
+                                  hipMemcpyDeviceToHost),
+                        "hipMemcpy failed");
+        }
+
+        std::cout << "GPU input:\n";
+        params.print_ibuffer(cpu_input);
+    }
+
+    // GPU output buffer:
     std::vector<gpubuf>  obuffer_data;
     std::vector<gpubuf>* obuffer = &obuffer_data;
     if(params.placement == fft_placement_inplace)
@@ -223,10 +263,7 @@ int main(int argc, char* argv[])
         obuffer_data.resize(obuffer_sizes.size());
         for(unsigned int i = 0; i < obuffer_data.size(); ++i)
         {
-            if(obuffer_data[i].alloc(obuffer_sizes[i]) != hipSuccess)
-            {
-                throw std::runtime_error("obuffer alloc failed");
-            }
+            HIP_V_THROW(obuffer_data[i].alloc(obuffer_sizes[i]), "Creating output Buffer failed");
         }
     }
     std::vector<void*> pobuffer(obuffer->size());
@@ -234,44 +271,14 @@ int main(int argc, char* argv[])
     {
         pobuffer[i] = obuffer->at(i).data();
     }
-    
-    // Warm up once:
-    for(int idx = 0; idx < gpu_input.size(); ++idx)
-    {
-        if(hipMemcpy(pibuffer[idx],
-                     gpu_input[idx].data(),
-                     gpu_input[idx].size(),
-                     hipMemcpyHostToDevice)
-           != hipSuccess)
-        {
-                throw std::runtime_error("obuffer alloc failed");
-        }
-    }
+
     
     if(params.execute(pibuffer.data(), pobuffer.data()) != fft_status_success)
     {
-        throw std::runtime_error("exec failed");
-    }
-    
-    if(verbose > 2)
-    {
-        auto output = allocate_host_buffer(params.precision, params.otype, params.osize);
-        for(int idx = 0; idx < output.size(); ++idx)
-        {
-            if( hipMemcpy(output[idx].data(),
-                          pobuffer[idx],
-                          output[idx].size(),
-                          hipMemcpyDeviceToHost)
-                != hipSuccess)
-            {
-                throw std::runtime_error("obuffer hipMemcpy failed");
-            }
-        }
-        std::cout << "GPU output:\n";
-        params.print_obuffer(output);
+        throw std::runtime_error("FFT plan execution failed!");
     }
 
-       // Run the transform several times and record the execution time:
+    // Run the transform several times and record the execution time:
     std::vector<double> gpu_time(ntrial);
 
     hipEvent_t start, stop;
@@ -286,33 +293,14 @@ int main(int argc, char* argv[])
 
     for(int itrial = 0; itrial < gpu_time.size(); ++itrial)
     {
-        // Copy the input data to the GPU:
-        for(int idx = 0; idx < gpu_input.size(); ++idx)
-        {
-            if(hipMemcpy(pibuffer[idx],
-                         gpu_input[idx].data(),
-                         gpu_input[idx].size(),
-                         hipMemcpyHostToDevice) !=  hipSuccess)
-            {
-                throw std::runtime_error("obuffer hipMemcpy failed");
-            }
-        }
+        params.compute_input(ibuffer);
 
-        if(hipEventRecord(start) !=  hipSuccess)
-        {
-            throw std::runtime_error("hipEventRecord failed");
-        }
-
+        HIP_V_THROW(hipEventRecord(start), "hipEventRecord failed");
+        
         params.execute(pibuffer.data(), pobuffer.data());
 
-        if(hipEventRecord(stop)!=  hipSuccess)
-        {
-            throw std::runtime_error("hipEventRecord failed");
-        }
-        if(hipEventSynchronize(stop)!=  hipSuccess)
-        {
-            throw std::runtime_error("hipEventSynchronize failed");
-        }
+        HIP_V_THROW(hipEventRecord(stop), "hipEventRecord failed");
+        HIP_V_THROW(hipEventSynchronize(stop), "hipEventSynchronize failed");
 
         float time;
         if(hipEventElapsedTime(&time, start, stop) !=  hipSuccess)

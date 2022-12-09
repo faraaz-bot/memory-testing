@@ -1,0 +1,5 @@
+first, compile vkfft:
+
+cmake -DCMAKE_INSTALL_PREFIX=${HOME}/vkfft -DVKFFT_BACKEND=2 ..
+
+cmake -DVKFFT_SRC_DIR=~/repo/vkfft -DROCFFT_SRC_DIR=~/repo/rocfft -DCMAKE_CXX_COMPILER=hipcc ..

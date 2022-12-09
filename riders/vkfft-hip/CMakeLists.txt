@@ -2,14 +2,15 @@ cmake_minimum_required( VERSION 3.19 )
 
 project( vkfft-hip-clients LANGUAGES CXX )
 
-add_executable( vkfft-hip-rider vkfft-hip-rider.cpp )
+add_executable( vkfft-hip-rider vkfft-hip-rider.cpp ${ROCFFT_SRC_DIR}/shared/array_validator.cpp)
 set_property( TARGET vkfft-hip-rider PROPERTY CXX_STANDARD 17 )
 
 find_package( Boost COMPONENTS program_options REQUIRED)
 
-
 list(APPEND CMAKE_PREFIX_PATH /opt/rocm/hip /opt/rocm)
-find_package(hip)
+find_package( HIP REQUIRED )
+
+find_package( rocrand REQUIRED )
 
 add_compile_definitions(VKFFT_BACKEND=2)
 
@@ -25,6 +26,7 @@ target_compile_definitions( VkFFT INTERFACE -DVKFFT_BACKEND=2 )
 target_link_libraries( vkfft-hip-rider
   PUBLIC hip::host
   VkFFT
-  Boost::program_options )
+  Boost::program_options 
+  roc::rocrand)
 
 
