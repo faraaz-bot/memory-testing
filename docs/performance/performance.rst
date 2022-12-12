@@ -234,6 +234,19 @@ Representative transforms (stride is 1):
 * 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
   
 
+GENE
+^^^^
+
+JIRA tickets
+
+* `https://ontrack-internal.amd.com/browse/SWDEV-366568`_
+
+Representative transforms:
+
+* 1D R2C: ``rocfft-rider --length 48 -t 2 -b 4423680``
+* 1D D2Z: ``rocfft-rider --length 48 -t 2 -b 4423680 --double``
+
+
 MI200
 ^^^^^
 
