@@ -270,19 +270,45 @@ $\left(\bm\ell,\bm{s}\right)=\left(\left( 307, 299, 495 \right), \left(
 50, 1006, 674 \right)\right)$, then we get a collision at
 \begin{dmath}
   5050
-  = 50 \times 11
-  = 1 \times 1006 + 6 \times 674.
+  = \left(50, 1006, 674 \right) \cdot \left(11, 0, 0  \right)
+  = \left(50, 1006, 674 \right) \cdot \left(0, 1, 6  \right)
 \end{dmath}
 So we can't just search vertices; we do need to check for collisiions
 between all combinations of hypersurfaces.
 
-TODO: can we find 5050 by the solving the linear diophantine equation?
+% TODO: can we find 5050 by the solving the linear diophantine equation?
 
 % https://www.math.uwaterloo.ca/~snburris/htdocs/linear.html
 
-TODO: happy-path quick-return.
-
 TODO: sorted and binary search.
+
+\subsection{Ordered Case}
+
+The typical case for strides is to have contiguous data in either
+row-major or column-major format.  For example, given lengths
+$\left(\ell_0,\dots,\ell_{d-1}\right)$, then strides
+$\left(\prod_{i=1}^{d-1}\ell_i,\dots{},\ell_{d-2}\ell_{d-1},\ell_{d-1},1\right)$
+give a row-major contiguous data layout with no collissions.  In
+general, we can sort the length/stride pairs in decreasing order of
+stride and then check that
+\begin{equation}
+  s_i \geq{} \ell_{i+1} s_{i+1}, \text{ for } i = 0,\dots{}d-2.
+\end{equation}
+If this relationship holds, then we know that the data format is valid
+and we can exit early, skipping any other calculation.
+
+\subsection{Solving the linear system}
+
+TODO: we can loop over the pointer offsets from one side and then
+solve the diophantine linear system on the other side; no need to
+store anything, nor to search.  We also only need to go up to the
+hyperplane defined by the vertices of each axis.  Just need to figure
+out how to create the plane, determine which side we're on (should be
+easy), and then solve the n-dimensional linear diophantine equation
+(should also be straightforward).  Then benchmark this agains the
+current implementation.
+
+\subsection{Verification and Generalization}
 
 This algorithm has been verified for 1, 2, and 3 dimensions on the
 \texttt{rocFFT} accuracy test suite.  This covers several thousand
