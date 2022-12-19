@@ -287,7 +287,7 @@ TODO: sorted and binary search.
 The typical case for strides is to have contiguous data in either
 row-major or column-major format.  For example, given lengths
 $\left(\ell_0,\dots,\ell_{d-1}\right)$, then strides
-$\left(\prod_{i=1}^{d-1}\ell_i,\dots{},\ell_{d-2}\ell_{d-1},\ell_{d-1},1\right)$
+$\left(\prod_{i=1}^{d-2}\ell_i,\dots{},\ell_{d-2}\ell_{d-1},\ell_{d-1},1\right)$
 give a row-major contiguous data layout with no collissions.  In
 general, we can sort the length/stride pairs in decreasing order of
 stride and then check that
