@@ -1,5 +1,5 @@
 import graph;
-import stats;
+import quartiles;
 
 void whiskerplot(real[][] data,
 		 string[] legend,

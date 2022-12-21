@@ -1,20 +1,15 @@
-size(15cm, 12cm, IgnoreAspect);
+import graph;
+import stats;
+
+size(400,200,IgnoreAspect);
+
+scale(Log, Linear);
 
 import utils;
-
-import graph;
-
-scale(Linear,Log);
-
-import quartiles;
-
-import whiskerplot;
 
 string filelist = "";
 
 string token = "";
-
-//string token = "complex_inverse_len_256_double_ip_batch_1_istride_1_CI_ostride_1_CI_idist_256_odist_256_ioffset_0_0_ooffset_0_0";
 
 usersetting();
 
@@ -44,21 +39,18 @@ for(int ifile = 0; ifile < filenames.length; ++ifile) {
     }
 }
 
-real[][] plotdata = new real[][];
+// TODO: the different histograms use different bin boundaries, so we
+// should maybe unify that somehow.
 
+int Nbins = 8 * bins(inputs[0][tokenidx[0]].vals);
+write("Nbins: ", N);
+                         
 for(int ifile = 0; ifile < filenames.length; ++ifile) {
-    plotdata.push(new real[]);
     int idx = tokenidx[ifile];
-    plotdata[ifile] = inputs[ifile][idx].vals;
+    histogram(inputs[ifile][idx].vals,
+              min(inputs[ifile][idx].vals),
+              max(inputs[ifile][idx].vals), Nbins, normalize=true, low=0, Pen(ifile)+opacity(0.5), black, bars=true);
 }
 
-
-string[] legendlist = new string[];
-legendlist.push("a");
-legendlist.push("b");
-
-//write(abdata);
-
-string ylegend = "time (ms)";
-
-whiskerplot(plotdata, legendlist, texify(token), ylegend);
+xaxis("time (ms)",BottomTop,LeftTicks);
+yaxis("count",LeftRight,RightTicks(trailingzero));
