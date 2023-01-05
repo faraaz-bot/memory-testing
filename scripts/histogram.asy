@@ -3,7 +3,9 @@ import stats;
 
 size(400,200,IgnoreAspect);
 
-scale(Log, Linear);
+//scale(Log, Linear);
+scale(Linear, Linear);
+
 
 import utils;
 
@@ -42,14 +44,40 @@ for(int ifile = 0; ifile < filenames.length; ++ifile) {
 // TODO: the different histograms use different bin boundaries, so we
 // should maybe unify that somehow.
 
-int Nbins = 8 * bins(inputs[0][tokenidx[0]].vals);
-write("Nbins: ", N);
-                         
+// Take the log of the data (maybe it's log-normal?)
+if(false) {
+    for(int ifile = 0; ifile < filenames.length; ++ifile) {
+        int idx = tokenidx[ifile];
+        for(int i = 0; i <inputs[ifile][idx].vals.length; ++i) {
+            inputs[ifile][idx].vals[i] = exp(inputs[ifile][idx].vals[i]);
+        }
+    }
+}
+
+// Get the bin count and the range to match all the data.
+real maxval = -inf;
+real minval = +inf;
+int Nbins = bins(inputs[0][tokenidx[0]].vals);
+for(int ifile = 0; ifile < filenames.length; ++ifile) {
+    int idx = tokenidx[ifile];
+    Nbins = max(Nbins, bins(inputs[ifile][idx].vals));
+    minval = min(min(inputs[ifile][idx].vals), minval);
+    maxval = max(max(inputs[ifile][idx].vals), maxval);
+}
+Nbins *= 4;
+
+write("Nbins: ", Nbins);
+write("minval: ", minval);
+write("maxval: ", maxval);
+
+//maxval = 0.08;
+
 for(int ifile = 0; ifile < filenames.length; ++ifile) {
     int idx = tokenidx[ifile];
     histogram(inputs[ifile][idx].vals,
-              min(inputs[ifile][idx].vals),
-              max(inputs[ifile][idx].vals), Nbins, normalize=true, low=0, Pen(ifile)+opacity(0.5), black, bars=true);
+              minval,
+              maxval,
+              Nbins, normalize=true, low=0, Pen(ifile)+opacity(0.5), black, bars=true);
 }
 
 xaxis("time (ms)",BottomTop,LeftTicks);
