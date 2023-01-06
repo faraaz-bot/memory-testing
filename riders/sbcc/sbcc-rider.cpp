@@ -66,6 +66,7 @@ hipFunction_t kernel = nullptr;
 #else
 #include "sbcc-kernel.h"
 #endif
+#include "sbrr-kernel.h"
 
 // Simple RAII class for GPU buffers.  T is the type of pointer that
 // data() returns
@@ -161,17 +162,17 @@ T1 ceildiv(T1 a, T2 b)
     return (a + b - 1) / b;
 }
 
-// return a GPU buffer filled with random double2 data
-gpubuf_t<double2> hipMalloc_random_double2s(unsigned int Ndouble2s)
+// return a GPU buffer filled with random float2 data
+gpubuf_t<float2> hipMalloc_random_float2s(unsigned int Nfloat2s)
 {
-    gpubuf_t<double2> ret;
-    if(ret.alloc(sizeof(double2) * Ndouble2s) != hipSuccess)
+    gpubuf_t<float2> ret;
+    if(ret.alloc(sizeof(float2) * Nfloat2s) != hipSuccess)
         throw std::runtime_error("failed to hipMalloc");
 
-    std::vector<double2> hostBuf(Ndouble2s);
+    std::vector<float2> hostBuf(Nfloat2s);
 
     auto partitions     = std::max<size_t>(std::thread::hardware_concurrency(), 32);
-    auto partition_size = ceildiv(Ndouble2s, partitions);
+    auto partition_size = ceildiv(Nfloat2s, partitions);
 
 #pragma omp parallel for
     for(unsigned int partition = 0; partition < partitions; ++partition)
@@ -180,9 +181,9 @@ gpubuf_t<double2> hipMalloc_random_double2s(unsigned int Ndouble2s)
         std::uniform_real_distribution<double> dis(0.0, 1.0);
 
         auto begin = partition * partition_size;
-        if(begin >= Ndouble2s)
+        if(begin >= Nfloat2s)
             continue;
-        auto end = std::min(begin + partition_size, Ndouble2s);
+        auto end = std::min(begin + partition_size, Nfloat2s);
 
         for(auto d = hostBuf.begin() + begin; d != hostBuf.begin() + end; ++d)
         {
@@ -190,7 +191,7 @@ gpubuf_t<double2> hipMalloc_random_double2s(unsigned int Ndouble2s)
             d->y = dis(gen);
         }
     }
-    if(hipMemcpy(ret.data(), hostBuf.data(), sizeof(double2) * Ndouble2s, hipMemcpyHostToDevice)
+    if(hipMemcpy(ret.data(), hostBuf.data(), sizeof(float2) * Nfloat2s, hipMemcpyHostToDevice)
        != hipSuccess)
         throw std::runtime_error("failed to memcpy");
     return ret;
@@ -208,6 +209,109 @@ gpubuf_t<size_t> host_sizes_to_dev(const std::vector<size_t>& h)
     return ret;
 }
 
+void launch_sbrr(const gpubuf_t<float2>& twiddles,
+                 size_t                  dim,
+                 const gpubuf_t<size_t>& lengths_d,
+                 const gpubuf_t<size_t>& stride_d,
+                 size_t                  nbatch,
+                 gpubuf_t<float2>&       buf,
+                 dim3                    gridDim,
+                 dim3                    blockDim,
+                 unsigned int            lds_bytes)
+{
+    hipLaunchKernelGGL(
+        HIP_KERNEL_NAME(ip_forward_length125_SBRR<float2,
+                                                  SB_UNIT,
+                                                  EmbeddedType::NONE,
+                                                  CallbackType::NONE,
+                                                  DirectRegType::FORCE_OFF_OR_NOT_SUPPORT>),
+        gridDim,
+        blockDim,
+        lds_bytes,
+        nullptr,
+        twiddles.data(),
+        dim,
+        lengths_d.data(),
+        stride_d.data(),
+        nbatch,
+        0,
+        nullptr,
+        nullptr,
+        0,
+        nullptr,
+        nullptr,
+        buf.data());
+}
+
+void launch_sbcc(const gpubuf_t<float2>& twiddles,
+                 size_t                  dim,
+                 const gpubuf_t<size_t>& lengths_d,
+                 const gpubuf_t<size_t>& stride_d,
+                 size_t                  nbatch,
+                 gpubuf_t<float2>&       buf,
+                 dim3                    gridDim,
+                 dim3                    blockDim,
+                 unsigned int            lds_bytes)
+{
+#ifdef SBCC_RUNTIME_COMPILE
+    RTCKernelArgs kargs;
+    kargs.append_ptr(twiddles.data());
+    kargs.append_ptr(nullptr);
+    kargs.append_size_t(dim);
+    kargs.append_ptr(lengths_d.data());
+    kargs.append_ptr(stride_d.data());
+    kargs.append_size_t(nbatch);
+    kargs.append_unsigned_int(0);
+    kargs.append_ptr(nullptr);
+    kargs.append_ptr(nullptr);
+    kargs.append_unsigned_int(0);
+    kargs.append_ptr(nullptr);
+    kargs.append_ptr(nullptr);
+    kargs.append_ptr(buf.data());
+
+    auto  size     = kargs.size_bytes();
+    void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER,
+                      kargs.data(),
+                      HIP_LAUNCH_PARAM_BUFFER_SIZE,
+                      &size,
+                      HIP_LAUNCH_PARAM_END};
+    if(hipModuleLaunchKernel(kernel,
+                             gridDim.x,
+                             gridDim.y,
+                             gridDim.z,
+                             blockDim.x,
+                             blockDim.y,
+                             blockDim.z,
+                             lds_bytes,
+                             0,
+                             nullptr,
+                             config)
+       != hipSuccess)
+    {
+        throw std::runtime_error("failed to launch");
+    }
+#else
+    hipLaunchKernelGGL(fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg,
+                       gridDim,
+                       blockDim,
+                       lds_bytes,
+                       0,
+                       twiddles.data(),
+                       nullptr,
+                       dim,
+                       lengths_d.data(),
+                       stride_d.data(),
+                       nbatch,
+                       0,
+                       nullptr,
+                       nullptr,
+                       0,
+                       nullptr,
+                       nullptr,
+                       buf.data());
+#endif
+}
+
 int main()
 {
 #ifdef SBCC_RUNTIME_COMPILE
@@ -222,24 +326,8 @@ int main()
         throw std::runtime_error("unable to create program");
     }
     std::vector<const char*> options;
-    options.push_back("-Xclang");
-    options.push_back("-fallow-half-arguments-and-returns");
-    options.push_back("-D__HIP_HCC_COMPAT_MODE__=1");
-    options.push_back("-mllvm");
-    options.push_back("-amdgpu-early-inline-all=true");
-    options.push_back("-mllvm");
-    options.push_back("-amdgpu-function-calls=false");
-    options.push_back("-D__HIP_PLATFORM_AMD__=1");
-    options.push_back("-D__HIP_PLATFORM_HCC__=1");
     options.push_back("-O3");
-    options.push_back("-DNDEBUG");
-    options.push_back("-fPIC");
-    options.push_back("-fvisibility=hidden");
-    options.push_back("-fvisibility-inlines-hidden");
-    options.push_back("-fno-gpu-rdc");
-    options.push_back("-x");
-    options.push_back("hip");
-    options.push_back("-std=gnu++17");
+
     auto compileResult = hiprtcCompileProgram(prog, options.size(), options.data());
     if(compileResult != HIPRTC_SUCCESS)
     {
@@ -267,49 +355,49 @@ int main()
     if(hipModuleLoadData(&module, code.data()) != hipSuccess)
         throw std::runtime_error("failed to load module");
 
-    if(hipModuleGetFunction(
-           &kernel, module, "fft_rtc_fwd_len168_dp_op_CI_CI_sbcc_twdbase8_2step_dirReg")
+    if(hipModuleGetFunction(&kernel, module, "fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg")
        != hipSuccess)
         throw std::runtime_error("failed to get function");
 #endif
 
-    // problem size: double-precision batch-5000 length-21504 FFT.
-    // Length-21504 is decomposed into length-168 SBCC + length-128 SBRC.
-    const unsigned int lengthCC = 168;
-    const unsigned int lengthRC = 128;
-    const unsigned int length   = lengthCC * lengthRC;
-    const unsigned int batch    = 5000;
+    // problem size: single-precision batch-10 length-125x125x125 FFT.
+    const unsigned int length = 125;
+    const unsigned int batch  = 10;
 
-    // length-168 SBCC needs 161 normal twiddles, 512 large twd.
-    const unsigned int twiddle_length       = 161;
-    const unsigned int large_twiddle_length = 512;
+    // length-125 SBCC needs 120 normal twiddles
+    const unsigned int twiddle_length = 120;
 
-    // length-168 SBCC does 42 threads per transform, 6 transforms per block
-    const unsigned int threads_per_transform = 42;
-    const unsigned int transforms_per_block  = 6;
-    const unsigned int grid                  = ceildiv(lengthRC, transforms_per_block) * batch;
-    const unsigned int threads               = threads_per_transform * transforms_per_block;
-    const bool         halfLds               = true;
-    const unsigned int lds_bytes
-        = transforms_per_block * lengthCC * sizeof(double2) / (halfLds ? 2 : 1);
+    // length-125 SBRR does 25 threads per transform, 10 transforms per block
+    const unsigned int threads_per_transformRR = 25;
+    const unsigned int transforms_per_blockRR  = 10;
+    const unsigned int gridRR                  = ceildiv(125 * 125 * batch, transforms_per_blockRR);
+    const unsigned int threadsRR               = threads_per_transformRR * transforms_per_blockRR;
+    const bool         halfLdsRR               = false;
+    const unsigned int lds_bytesRR
+        = transforms_per_blockRR * length * sizeof(float2) / (halfLdsRR ? 2 : 1);
+
+    // length-125 SBCC does 25 threads per transform, 16 transforms per block
+    const unsigned int threads_per_transformCC = 25;
+    const unsigned int transforms_per_blockCC  = 16;
+    const unsigned int gridCC                  = ceildiv(125, transforms_per_blockCC) * 125 * batch;
+    const unsigned int threadsCC               = threads_per_transformCC * transforms_per_blockCC;
+    const bool         halfLdsCC               = false;
+    const unsigned int lds_bytesCC
+        = transforms_per_blockCC * length * sizeof(float2) / (halfLdsCC ? 2 : 1);
 
     const unsigned int nTrials = 20;
 
-    std::vector<size_t> lengths_h;
-    lengths_h.push_back(lengthCC);
-    lengths_h.push_back(lengthRC);
-    std::vector<size_t> stride_h;
-    stride_h.push_back(lengthRC);
-    stride_h.push_back(1);
-    stride_h.push_back(length);
-    auto lengths_d    = host_sizes_to_dev(lengths_h);
-    auto stride_in_d  = host_sizes_to_dev(stride_h);
-    auto stride_out_d = host_sizes_to_dev(stride_h);
+    auto lengths_RR_d = host_sizes_to_dev({125});
+    auto stride_RR_d  = host_sizes_to_dev({1, 125});
 
-    auto input          = hipMalloc_random_double2s(length * batch);
-    auto output         = hipMalloc_random_double2s(length * batch);
-    auto twiddles       = hipMalloc_random_double2s(twiddle_length);
-    auto large_twiddles = hipMalloc_random_double2s(large_twiddle_length);
+    auto lengths_CC1_d = host_sizes_to_dev({125, 125});
+    auto stride_CC1_d  = host_sizes_to_dev({125, 1, 15625});
+
+    auto lengths_CC2_d = host_sizes_to_dev({125, 125, 125});
+    auto stride_CC2_d  = host_sizes_to_dev({15625, 1, 125, 1953125});
+
+    auto input    = hipMalloc_random_float2s(length * length * length * batch);
+    auto twiddles = hipMalloc_random_float2s(twiddle_length);
 
     std::vector<float> samples(nTrials);
 
@@ -322,57 +410,14 @@ int main()
     {
         if(hipEventRecord(start) != hipSuccess)
             throw std::runtime_error("hipEventRecord failed");
-#ifdef SBCC_RUNTIME_COMPILE
-        RTCKernelArgs kargs;
-        kargs.append_ptr(twiddles.data());
-        kargs.append_ptr(large_twiddles.data());
-        kargs.append_size_t(2);
-        kargs.append_ptr(lengths_d.data());
-        kargs.append_ptr(stride_in_d.data());
-        kargs.append_ptr(stride_out_d.data());
-        kargs.append_size_t(batch);
-        kargs.append_unsigned_int(0);
-        kargs.append_ptr(nullptr);
-        kargs.append_ptr(nullptr);
-        kargs.append_unsigned_int(0);
-        kargs.append_ptr(nullptr);
-        kargs.append_ptr(nullptr);
-        kargs.append_ptr(input.data());
-        kargs.append_ptr(output.data());
 
-        auto  size     = kargs.size_bytes();
-        void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER,
-                          kargs.data(),
-                          HIP_LAUNCH_PARAM_BUFFER_SIZE,
-                          &size,
-                          HIP_LAUNCH_PARAM_END};
-        if(hipModuleLaunchKernel(kernel, grid, 1, 1, threads, 1, 1, lds_bytes, 0, nullptr, config)
-           != hipSuccess)
-        {
-            throw std::runtime_error("failed to launch");
-        }
-#else
-        hipLaunchKernelGGL(fft_rtc_fwd_len168_dp_op_CI_CI_sbcc_twdbase8_2step_dirReg,
-                           grid,
-                           threads,
-                           lds_bytes,
-                           0,
-                           twiddles.data(),
-                           large_twiddles.data(),
-                           2,
-                           lengths_d.data(),
-                           stride_in_d.data(),
-                           stride_out_d.data(),
-                           batch,
-                           0,
-                           nullptr,
-                           nullptr,
-                           0,
-                           nullptr,
-                           nullptr,
-                           input.data(),
-                           output.data());
-#endif
+        launch_sbrr(
+            twiddles, 1, lengths_RR_d, stride_RR_d, 156250, input, gridRR, threadsRR, lds_bytesRR);
+        launch_sbcc(
+            twiddles, 2, lengths_CC1_d, stride_CC1_d, 1250, input, gridCC, threadsCC, lds_bytesCC);
+        launch_sbcc(
+            twiddles, 3, lengths_CC2_d, stride_CC2_d, 1250, input, gridCC, threadsCC, lds_bytesCC);
+
         if(hipEventRecord(stop) != hipSuccess)
             throw std::runtime_error("hipEventRecord failed");
         if(hipEventSynchronize(stop) != hipSuccess)

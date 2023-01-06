@@ -1,4 +1,4 @@
-// ROCFFT_RTC_BEGIN fft_rtc_fwd_len168_dp_op_CI_CI_sbcc_twdbase8_2step_dirReg
+// ROCFFT_RTC_BEGIN fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg
 #define ROCFFT_CALLBACKS_ENABLED
 
 // Copyright (C) 2016 - 2022 Advanced Micro Devices, Inc. All rights reserved.
@@ -1362,6 +1362,9 @@ static __device__ typename callback_type<T>::store get_store_cb(void* ptr)
  * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
  ******************************************************************************/
 
+#ifndef ROCFFT_BUTTERFLY_TEMPLATE_H
+#define ROCFFT_BUTTERFLY_TEMPLATE_H
+
 template <typename T, size_t Base, size_t Steps>
 __device__ T TW_NSteps(const T* const twiddles, size_t u)
 {
@@ -1391,15 +1394,208 @@ __device__ T TW_NSteps(const T* const twiddles, size_t u)
                                      (result.y * twiddles[(1 << Base) * i + j].x
                                       + result.x * twiddles[(1 << Base) * i + j].y));
     }
-    static_assert(Steps < 4, "4-steps is not support");
+    // we probably don't have 4-steps for large-twiddle
     // if(Steps >= 4){...}
 
     return result;
 }
 
-/*******************************************************************************
- * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
- ******************************************************************************/
+template <typename T>
+__device__ T TW3step(const T* const twiddles, size_t u)
+{
+    size_t j      = u & 255;
+    T      result = twiddles[j];
+
+    u >>= 8;
+    j      = u & 255;
+    result = lib_make_vector2<T>((result.x * twiddles[256 + j].x - result.y * twiddles[256 + j].y),
+                                 (result.y * twiddles[256 + j].x + result.x * twiddles[256 + j].y));
+
+    u >>= 8;
+    j      = u & 255;
+    result = lib_make_vector2<T>((result.x * twiddles[512 + j].x - result.y * twiddles[512 + j].y),
+                                 (result.y * twiddles[512 + j].x + result.x * twiddles[512 + j].y));
+    return result;
+}
+
+template <typename T>
+__device__ void FwdRad2B1(T* R0, T* R1)
+{
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+}
+
+template <typename T>
+__device__ void InvRad2B1(T* R0, T* R1)
+{
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+}
+
+template <typename T>
+__device__ void FwdRad3B1(T* R0, T* R1, T* R2)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2;
+
+    TR0 = (*R0).x + (*R1).x + (*R2).x;
+    TR1 = ((*R0).x - C3QA * ((*R1).x + (*R2).x)) + C3QB * ((*R1).y - (*R2).y);
+    TR2 = ((*R0).x - C3QA * ((*R1).x + (*R2).x)) - C3QB * ((*R1).y - (*R2).y);
+
+    TI0 = (*R0).y + (*R1).y + (*R2).y;
+    TI1 = ((*R0).y - C3QA * ((*R1).y + (*R2).y)) - C3QB * ((*R1).x - (*R2).x);
+    TI2 = ((*R0).y - C3QA * ((*R1).y + (*R2).y)) + C3QB * ((*R1).x - (*R2).x);
+
+    ((*R0).x) = TR0;
+    ((*R0).y) = TI0;
+    ((*R1).x) = TR1;
+    ((*R1).y) = TI1;
+    ((*R2).x) = TR2;
+    ((*R2).y) = TI2;
+}
+
+template <typename T>
+__device__ void InvRad3B1(T* R0, T* R1, T* R2)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2;
+
+    TR0 = (*R0).x + (*R1).x + (*R2).x;
+    TR1 = ((*R0).x - C3QA * ((*R1).x + (*R2).x)) - C3QB * ((*R1).y - (*R2).y);
+    TR2 = ((*R0).x - C3QA * ((*R1).x + (*R2).x)) + C3QB * ((*R1).y - (*R2).y);
+
+    TI0 = (*R0).y + (*R1).y + (*R2).y;
+    TI1 = ((*R0).y - C3QA * ((*R1).y + (*R2).y)) + C3QB * ((*R1).x - (*R2).x);
+    TI2 = ((*R0).y - C3QA * ((*R1).y + (*R2).y)) - C3QB * ((*R1).x - (*R2).x);
+
+    ((*R0).x) = TR0;
+    ((*R0).y) = TI0;
+    ((*R1).x) = TR1;
+    ((*R1).y) = TI1;
+    ((*R2).x) = TR2;
+    ((*R2).y) = TI2;
+}
+
+template <typename T>
+__device__ void FwdRad4B1(T* R0, T* R2, T* R1, T* R3)
+{
+
+    T res;
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+    (*R3) = (*R2) - (*R3);
+    (*R2) = 2.0 * (*R2) - (*R3);
+
+    (*R2) = (*R0) - (*R2);
+    (*R0) = 2.0 * (*R0) - (*R2);
+
+    (*R3) = (*R1) + lib_make_vector2<T>(-(*R3).y, (*R3).x);
+    (*R1) = 2.0 * (*R1) - (*R3);
+
+    res   = (*R1);
+    (*R1) = (*R2);
+    (*R2) = res;
+}
+
+template <typename T>
+__device__ void InvRad4B1(T* R0, T* R2, T* R1, T* R3)
+{
+
+    T res;
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+    (*R3) = (*R2) - (*R3);
+    (*R2) = 2.0 * (*R2) - (*R3);
+
+    (*R2) = (*R0) - (*R2);
+    (*R0) = 2.0 * (*R0) - (*R2);
+    (*R3) = (*R1) + lib_make_vector2<T>((*R3).y, -(*R3).x);
+    (*R1) = 2.0 * (*R1) - (*R3);
+
+    res   = (*R1);
+    (*R1) = (*R2);
+    (*R2) = res;
+}
+
+template <typename T>
+__device__ void FwdRad5B1(T* R0, T* R1, T* R2, T* R3, T* R4)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2, TR3, TI3, TR4, TI4;
+
+    TR0 = (*R0).x + (*R1).x + (*R2).x + (*R3).x + (*R4).x;
+    TR1 = ((*R0).x - C5QC * ((*R2).x + (*R3).x)) + C5QB * ((*R1).y - (*R4).y)
+          + C5QD * ((*R2).y - (*R3).y) + C5QA * (((*R1).x - (*R2).x) + ((*R4).x - (*R3).x));
+    TR4 = ((*R0).x - C5QC * ((*R2).x + (*R3).x)) - C5QB * ((*R1).y - (*R4).y)
+          - C5QD * ((*R2).y - (*R3).y) + C5QA * (((*R1).x - (*R2).x) + ((*R4).x - (*R3).x));
+    TR2 = ((*R0).x - C5QC * ((*R1).x + (*R4).x)) - C5QB * ((*R2).y - (*R3).y)
+          + C5QD * ((*R1).y - (*R4).y) + C5QA * (((*R2).x - (*R1).x) + ((*R3).x - (*R4).x));
+    TR3 = ((*R0).x - C5QC * ((*R1).x + (*R4).x)) + C5QB * ((*R2).y - (*R3).y)
+          - C5QD * ((*R1).y - (*R4).y) + C5QA * (((*R2).x - (*R1).x) + ((*R3).x - (*R4).x));
+
+    TI0 = (*R0).y + (*R1).y + (*R2).y + (*R3).y + (*R4).y;
+    TI1 = ((*R0).y - C5QC * ((*R2).y + (*R3).y)) - C5QB * ((*R1).x - (*R4).x)
+          - C5QD * ((*R2).x - (*R3).x) + C5QA * (((*R1).y - (*R2).y) + ((*R4).y - (*R3).y));
+    TI4 = ((*R0).y - C5QC * ((*R2).y + (*R3).y)) + C5QB * ((*R1).x - (*R4).x)
+          + C5QD * ((*R2).x - (*R3).x) + C5QA * (((*R1).y - (*R2).y) + ((*R4).y - (*R3).y));
+    TI2 = ((*R0).y - C5QC * ((*R1).y + (*R4).y)) + C5QB * ((*R2).x - (*R3).x)
+          - C5QD * ((*R1).x - (*R4).x) + C5QA * (((*R2).y - (*R1).y) + ((*R3).y - (*R4).y));
+    TI3 = ((*R0).y - C5QC * ((*R1).y + (*R4).y)) - C5QB * ((*R2).x - (*R3).x)
+          + C5QD * ((*R1).x - (*R4).x) + C5QA * (((*R2).y - (*R1).y) + ((*R3).y - (*R4).y));
+
+    ((*R0).x) = TR0;
+    ((*R0).y) = TI0;
+    ((*R1).x) = TR1;
+    ((*R1).y) = TI1;
+    ((*R2).x) = TR2;
+    ((*R2).y) = TI2;
+    ((*R3).x) = TR3;
+    ((*R3).y) = TI3;
+    ((*R4).x) = TR4;
+    ((*R4).y) = TI4;
+}
+
+template <typename T>
+__device__ void InvRad5B1(T* R0, T* R1, T* R2, T* R3, T* R4)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2, TR3, TI3, TR4, TI4;
+
+    TR0 = (*R0).x + (*R1).x + (*R2).x + (*R3).x + (*R4).x;
+    TR1 = ((*R0).x - C5QC * ((*R2).x + (*R3).x)) - C5QB * ((*R1).y - (*R4).y)
+          - C5QD * ((*R2).y - (*R3).y) + C5QA * (((*R1).x - (*R2).x) + ((*R4).x - (*R3).x));
+    TR4 = ((*R0).x - C5QC * ((*R2).x + (*R3).x)) + C5QB * ((*R1).y - (*R4).y)
+          + C5QD * ((*R2).y - (*R3).y) + C5QA * (((*R1).x - (*R2).x) + ((*R4).x - (*R3).x));
+    TR2 = ((*R0).x - C5QC * ((*R1).x + (*R4).x)) + C5QB * ((*R2).y - (*R3).y)
+          - C5QD * ((*R1).y - (*R4).y) + C5QA * (((*R2).x - (*R1).x) + ((*R3).x - (*R4).x));
+    TR3 = ((*R0).x - C5QC * ((*R1).x + (*R4).x)) - C5QB * ((*R2).y - (*R3).y)
+          + C5QD * ((*R1).y - (*R4).y) + C5QA * (((*R2).x - (*R1).x) + ((*R3).x - (*R4).x));
+
+    TI0 = (*R0).y + (*R1).y + (*R2).y + (*R3).y + (*R4).y;
+    TI1 = ((*R0).y - C5QC * ((*R2).y + (*R3).y)) + C5QB * ((*R1).x - (*R4).x)
+          + C5QD * ((*R2).x - (*R3).x) + C5QA * (((*R1).y - (*R2).y) + ((*R4).y - (*R3).y));
+    TI4 = ((*R0).y - C5QC * ((*R2).y + (*R3).y)) - C5QB * ((*R1).x - (*R4).x)
+          - C5QD * ((*R2).x - (*R3).x) + C5QA * (((*R1).y - (*R2).y) + ((*R4).y - (*R3).y));
+    TI2 = ((*R0).y - C5QC * ((*R1).y + (*R4).y)) - C5QB * ((*R2).x - (*R3).x)
+          + C5QD * ((*R1).x - (*R4).x) + C5QA * (((*R2).y - (*R1).y) + ((*R3).y - (*R4).y));
+    TI3 = ((*R0).y - C5QC * ((*R1).y + (*R4).y)) + C5QB * ((*R2).x - (*R3).x)
+          - C5QD * ((*R1).x - (*R4).x) + C5QA * (((*R2).y - (*R1).y) + ((*R3).y - (*R4).y));
+
+    ((*R0).x) = TR0;
+    ((*R0).y) = TI0;
+    ((*R1).x) = TR1;
+    ((*R1).y) = TI1;
+    ((*R2).x) = TR2;
+    ((*R2).y) = TI2;
+    ((*R3).x) = TR3;
+    ((*R3).y) = TI3;
+    ((*R4).x) = TR4;
+    ((*R4).y) = TI4;
+}
 
 template <typename T>
 __device__ void FwdRad6B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5)
@@ -1478,57 +1674,6 @@ __device__ void InvRad6B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5)
     (*R4).y = TI2 - (C3QB * TR3 + C3QA * TI3);
     (*R5).y = TI4 - (C3QB * TR5 - C3QA * TI5);
 }
-
-/*******************************************************************************
- * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
- ******************************************************************************/
-
-template <typename T>
-__device__ void FwdRad4B1(T* R0, T* R2, T* R1, T* R3)
-{
-
-    T res;
-
-    (*R1) = (*R0) - (*R1);
-    (*R0) = 2.0 * (*R0) - (*R1);
-    (*R3) = (*R2) - (*R3);
-    (*R2) = 2.0 * (*R2) - (*R3);
-
-    (*R2) = (*R0) - (*R2);
-    (*R0) = 2.0 * (*R0) - (*R2);
-
-    (*R3) = (*R1) + lib_make_vector2<T>(-(*R3).y, (*R3).x);
-    (*R1) = 2.0 * (*R1) - (*R3);
-
-    res   = (*R1);
-    (*R1) = (*R2);
-    (*R2) = res;
-}
-
-template <typename T>
-__device__ void InvRad4B1(T* R0, T* R2, T* R1, T* R3)
-{
-
-    T res;
-
-    (*R1) = (*R0) - (*R1);
-    (*R0) = 2.0 * (*R0) - (*R1);
-    (*R3) = (*R2) - (*R3);
-    (*R2) = 2.0 * (*R2) - (*R3);
-
-    (*R2) = (*R0) - (*R2);
-    (*R0) = 2.0 * (*R0) - (*R2);
-    (*R3) = (*R1) + lib_make_vector2<T>((*R3).y, -(*R3).x);
-    (*R1) = 2.0 * (*R1) - (*R3);
-
-    res   = (*R1);
-    (*R1) = (*R2);
-    (*R2) = res;
-}
-
-/*******************************************************************************
- * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
- ******************************************************************************/
 
 template <typename T>
 __device__ void FwdRad7B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6)
@@ -1696,6 +1841,2112 @@ __device__ void InvRad7B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6)
     (*R6).y = p7.y + q6.x;
 }
 
+template <typename T>
+__device__ void FwdRad8B1(T* R0, T* R4, T* R2, T* R6, T* R1, T* R5, T* R3, T* R7)
+{
+
+    T res;
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+    (*R3) = (*R2) - (*R3);
+    (*R2) = 2.0 * (*R2) - (*R3);
+    (*R5) = (*R4) - (*R5);
+    (*R4) = 2.0 * (*R4) - (*R5);
+    (*R7) = (*R6) - (*R7);
+    (*R6) = 2.0 * (*R6) - (*R7);
+
+    (*R2) = (*R0) - (*R2);
+    (*R0) = 2.0 * (*R0) - (*R2);
+    (*R3) = (*R1) + lib_make_vector2<T>(-(*R3).y, (*R3).x);
+    (*R1) = 2.0 * (*R1) - (*R3);
+    (*R6) = (*R4) - (*R6);
+    (*R4) = 2.0 * (*R4) - (*R6);
+    (*R7) = (*R5) + lib_make_vector2<T>(-(*R7).y, (*R7).x);
+
+    (*R5) = 2.0 * (*R5) - (*R7);
+
+    (*R4) = (*R0) - (*R4);
+    (*R0) = 2.0 * (*R0) - (*R4);
+    (*R5) = ((*R1) - C8Q * (*R5)) - C8Q * lib_make_vector2<T>((*R5).y, -(*R5).x);
+    (*R1) = 2.0 * (*R1) - (*R5);
+    (*R6) = (*R2) + lib_make_vector2<T>(-(*R6).y, (*R6).x);
+    (*R2) = 2.0 * (*R2) - (*R6);
+    (*R7) = ((*R3) + C8Q * (*R7)) - C8Q * lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R3) = 2.0 * (*R3) - (*R7);
+
+    res   = (*R1);
+    (*R1) = (*R4);
+    (*R4) = res;
+    res   = (*R3);
+    (*R3) = (*R6);
+    (*R6) = res;
+}
+
+template <typename T>
+__device__ void InvRad8B1(T* R0, T* R4, T* R2, T* R6, T* R1, T* R5, T* R3, T* R7)
+{
+
+    T res;
+
+    (*R1) = (*R0) - (*R1);
+    (*R0) = 2.0 * (*R0) - (*R1);
+    (*R3) = (*R2) - (*R3);
+    (*R2) = 2.0 * (*R2) - (*R3);
+    (*R5) = (*R4) - (*R5);
+    (*R4) = 2.0 * (*R4) - (*R5);
+    (*R7) = (*R6) - (*R7);
+    (*R6) = 2.0 * (*R6) - (*R7);
+
+    (*R2) = (*R0) - (*R2);
+    (*R0) = 2.0 * (*R0) - (*R2);
+    (*R3) = (*R1) + lib_make_vector2<T>((*R3).y, -(*R3).x);
+    (*R1) = 2.0 * (*R1) - (*R3);
+    (*R6) = (*R4) - (*R6);
+    (*R4) = 2.0 * (*R4) - (*R6);
+    (*R7) = (*R5) + lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R5) = 2.0 * (*R5) - (*R7);
+
+    (*R4) = (*R0) - (*R4);
+    (*R0) = 2.0 * (*R0) - (*R4);
+    (*R5) = ((*R1) - C8Q * (*R5)) + C8Q * lib_make_vector2<T>((*R5).y, -(*R5).x);
+    (*R1) = 2.0 * (*R1) - (*R5);
+    (*R6) = (*R2) + lib_make_vector2<T>((*R6).y, -(*R6).x);
+    (*R2) = 2.0 * (*R2) - (*R6);
+    (*R7) = ((*R3) + C8Q * (*R7)) + C8Q * lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R3) = 2.0 * (*R3) - (*R7);
+
+    res   = (*R1);
+    (*R1) = (*R4);
+    (*R4) = res;
+    res   = (*R3);
+    (*R3) = (*R6);
+    (*R6) = res;
+}
+
+template <typename T>
+__device__ void FwdRad9B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8)
+{
+    // p2 is always multiplied by C9QF, so do it once in p2
+    // update R0 and the end since the original R0 is used by others
+    // we can also use v3 = R4 + R5 and p3 = R4 - R5
+    // but it's ok to do without them and save regs
+    T v0 = (*R1) + (*R8);
+    T v1 = (*R2) + (*R7);
+    T v2 = (*R3) + (*R6);
+
+    T p0 = (*R1) - (*R8);
+    T p1 = (*R2) - (*R7);
+    T p2 = ((*R3) - (*R6)) * C9QF;
+
+    // borrow R8 as temp
+    (*R8) = (C9QB * p0) + (C9QD * p1) + (p2) + (C9QH * ((*R4) - (*R5)));
+    (*R1) = ((*R0) + (C9QA * v0) + (C9QC * v1) - (C9QE * v2) - (C9QG * ((*R4) + (*R5))))
+            + lib_make_vector2<T>((*R8).y, -(*R8).x);
+    (*R8) = (*R1) + 2.0 * lib_make_vector2<T>(-(*R8).y, (*R8).x);
+    // borrow R7 as temp
+    (*R7) = -(C9QB * ((*R4) - (*R5))) + (C9QD * p0) - (p2) + (C9QH * p1);
+    (*R2) = ((*R0) + (C9QA * ((*R4) + (*R5))) + (C9QC * v0) - (C9QE * v2) - (C9QG * v1))
+            + lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R7) = (*R2) + 2.0 * lib_make_vector2<T>(-(*R7).y, (*R7).x);
+    // borrow R6 temp
+    (*R6) = C9QF * (p0 + ((*R4) - (*R5)) - p1);
+    (*R3) = ((*R0) + v2 - C9QE * (v0 + v1 + ((*R4) + (*R5))))
+            + lib_make_vector2<T>((*R6).y, -(*R6).x);
+    (*R6) = (*R3) + 2.0 * lib_make_vector2<T>(-(*R6).y, (*R6).x);
+    // borrow p0 as temp
+    p0 = -(C9QB * p1) - (C9QD * ((*R4) - (*R5))) + (p2) + (C9QH * p0);
+    p1 = (*R0);
+    (*R0) += (v0 + v1 + v2 + (*R4) + (*R5));
+    (*R4) = (p1 + (C9QA * v1) + (C9QC * ((*R4) + (*R5))) - (C9QE * v2) - (C9QG * v0))
+            + lib_make_vector2<T>(p0.y, -p0.x);
+    (*R5) = (*R4) + 2.0 * lib_make_vector2<T>(-p0.y, p0.x);
+}
+
+template <typename T>
+__device__ void InvRad9B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8)
+{
+    // p2 is always multiplied by C9QF, so do it once in p2
+    // update R0 and the end since the original R0 is used by others
+    T v0 = (*R1) + (*R8);
+    T v1 = (*R2) + (*R7);
+    T v2 = (*R3) + (*R6);
+
+    T p0 = (*R1) - (*R8);
+    T p1 = (*R2) - (*R7);
+    T p2 = ((*R3) - (*R6)) * C9QF;
+
+    // borrow R8 as temp
+    (*R8) = (C9QB * p0) + (C9QD * p1) + (p2) + (C9QH * ((*R4) - (*R5)));
+    (*R1) = ((*R0) + (C9QA * v0) + (C9QC * v1) - (C9QE * v2) - (C9QG * ((*R4) + (*R5))))
+            + lib_make_vector2<T>(-(*R8).y, (*R8).x);
+    (*R8) = (*R1) + 2.0 * lib_make_vector2<T>((*R8).y, -(*R8).x);
+    // borrow R7 as temp
+    (*R7) = -(C9QB * ((*R4) - (*R5))) + (C9QD * p0) - (p2) + (C9QH * p1);
+    (*R2) = ((*R0) + (C9QA * ((*R4) + (*R5))) + (C9QC * v0) - (C9QE * v2) - (C9QG * v1))
+            + lib_make_vector2<T>(-(*R7).y, (*R7).x);
+    (*R7) = (*R2) + 2.0 * lib_make_vector2<T>((*R7).y, -(*R7).x);
+    // borrow R6 temp
+    (*R6) = C9QF * (p0 + ((*R4) - (*R5)) - p1);
+    (*R3) = ((*R0) + v2 - C9QE * (v0 + v1 + ((*R4) + (*R5))))
+            + lib_make_vector2<T>(-(*R6).y, (*R6).x);
+    (*R6) = (*R3) + 2.0 * lib_make_vector2<T>((*R6).y, -(*R6).x);
+    // borrow p0 as temp
+    p0 = -(C9QB * p1) - (C9QD * ((*R4) - (*R5))) + (p2) + (C9QH * p0);
+    p1 = (*R0);
+    (*R0) += (v0 + v1 + v2 + (*R4) + (*R5));
+    (*R4) = (p1 + (C9QA * v1) + (C9QC * ((*R4) + (*R5))) - (C9QE * v2) - (C9QG * v0))
+            + lib_make_vector2<T>(-p0.y, p0.x);
+    (*R5) = (*R4) + 2.0 * lib_make_vector2<T>(p0.y, -p0.x);
+}
+
+template <typename T>
+__device__ void FwdRad10B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2, TR3, TI3, TR4, TI4, TR5, TI5, TR6, TI6, TR7, TI7,
+        TR8, TI8, TR9, TI9;
+
+    TR0 = (*R0).x + (*R2).x + (*R4).x + (*R6).x + (*R8).x;
+    TR2 = ((*R0).x - C5QC * ((*R4).x + (*R6).x)) + C5QB * ((*R2).y - (*R8).y)
+          + C5QD * ((*R4).y - (*R6).y) + C5QA * (((*R2).x - (*R4).x) + ((*R8).x - (*R6).x));
+    TR8 = ((*R0).x - C5QC * ((*R4).x + (*R6).x)) - C5QB * ((*R2).y - (*R8).y)
+          - C5QD * ((*R4).y - (*R6).y) + C5QA * (((*R2).x - (*R4).x) + ((*R8).x - (*R6).x));
+    TR4 = ((*R0).x - C5QC * ((*R2).x + (*R8).x)) - C5QB * ((*R4).y - (*R6).y)
+          + C5QD * ((*R2).y - (*R8).y) + C5QA * (((*R4).x - (*R2).x) + ((*R6).x - (*R8).x));
+    TR6 = ((*R0).x - C5QC * ((*R2).x + (*R8).x)) + C5QB * ((*R4).y - (*R6).y)
+          - C5QD * ((*R2).y - (*R8).y) + C5QA * (((*R4).x - (*R2).x) + ((*R6).x - (*R8).x));
+
+    TI0 = (*R0).y + (*R2).y + (*R4).y + (*R6).y + (*R8).y;
+    TI2 = ((*R0).y - C5QC * ((*R4).y + (*R6).y)) - C5QB * ((*R2).x - (*R8).x)
+          - C5QD * ((*R4).x - (*R6).x) + C5QA * (((*R2).y - (*R4).y) + ((*R8).y - (*R6).y));
+    TI8 = ((*R0).y - C5QC * ((*R4).y + (*R6).y)) + C5QB * ((*R2).x - (*R8).x)
+          + C5QD * ((*R4).x - (*R6).x) + C5QA * (((*R2).y - (*R4).y) + ((*R8).y - (*R6).y));
+    TI4 = ((*R0).y - C5QC * ((*R2).y + (*R8).y)) + C5QB * ((*R4).x - (*R6).x)
+          - C5QD * ((*R2).x - (*R8).x) + C5QA * (((*R4).y - (*R2).y) + ((*R6).y - (*R8).y));
+    TI6 = ((*R0).y - C5QC * ((*R2).y + (*R8).y)) - C5QB * ((*R4).x - (*R6).x)
+          + C5QD * ((*R2).x - (*R8).x) + C5QA * (((*R4).y - (*R2).y) + ((*R6).y - (*R8).y));
+
+    TR1 = (*R1).x + (*R3).x + (*R5).x + (*R7).x + (*R9).x;
+    TR3 = ((*R1).x - C5QC * ((*R5).x + (*R7).x)) + C5QB * ((*R3).y - (*R9).y)
+          + C5QD * ((*R5).y - (*R7).y) + C5QA * (((*R3).x - (*R5).x) + ((*R9).x - (*R7).x));
+    TR9 = ((*R1).x - C5QC * ((*R5).x + (*R7).x)) - C5QB * ((*R3).y - (*R9).y)
+          - C5QD * ((*R5).y - (*R7).y) + C5QA * (((*R3).x - (*R5).x) + ((*R9).x - (*R7).x));
+    TR5 = ((*R1).x - C5QC * ((*R3).x + (*R9).x)) - C5QB * ((*R5).y - (*R7).y)
+          + C5QD * ((*R3).y - (*R9).y) + C5QA * (((*R5).x - (*R3).x) + ((*R7).x - (*R9).x));
+    TR7 = ((*R1).x - C5QC * ((*R3).x + (*R9).x)) + C5QB * ((*R5).y - (*R7).y)
+          - C5QD * ((*R3).y - (*R9).y) + C5QA * (((*R5).x - (*R3).x) + ((*R7).x - (*R9).x));
+
+    TI1 = (*R1).y + (*R3).y + (*R5).y + (*R7).y + (*R9).y;
+    TI3 = ((*R1).y - C5QC * ((*R5).y + (*R7).y)) - C5QB * ((*R3).x - (*R9).x)
+          - C5QD * ((*R5).x - (*R7).x) + C5QA * (((*R3).y - (*R5).y) + ((*R9).y - (*R7).y));
+    TI9 = ((*R1).y - C5QC * ((*R5).y + (*R7).y)) + C5QB * ((*R3).x - (*R9).x)
+          + C5QD * ((*R5).x - (*R7).x) + C5QA * (((*R3).y - (*R5).y) + ((*R9).y - (*R7).y));
+    TI5 = ((*R1).y - C5QC * ((*R3).y + (*R9).y)) + C5QB * ((*R5).x - (*R7).x)
+          - C5QD * ((*R3).x - (*R9).x) + C5QA * (((*R5).y - (*R3).y) + ((*R7).y - (*R9).y));
+    TI7 = ((*R1).y - C5QC * ((*R3).y + (*R9).y)) - C5QB * ((*R5).x - (*R7).x)
+          + C5QD * ((*R3).x - (*R9).x) + C5QA * (((*R5).y - (*R3).y) + ((*R7).y - (*R9).y));
+
+    (*R0).x = TR0 + TR1;
+    (*R1).x = TR2 + (C5QE * TR3 + C5QD * TI3);
+    (*R2).x = TR4 + (C5QA * TR5 + C5QB * TI5);
+    (*R3).x = TR6 + (-C5QA * TR7 + C5QB * TI7);
+    (*R4).x = TR8 + (-C5QE * TR9 + C5QD * TI9);
+
+    (*R0).y = TI0 + TI1;
+    (*R1).y = TI2 + (-C5QD * TR3 + C5QE * TI3);
+    (*R2).y = TI4 + (-C5QB * TR5 + C5QA * TI5);
+    (*R3).y = TI6 + (-C5QB * TR7 - C5QA * TI7);
+    (*R4).y = TI8 + (-C5QD * TR9 - C5QE * TI9);
+
+    (*R5).x = TR0 - TR1;
+    (*R6).x = TR2 - (C5QE * TR3 + C5QD * TI3);
+    (*R7).x = TR4 - (C5QA * TR5 + C5QB * TI5);
+    (*R8).x = TR6 - (-C5QA * TR7 + C5QB * TI7);
+    (*R9).x = TR8 - (-C5QE * TR9 + C5QD * TI9);
+
+    (*R5).y = TI0 - TI1;
+    (*R6).y = TI2 - (-C5QD * TR3 + C5QE * TI3);
+    (*R7).y = TI4 - (-C5QB * TR5 + C5QA * TI5);
+    (*R8).y = TI6 - (-C5QB * TR7 - C5QA * TI7);
+    (*R9).y = TI8 - (-C5QD * TR9 - C5QE * TI9);
+}
+
+template <typename T>
+__device__ void InvRad10B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9)
+{
+
+    real_type_t<T> TR0, TI0, TR1, TI1, TR2, TI2, TR3, TI3, TR4, TI4, TR5, TI5, TR6, TI6, TR7, TI7,
+        TR8, TI8, TR9, TI9;
+
+    TR0 = (*R0).x + (*R2).x + (*R4).x + (*R6).x + (*R8).x;
+    TR2 = ((*R0).x - C5QC * ((*R4).x + (*R6).x)) - C5QB * ((*R2).y - (*R8).y)
+          - C5QD * ((*R4).y - (*R6).y) + C5QA * (((*R2).x - (*R4).x) + ((*R8).x - (*R6).x));
+    TR8 = ((*R0).x - C5QC * ((*R4).x + (*R6).x)) + C5QB * ((*R2).y - (*R8).y)
+          + C5QD * ((*R4).y - (*R6).y) + C5QA * (((*R2).x - (*R4).x) + ((*R8).x - (*R6).x));
+    TR4 = ((*R0).x - C5QC * ((*R2).x + (*R8).x)) + C5QB * ((*R4).y - (*R6).y)
+          - C5QD * ((*R2).y - (*R8).y) + C5QA * (((*R4).x - (*R2).x) + ((*R6).x - (*R8).x));
+    TR6 = ((*R0).x - C5QC * ((*R2).x + (*R8).x)) - C5QB * ((*R4).y - (*R6).y)
+          + C5QD * ((*R2).y - (*R8).y) + C5QA * (((*R4).x - (*R2).x) + ((*R6).x - (*R8).x));
+
+    TI0 = (*R0).y + (*R2).y + (*R4).y + (*R6).y + (*R8).y;
+    TI2 = ((*R0).y - C5QC * ((*R4).y + (*R6).y)) + C5QB * ((*R2).x - (*R8).x)
+          + C5QD * ((*R4).x - (*R6).x) + C5QA * (((*R2).y - (*R4).y) + ((*R8).y - (*R6).y));
+    TI8 = ((*R0).y - C5QC * ((*R4).y + (*R6).y)) - C5QB * ((*R2).x - (*R8).x)
+          - C5QD * ((*R4).x - (*R6).x) + C5QA * (((*R2).y - (*R4).y) + ((*R8).y - (*R6).y));
+    TI4 = ((*R0).y - C5QC * ((*R2).y + (*R8).y)) - C5QB * ((*R4).x - (*R6).x)
+          + C5QD * ((*R2).x - (*R8).x) + C5QA * (((*R4).y - (*R2).y) + ((*R6).y - (*R8).y));
+    TI6 = ((*R0).y - C5QC * ((*R2).y + (*R8).y)) + C5QB * ((*R4).x - (*R6).x)
+          - C5QD * ((*R2).x - (*R8).x) + C5QA * (((*R4).y - (*R2).y) + ((*R6).y - (*R8).y));
+
+    TR1 = (*R1).x + (*R3).x + (*R5).x + (*R7).x + (*R9).x;
+    TR3 = ((*R1).x - C5QC * ((*R5).x + (*R7).x)) - C5QB * ((*R3).y - (*R9).y)
+          - C5QD * ((*R5).y - (*R7).y) + C5QA * (((*R3).x - (*R5).x) + ((*R9).x - (*R7).x));
+    TR9 = ((*R1).x - C5QC * ((*R5).x + (*R7).x)) + C5QB * ((*R3).y - (*R9).y)
+          + C5QD * ((*R5).y - (*R7).y) + C5QA * (((*R3).x - (*R5).x) + ((*R9).x - (*R7).x));
+    TR5 = ((*R1).x - C5QC * ((*R3).x + (*R9).x)) + C5QB * ((*R5).y - (*R7).y)
+          - C5QD * ((*R3).y - (*R9).y) + C5QA * (((*R5).x - (*R3).x) + ((*R7).x - (*R9).x));
+    TR7 = ((*R1).x - C5QC * ((*R3).x + (*R9).x)) - C5QB * ((*R5).y - (*R7).y)
+          + C5QD * ((*R3).y - (*R9).y) + C5QA * (((*R5).x - (*R3).x) + ((*R7).x - (*R9).x));
+
+    TI1 = (*R1).y + (*R3).y + (*R5).y + (*R7).y + (*R9).y;
+    TI3 = ((*R1).y - C5QC * ((*R5).y + (*R7).y)) + C5QB * ((*R3).x - (*R9).x)
+          + C5QD * ((*R5).x - (*R7).x) + C5QA * (((*R3).y - (*R5).y) + ((*R9).y - (*R7).y));
+    TI9 = ((*R1).y - C5QC * ((*R5).y + (*R7).y)) - C5QB * ((*R3).x - (*R9).x)
+          - C5QD * ((*R5).x - (*R7).x) + C5QA * (((*R3).y - (*R5).y) + ((*R9).y - (*R7).y));
+    TI5 = ((*R1).y - C5QC * ((*R3).y + (*R9).y)) - C5QB * ((*R5).x - (*R7).x)
+          + C5QD * ((*R3).x - (*R9).x) + C5QA * (((*R5).y - (*R3).y) + ((*R7).y - (*R9).y));
+    TI7 = ((*R1).y - C5QC * ((*R3).y + (*R9).y)) + C5QB * ((*R5).x - (*R7).x)
+          - C5QD * ((*R3).x - (*R9).x) + C5QA * (((*R5).y - (*R3).y) + ((*R7).y - (*R9).y));
+
+    (*R0).x = TR0 + TR1;
+    (*R1).x = TR2 + (C5QE * TR3 - C5QD * TI3);
+    (*R2).x = TR4 + (C5QA * TR5 - C5QB * TI5);
+    (*R3).x = TR6 + (-C5QA * TR7 - C5QB * TI7);
+    (*R4).x = TR8 + (-C5QE * TR9 - C5QD * TI9);
+
+    (*R0).y = TI0 + TI1;
+    (*R1).y = TI2 + (C5QD * TR3 + C5QE * TI3);
+    (*R2).y = TI4 + (C5QB * TR5 + C5QA * TI5);
+    (*R3).y = TI6 + (C5QB * TR7 - C5QA * TI7);
+    (*R4).y = TI8 + (C5QD * TR9 - C5QE * TI9);
+
+    (*R5).x = TR0 - TR1;
+    (*R6).x = TR2 - (C5QE * TR3 - C5QD * TI3);
+    (*R7).x = TR4 - (C5QA * TR5 - C5QB * TI5);
+    (*R8).x = TR6 - (-C5QA * TR7 - C5QB * TI7);
+    (*R9).x = TR8 - (-C5QE * TR9 - C5QD * TI9);
+
+    (*R5).y = TI0 - TI1;
+    (*R6).y = TI2 - (C5QD * TR3 + C5QE * TI3);
+    (*R7).y = TI4 - (C5QB * TR5 + C5QA * TI5);
+    (*R8).y = TI6 - (C5QB * TR7 - C5QA * TI7);
+    (*R9).y = TI8 - (C5QD * TR9 - C5QE * TI9);
+}
+
+template <typename T>
+__device__ void FwdRad16B1(T* R0,
+                           T* R8,
+                           T* R4,
+                           T* R12,
+                           T* R2,
+                           T* R10,
+                           T* R6,
+                           T* R14,
+                           T* R1,
+                           T* R9,
+                           T* R5,
+                           T* R13,
+                           T* R3,
+                           T* R11,
+                           T* R7,
+                           T* R15)
+{
+
+    T res;
+
+    (*R1)  = (*R0) - (*R1);
+    (*R0)  = 2.0 * (*R0) - (*R1);
+    (*R3)  = (*R2) - (*R3);
+    (*R2)  = 2.0 * (*R2) - (*R3);
+    (*R5)  = (*R4) - (*R5);
+    (*R4)  = 2.0 * (*R4) - (*R5);
+    (*R7)  = (*R6) - (*R7);
+    (*R6)  = 2.0 * (*R6) - (*R7);
+    (*R9)  = (*R8) - (*R9);
+    (*R8)  = 2.0 * (*R8) - (*R9);
+    (*R11) = (*R10) - (*R11);
+    (*R10) = 2.0 * (*R10) - (*R11);
+    (*R13) = (*R12) - (*R13);
+    (*R12) = 2.0 * (*R12) - (*R13);
+    (*R15) = (*R14) - (*R15);
+    (*R14) = 2.0 * (*R14) - (*R15);
+
+    (*R2)  = (*R0) - (*R2);
+    (*R0)  = 2.0 * (*R0) - (*R2);
+    (*R3)  = (*R1) + lib_make_vector2<T>(-(*R3).y, (*R3).x);
+    (*R1)  = 2.0 * (*R1) - (*R3);
+    (*R6)  = (*R4) - (*R6);
+    (*R4)  = 2.0 * (*R4) - (*R6);
+    (*R7)  = (*R5) + lib_make_vector2<T>(-(*R7).y, (*R7).x);
+    (*R5)  = 2.0 * (*R5) - (*R7);
+    (*R10) = (*R8) - (*R10);
+    (*R8)  = 2.0 * (*R8) - (*R10);
+    (*R11) = (*R9) + lib_make_vector2<T>(-(*R11).y, (*R11).x);
+    (*R9)  = 2.0 * (*R9) - (*R11);
+    (*R14) = (*R12) - (*R14);
+    (*R12) = 2.0 * (*R12) - (*R14);
+    (*R15) = (*R13) + lib_make_vector2<T>(-(*R15).y, (*R15).x);
+    (*R13) = 2.0 * (*R13) - (*R15);
+
+    (*R4)  = (*R0) - (*R4);
+    (*R0)  = 2.0 * (*R0) - (*R4);
+    (*R5)  = ((*R1) - C8Q * (*R5)) - C8Q * lib_make_vector2<T>((*R5).y, -(*R5).x);
+    (*R1)  = 2.0 * (*R1) - (*R5);
+    (*R6)  = (*R2) + lib_make_vector2<T>(-(*R6).y, (*R6).x);
+    (*R2)  = 2.0 * (*R2) - (*R6);
+    (*R7)  = ((*R3) + C8Q * (*R7)) - C8Q * lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R3)  = 2.0 * (*R3) - (*R7);
+    (*R12) = (*R8) - (*R12);
+    (*R8)  = 2.0 * (*R8) - (*R12);
+    (*R13) = ((*R9) - C8Q * (*R13)) - C8Q * lib_make_vector2<T>((*R13).y, -(*R13).x);
+    (*R9)  = 2.0 * (*R9) - (*R13);
+    (*R14) = (*R10) + lib_make_vector2<T>(-(*R14).y, (*R14).x);
+    (*R10) = 2.0 * (*R10) - (*R14);
+    (*R15) = ((*R11) + C8Q * (*R15)) - C8Q * lib_make_vector2<T>((*R15).y, -(*R15).x);
+    (*R11) = 2.0 * (*R11) - (*R15);
+
+    (*R8) = (*R0) - (*R8);
+    (*R0) = 2.0 * (*R0) - (*R8);
+    (*R9) = ((*R1) - C16A * (*R9)) - C16B * lib_make_vector2<T>((*R9).y, -(*R9).x);
+    res   = (*R8);
+    (*R1) = 2.0 * (*R1) - (*R9);
+
+    (*R10) = ((*R2) - C8Q * (*R10)) - C8Q * lib_make_vector2<T>((*R10).y, -(*R10).x);
+    (*R2)  = 2.0 * (*R2) - (*R10);
+    (*R11) = ((*R3) - C16B * (*R11)) - C16A * lib_make_vector2<T>((*R11).y, -(*R11).x);
+    (*R3)  = 2.0 * (*R3) - (*R11);
+
+    (*R12) = (*R4) + lib_make_vector2<T>(-(*R12).y, (*R12).x);
+    (*R4)  = 2.0 * (*R4) - (*R12);
+    (*R13) = ((*R5) + C16B * (*R13)) - C16A * lib_make_vector2<T>((*R13).y, -(*R13).x);
+    (*R5)  = 2.0 * (*R5) - (*R13);
+
+    (*R14) = ((*R6) + C8Q * (*R14)) - C8Q * lib_make_vector2<T>((*R14).y, -(*R14).x);
+    (*R6)  = 2.0 * (*R6) - (*R14);
+    (*R15) = ((*R7) + C16A * (*R15)) - C16B * lib_make_vector2<T>((*R15).y, -(*R15).x);
+    (*R7)  = 2.0 * (*R7) - (*R15);
+
+    res    = (*R1);
+    (*R1)  = (*R8);
+    (*R8)  = res;
+    res    = (*R2);
+    (*R2)  = (*R4);
+    (*R4)  = res;
+    res    = (*R3);
+    (*R3)  = (*R12);
+    (*R12) = res;
+    res    = (*R5);
+    (*R5)  = (*R10);
+    (*R10) = res;
+    res    = (*R7);
+    (*R7)  = (*R14);
+    (*R14) = res;
+    res    = (*R11);
+    (*R11) = (*R13);
+    (*R13) = res;
+}
+
+template <typename T>
+__device__ void InvRad16B1(T* R0,
+                           T* R8,
+                           T* R4,
+                           T* R12,
+                           T* R2,
+                           T* R10,
+                           T* R6,
+                           T* R14,
+                           T* R1,
+                           T* R9,
+                           T* R5,
+                           T* R13,
+                           T* R3,
+                           T* R11,
+                           T* R7,
+                           T* R15)
+{
+
+    T res;
+
+    (*R1)  = (*R0) - (*R1);
+    (*R0)  = 2.0 * (*R0) - (*R1);
+    (*R3)  = (*R2) - (*R3);
+    (*R2)  = 2.0 * (*R2) - (*R3);
+    (*R5)  = (*R4) - (*R5);
+    (*R4)  = 2.0 * (*R4) - (*R5);
+    (*R7)  = (*R6) - (*R7);
+    (*R6)  = 2.0 * (*R6) - (*R7);
+    (*R9)  = (*R8) - (*R9);
+    (*R8)  = 2.0 * (*R8) - (*R9);
+    (*R11) = (*R10) - (*R11);
+    (*R10) = 2.0 * (*R10) - (*R11);
+    (*R13) = (*R12) - (*R13);
+    (*R12) = 2.0 * (*R12) - (*R13);
+    (*R15) = (*R14) - (*R15);
+    (*R14) = 2.0 * (*R14) - (*R15);
+
+    (*R2)  = (*R0) - (*R2);
+    (*R0)  = 2.0 * (*R0) - (*R2);
+    (*R3)  = (*R1) + lib_make_vector2<T>((*R3).y, -(*R3).x);
+    (*R1)  = 2.0 * (*R1) - (*R3);
+    (*R6)  = (*R4) - (*R6);
+    (*R4)  = 2.0 * (*R4) - (*R6);
+    (*R7)  = (*R5) + lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R5)  = 2.0 * (*R5) - (*R7);
+    (*R10) = (*R8) - (*R10);
+    (*R8)  = 2.0 * (*R8) - (*R10);
+    (*R11) = (*R9) + lib_make_vector2<T>((*R11).y, -(*R11).x);
+    (*R9)  = 2.0 * (*R9) - (*R11);
+    (*R14) = (*R12) - (*R14);
+    (*R12) = 2.0 * (*R12) - (*R14);
+    (*R15) = (*R13) + lib_make_vector2<T>((*R15).y, -(*R15).x);
+    (*R13) = 2.0 * (*R13) - (*R15);
+
+    (*R4)  = (*R0) - (*R4);
+    (*R0)  = 2.0 * (*R0) - (*R4);
+    (*R5)  = ((*R1) - C8Q * (*R5)) + C8Q * lib_make_vector2<T>((*R5).y, -(*R5).x);
+    (*R1)  = 2.0 * (*R1) - (*R5);
+    (*R6)  = (*R2) + lib_make_vector2<T>((*R6).y, -(*R6).x);
+    (*R2)  = 2.0 * (*R2) - (*R6);
+    (*R7)  = ((*R3) + C8Q * (*R7)) + C8Q * lib_make_vector2<T>((*R7).y, -(*R7).x);
+    (*R3)  = 2.0 * (*R3) - (*R7);
+    (*R12) = (*R8) - (*R12);
+    (*R8)  = 2.0 * (*R8) - (*R12);
+    (*R13) = ((*R9) - C8Q * (*R13)) + C8Q * lib_make_vector2<T>((*R13).y, -(*R13).x);
+    (*R9)  = 2.0 * (*R9) - (*R13);
+    (*R14) = (*R10) + lib_make_vector2<T>((*R14).y, -(*R14).x);
+    (*R10) = 2.0 * (*R10) - (*R14);
+    (*R15) = ((*R11) + C8Q * (*R15)) + C8Q * lib_make_vector2<T>((*R15).y, -(*R15).x);
+    (*R11) = 2.0 * (*R11) - (*R15);
+
+    (*R8)  = (*R0) - (*R8);
+    (*R0)  = 2.0 * (*R0) - (*R8);
+    (*R9)  = ((*R1) - C16A * (*R9)) + C16B * lib_make_vector2<T>((*R9).y, -(*R9).x);
+    (*R1)  = 2.0 * (*R1) - (*R9);
+    (*R10) = ((*R2) - C8Q * (*R10)) + C8Q * lib_make_vector2<T>((*R10).y, -(*R10).x);
+    (*R2)  = 2.0 * (*R2) - (*R10);
+    (*R11) = ((*R3) - C16B * (*R11)) + C16A * lib_make_vector2<T>((*R11).y, -(*R11).x);
+    (*R3)  = 2.0 * (*R3) - (*R11);
+    (*R12) = (*R4) + lib_make_vector2<T>((*R12).y, -(*R12).x);
+    (*R4)  = 2.0 * (*R4) - (*R12);
+    (*R13) = ((*R5) + C16B * (*R13)) + C16A * lib_make_vector2<T>((*R13).y, -(*R13).x);
+    (*R5)  = 2.0 * (*R5) - (*R13);
+    (*R14) = ((*R6) + C8Q * (*R14)) + C8Q * lib_make_vector2<T>((*R14).y, -(*R14).x);
+    (*R6)  = 2.0 * (*R6) - (*R14);
+    (*R15) = ((*R7) + C16A * (*R15)) + C16B * lib_make_vector2<T>((*R15).y, -(*R15).x);
+    (*R7)  = 2.0 * (*R7) - (*R15);
+
+    res    = (*R1);
+    (*R1)  = (*R8);
+    (*R8)  = res;
+    res    = (*R2);
+    (*R2)  = (*R4);
+    (*R4)  = res;
+    res    = (*R3);
+    (*R3)  = (*R12);
+    (*R12) = res;
+    res    = (*R5);
+    (*R5)  = (*R10);
+    (*R10) = res;
+    res    = (*R7);
+    (*R7)  = (*R14);
+    (*R14) = res;
+    res    = (*R11);
+    (*R11) = (*R13);
+    (*R13) = res;
+}
+
+template <typename T>
+__device__ void
+    FwdRad11B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9, T* R10)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, dp, dm;
+
+    x0  = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    dp  = (*R1) + (*R10);
+    dm  = (*R1) - (*R10);
+    x1.x += Q11i1j1R * dp.x - Q11i1j1I * dm.y;
+    x1.y += Q11i1j1R * dp.y + Q11i1j1I * dm.x;
+    x10.x += Q11i1j1R * dp.x + Q11i1j1I * dm.y;
+    x10.y += Q11i1j1R * dp.y - Q11i1j1I * dm.x;
+    x2.x += Q11i2j1R * dp.x - Q11i2j1I * dm.y;
+    x2.y += Q11i2j1R * dp.y + Q11i2j1I * dm.x;
+    x9.x += Q11i2j1R * dp.x + Q11i2j1I * dm.y;
+    x9.y += Q11i2j1R * dp.y - Q11i2j1I * dm.x;
+    x3.x += Q11i3j1R * dp.x - Q11i3j1I * dm.y;
+    x3.y += Q11i3j1R * dp.y + Q11i3j1I * dm.x;
+    x8.x += Q11i3j1R * dp.x + Q11i3j1I * dm.y;
+    x8.y += Q11i3j1R * dp.y - Q11i3j1I * dm.x;
+    x4.x += Q11i4j1R * dp.x - Q11i4j1I * dm.y;
+    x4.y += Q11i4j1R * dp.y + Q11i4j1I * dm.x;
+    x7.x += Q11i4j1R * dp.x + Q11i4j1I * dm.y;
+    x7.y += Q11i4j1R * dp.y - Q11i4j1I * dm.x;
+    x5.x += Q11i5j1R * dp.x - Q11i5j1I * dm.y;
+    x5.y += Q11i5j1R * dp.y + Q11i5j1I * dm.x;
+    x6.x += Q11i5j1R * dp.x + Q11i5j1I * dm.y;
+    x6.y += Q11i5j1R * dp.y - Q11i5j1I * dm.x;
+    dp = (*R2) + (*R9);
+    dm = (*R2) - (*R9);
+    x1.x += Q11i1j2R * dp.x - Q11i1j2I * dm.y;
+    x1.y += Q11i1j2R * dp.y + Q11i1j2I * dm.x;
+    x10.x += Q11i1j2R * dp.x + Q11i1j2I * dm.y;
+    x10.y += Q11i1j2R * dp.y - Q11i1j2I * dm.x;
+    x2.x += Q11i2j2R * dp.x - Q11i2j2I * dm.y;
+    x2.y += Q11i2j2R * dp.y + Q11i2j2I * dm.x;
+    x9.x += Q11i2j2R * dp.x + Q11i2j2I * dm.y;
+    x9.y += Q11i2j2R * dp.y - Q11i2j2I * dm.x;
+    x3.x += Q11i3j2R * dp.x - Q11i3j2I * dm.y;
+    x3.y += Q11i3j2R * dp.y + Q11i3j2I * dm.x;
+    x8.x += Q11i3j2R * dp.x + Q11i3j2I * dm.y;
+    x8.y += Q11i3j2R * dp.y - Q11i3j2I * dm.x;
+    x4.x += Q11i4j2R * dp.x - Q11i4j2I * dm.y;
+    x4.y += Q11i4j2R * dp.y + Q11i4j2I * dm.x;
+    x7.x += Q11i4j2R * dp.x + Q11i4j2I * dm.y;
+    x7.y += Q11i4j2R * dp.y - Q11i4j2I * dm.x;
+    x5.x += Q11i5j2R * dp.x - Q11i5j2I * dm.y;
+    x5.y += Q11i5j2R * dp.y + Q11i5j2I * dm.x;
+    x6.x += Q11i5j2R * dp.x + Q11i5j2I * dm.y;
+    x6.y += Q11i5j2R * dp.y - Q11i5j2I * dm.x;
+    dp = (*R3) + (*R8);
+    dm = (*R3) - (*R8);
+    x1.x += Q11i1j3R * dp.x - Q11i1j3I * dm.y;
+    x1.y += Q11i1j3R * dp.y + Q11i1j3I * dm.x;
+    x10.x += Q11i1j3R * dp.x + Q11i1j3I * dm.y;
+    x10.y += Q11i1j3R * dp.y - Q11i1j3I * dm.x;
+    x2.x += Q11i2j3R * dp.x - Q11i2j3I * dm.y;
+    x2.y += Q11i2j3R * dp.y + Q11i2j3I * dm.x;
+    x9.x += Q11i2j3R * dp.x + Q11i2j3I * dm.y;
+    x9.y += Q11i2j3R * dp.y - Q11i2j3I * dm.x;
+    x3.x += Q11i3j3R * dp.x - Q11i3j3I * dm.y;
+    x3.y += Q11i3j3R * dp.y + Q11i3j3I * dm.x;
+    x8.x += Q11i3j3R * dp.x + Q11i3j3I * dm.y;
+    x8.y += Q11i3j3R * dp.y - Q11i3j3I * dm.x;
+    x4.x += Q11i4j3R * dp.x - Q11i4j3I * dm.y;
+    x4.y += Q11i4j3R * dp.y + Q11i4j3I * dm.x;
+    x7.x += Q11i4j3R * dp.x + Q11i4j3I * dm.y;
+    x7.y += Q11i4j3R * dp.y - Q11i4j3I * dm.x;
+    x5.x += Q11i5j3R * dp.x - Q11i5j3I * dm.y;
+    x5.y += Q11i5j3R * dp.y + Q11i5j3I * dm.x;
+    x6.x += Q11i5j3R * dp.x + Q11i5j3I * dm.y;
+    x6.y += Q11i5j3R * dp.y - Q11i5j3I * dm.x;
+    dp = (*R4) + (*R7);
+    dm = (*R4) - (*R7);
+    x1.x += Q11i1j4R * dp.x - Q11i1j4I * dm.y;
+    x1.y += Q11i1j4R * dp.y + Q11i1j4I * dm.x;
+    x10.x += Q11i1j4R * dp.x + Q11i1j4I * dm.y;
+    x10.y += Q11i1j4R * dp.y - Q11i1j4I * dm.x;
+    x2.x += Q11i2j4R * dp.x - Q11i2j4I * dm.y;
+    x2.y += Q11i2j4R * dp.y + Q11i2j4I * dm.x;
+    x9.x += Q11i2j4R * dp.x + Q11i2j4I * dm.y;
+    x9.y += Q11i2j4R * dp.y - Q11i2j4I * dm.x;
+    x3.x += Q11i3j4R * dp.x - Q11i3j4I * dm.y;
+    x3.y += Q11i3j4R * dp.y + Q11i3j4I * dm.x;
+    x8.x += Q11i3j4R * dp.x + Q11i3j4I * dm.y;
+    x8.y += Q11i3j4R * dp.y - Q11i3j4I * dm.x;
+    x4.x += Q11i4j4R * dp.x - Q11i4j4I * dm.y;
+    x4.y += Q11i4j4R * dp.y + Q11i4j4I * dm.x;
+    x7.x += Q11i4j4R * dp.x + Q11i4j4I * dm.y;
+    x7.y += Q11i4j4R * dp.y - Q11i4j4I * dm.x;
+    x5.x += Q11i5j4R * dp.x - Q11i5j4I * dm.y;
+    x5.y += Q11i5j4R * dp.y + Q11i5j4I * dm.x;
+    x6.x += Q11i5j4R * dp.x + Q11i5j4I * dm.y;
+    x6.y += Q11i5j4R * dp.y - Q11i5j4I * dm.x;
+    dp = (*R5) + (*R6);
+    dm = (*R5) - (*R6);
+    x1.x += Q11i1j5R * dp.x - Q11i1j5I * dm.y;
+    x1.y += Q11i1j5R * dp.y + Q11i1j5I * dm.x;
+    x10.x += Q11i1j5R * dp.x + Q11i1j5I * dm.y;
+    x10.y += Q11i1j5R * dp.y - Q11i1j5I * dm.x;
+    x2.x += Q11i2j5R * dp.x - Q11i2j5I * dm.y;
+    x2.y += Q11i2j5R * dp.y + Q11i2j5I * dm.x;
+    x9.x += Q11i2j5R * dp.x + Q11i2j5I * dm.y;
+    x9.y += Q11i2j5R * dp.y - Q11i2j5I * dm.x;
+    x3.x += Q11i3j5R * dp.x - Q11i3j5I * dm.y;
+    x3.y += Q11i3j5R * dp.y + Q11i3j5I * dm.x;
+    x8.x += Q11i3j5R * dp.x + Q11i3j5I * dm.y;
+    x8.y += Q11i3j5R * dp.y - Q11i3j5I * dm.x;
+    x4.x += Q11i4j5R * dp.x - Q11i4j5I * dm.y;
+    x4.y += Q11i4j5R * dp.y + Q11i4j5I * dm.x;
+    x7.x += Q11i4j5R * dp.x + Q11i4j5I * dm.y;
+    x7.y += Q11i4j5R * dp.y - Q11i4j5I * dm.x;
+    x5.x += Q11i5j5R * dp.x - Q11i5j5I * dm.y;
+    x5.y += Q11i5j5R * dp.y + Q11i5j5I * dm.x;
+    x6.x += Q11i5j5R * dp.x + Q11i5j5I * dm.y;
+    x6.y += Q11i5j5R * dp.y - Q11i5j5I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+}
+
+template <typename T>
+__device__ void
+    InvRad11B1(T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9, T* R10)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, dp, dm;
+
+    x0  = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    dp  = (*R1) + (*R10);
+    dm  = (*R1) - (*R10);
+    x1.x += Q11i1j1R * dp.x + Q11i1j1I * dm.y;
+    x1.y += Q11i1j1R * dp.y - Q11i1j1I * dm.x;
+    x10.x += Q11i1j1R * dp.x - Q11i1j1I * dm.y;
+    x10.y += Q11i1j1R * dp.y + Q11i1j1I * dm.x;
+    x2.x += Q11i2j1R * dp.x + Q11i2j1I * dm.y;
+    x2.y += Q11i2j1R * dp.y - Q11i2j1I * dm.x;
+    x9.x += Q11i2j1R * dp.x - Q11i2j1I * dm.y;
+    x9.y += Q11i2j1R * dp.y + Q11i2j1I * dm.x;
+    x3.x += Q11i3j1R * dp.x + Q11i3j1I * dm.y;
+    x3.y += Q11i3j1R * dp.y - Q11i3j1I * dm.x;
+    x8.x += Q11i3j1R * dp.x - Q11i3j1I * dm.y;
+    x8.y += Q11i3j1R * dp.y + Q11i3j1I * dm.x;
+    x4.x += Q11i4j1R * dp.x + Q11i4j1I * dm.y;
+    x4.y += Q11i4j1R * dp.y - Q11i4j1I * dm.x;
+    x7.x += Q11i4j1R * dp.x - Q11i4j1I * dm.y;
+    x7.y += Q11i4j1R * dp.y + Q11i4j1I * dm.x;
+    x5.x += Q11i5j1R * dp.x + Q11i5j1I * dm.y;
+    x5.y += Q11i5j1R * dp.y - Q11i5j1I * dm.x;
+    x6.x += Q11i5j1R * dp.x - Q11i5j1I * dm.y;
+    x6.y += Q11i5j1R * dp.y + Q11i5j1I * dm.x;
+    dp = (*R2) + (*R9);
+    dm = (*R2) - (*R9);
+    x1.x += Q11i1j2R * dp.x + Q11i1j2I * dm.y;
+    x1.y += Q11i1j2R * dp.y - Q11i1j2I * dm.x;
+    x10.x += Q11i1j2R * dp.x - Q11i1j2I * dm.y;
+    x10.y += Q11i1j2R * dp.y + Q11i1j2I * dm.x;
+    x2.x += Q11i2j2R * dp.x + Q11i2j2I * dm.y;
+    x2.y += Q11i2j2R * dp.y - Q11i2j2I * dm.x;
+    x9.x += Q11i2j2R * dp.x - Q11i2j2I * dm.y;
+    x9.y += Q11i2j2R * dp.y + Q11i2j2I * dm.x;
+    x3.x += Q11i3j2R * dp.x + Q11i3j2I * dm.y;
+    x3.y += Q11i3j2R * dp.y - Q11i3j2I * dm.x;
+    x8.x += Q11i3j2R * dp.x - Q11i3j2I * dm.y;
+    x8.y += Q11i3j2R * dp.y + Q11i3j2I * dm.x;
+    x4.x += Q11i4j2R * dp.x + Q11i4j2I * dm.y;
+    x4.y += Q11i4j2R * dp.y - Q11i4j2I * dm.x;
+    x7.x += Q11i4j2R * dp.x - Q11i4j2I * dm.y;
+    x7.y += Q11i4j2R * dp.y + Q11i4j2I * dm.x;
+    x5.x += Q11i5j2R * dp.x + Q11i5j2I * dm.y;
+    x5.y += Q11i5j2R * dp.y - Q11i5j2I * dm.x;
+    x6.x += Q11i5j2R * dp.x - Q11i5j2I * dm.y;
+    x6.y += Q11i5j2R * dp.y + Q11i5j2I * dm.x;
+    dp = (*R3) + (*R8);
+    dm = (*R3) - (*R8);
+    x1.x += Q11i1j3R * dp.x + Q11i1j3I * dm.y;
+    x1.y += Q11i1j3R * dp.y - Q11i1j3I * dm.x;
+    x10.x += Q11i1j3R * dp.x - Q11i1j3I * dm.y;
+    x10.y += Q11i1j3R * dp.y + Q11i1j3I * dm.x;
+    x2.x += Q11i2j3R * dp.x + Q11i2j3I * dm.y;
+    x2.y += Q11i2j3R * dp.y - Q11i2j3I * dm.x;
+    x9.x += Q11i2j3R * dp.x - Q11i2j3I * dm.y;
+    x9.y += Q11i2j3R * dp.y + Q11i2j3I * dm.x;
+    x3.x += Q11i3j3R * dp.x + Q11i3j3I * dm.y;
+    x3.y += Q11i3j3R * dp.y - Q11i3j3I * dm.x;
+    x8.x += Q11i3j3R * dp.x - Q11i3j3I * dm.y;
+    x8.y += Q11i3j3R * dp.y + Q11i3j3I * dm.x;
+    x4.x += Q11i4j3R * dp.x + Q11i4j3I * dm.y;
+    x4.y += Q11i4j3R * dp.y - Q11i4j3I * dm.x;
+    x7.x += Q11i4j3R * dp.x - Q11i4j3I * dm.y;
+    x7.y += Q11i4j3R * dp.y + Q11i4j3I * dm.x;
+    x5.x += Q11i5j3R * dp.x + Q11i5j3I * dm.y;
+    x5.y += Q11i5j3R * dp.y - Q11i5j3I * dm.x;
+    x6.x += Q11i5j3R * dp.x - Q11i5j3I * dm.y;
+    x6.y += Q11i5j3R * dp.y + Q11i5j3I * dm.x;
+    dp = (*R4) + (*R7);
+    dm = (*R4) - (*R7);
+    x1.x += Q11i1j4R * dp.x + Q11i1j4I * dm.y;
+    x1.y += Q11i1j4R * dp.y - Q11i1j4I * dm.x;
+    x10.x += Q11i1j4R * dp.x - Q11i1j4I * dm.y;
+    x10.y += Q11i1j4R * dp.y + Q11i1j4I * dm.x;
+    x2.x += Q11i2j4R * dp.x + Q11i2j4I * dm.y;
+    x2.y += Q11i2j4R * dp.y - Q11i2j4I * dm.x;
+    x9.x += Q11i2j4R * dp.x - Q11i2j4I * dm.y;
+    x9.y += Q11i2j4R * dp.y + Q11i2j4I * dm.x;
+    x3.x += Q11i3j4R * dp.x + Q11i3j4I * dm.y;
+    x3.y += Q11i3j4R * dp.y - Q11i3j4I * dm.x;
+    x8.x += Q11i3j4R * dp.x - Q11i3j4I * dm.y;
+    x8.y += Q11i3j4R * dp.y + Q11i3j4I * dm.x;
+    x4.x += Q11i4j4R * dp.x + Q11i4j4I * dm.y;
+    x4.y += Q11i4j4R * dp.y - Q11i4j4I * dm.x;
+    x7.x += Q11i4j4R * dp.x - Q11i4j4I * dm.y;
+    x7.y += Q11i4j4R * dp.y + Q11i4j4I * dm.x;
+    x5.x += Q11i5j4R * dp.x + Q11i5j4I * dm.y;
+    x5.y += Q11i5j4R * dp.y - Q11i5j4I * dm.x;
+    x6.x += Q11i5j4R * dp.x - Q11i5j4I * dm.y;
+    x6.y += Q11i5j4R * dp.y + Q11i5j4I * dm.x;
+    dp = (*R5) + (*R6);
+    dm = (*R5) - (*R6);
+    x1.x += Q11i1j5R * dp.x + Q11i1j5I * dm.y;
+    x1.y += Q11i1j5R * dp.y - Q11i1j5I * dm.x;
+    x10.x += Q11i1j5R * dp.x - Q11i1j5I * dm.y;
+    x10.y += Q11i1j5R * dp.y + Q11i1j5I * dm.x;
+    x2.x += Q11i2j5R * dp.x + Q11i2j5I * dm.y;
+    x2.y += Q11i2j5R * dp.y - Q11i2j5I * dm.x;
+    x9.x += Q11i2j5R * dp.x - Q11i2j5I * dm.y;
+    x9.y += Q11i2j5R * dp.y + Q11i2j5I * dm.x;
+    x3.x += Q11i3j5R * dp.x + Q11i3j5I * dm.y;
+    x3.y += Q11i3j5R * dp.y - Q11i3j5I * dm.x;
+    x8.x += Q11i3j5R * dp.x - Q11i3j5I * dm.y;
+    x8.y += Q11i3j5R * dp.y + Q11i3j5I * dm.x;
+    x4.x += Q11i4j5R * dp.x + Q11i4j5I * dm.y;
+    x4.y += Q11i4j5R * dp.y - Q11i4j5I * dm.x;
+    x7.x += Q11i4j5R * dp.x - Q11i4j5I * dm.y;
+    x7.y += Q11i4j5R * dp.y + Q11i4j5I * dm.x;
+    x5.x += Q11i5j5R * dp.x + Q11i5j5I * dm.y;
+    x5.y += Q11i5j5R * dp.y - Q11i5j5I * dm.x;
+    x6.x += Q11i5j5R * dp.x - Q11i5j5I * dm.y;
+    x6.y += Q11i5j5R * dp.y + Q11i5j5I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+}
+
+template <typename T>
+__device__ void FwdRad13B1(
+    T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9, T* R10, T* R11, T* R12)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, dp, dm;
+
+    x0 = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10)
+         + (*R11) + (*R12);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    x11 = (*R0);
+    x12 = (*R0);
+    dp  = (*R1) + (*R12);
+    dm  = (*R1) - (*R12);
+    x1.x += Q13i1j1R * dp.x - Q13i1j1I * dm.y;
+    x1.y += Q13i1j1R * dp.y + Q13i1j1I * dm.x;
+    x12.x += Q13i1j1R * dp.x + Q13i1j1I * dm.y;
+    x12.y += Q13i1j1R * dp.y - Q13i1j1I * dm.x;
+    x2.x += Q13i2j1R * dp.x - Q13i2j1I * dm.y;
+    x2.y += Q13i2j1R * dp.y + Q13i2j1I * dm.x;
+    x11.x += Q13i2j1R * dp.x + Q13i2j1I * dm.y;
+    x11.y += Q13i2j1R * dp.y - Q13i2j1I * dm.x;
+    x3.x += Q13i3j1R * dp.x - Q13i3j1I * dm.y;
+    x3.y += Q13i3j1R * dp.y + Q13i3j1I * dm.x;
+    x10.x += Q13i3j1R * dp.x + Q13i3j1I * dm.y;
+    x10.y += Q13i3j1R * dp.y - Q13i3j1I * dm.x;
+    x4.x += Q13i4j1R * dp.x - Q13i4j1I * dm.y;
+    x4.y += Q13i4j1R * dp.y + Q13i4j1I * dm.x;
+    x9.x += Q13i4j1R * dp.x + Q13i4j1I * dm.y;
+    x9.y += Q13i4j1R * dp.y - Q13i4j1I * dm.x;
+    x5.x += Q13i5j1R * dp.x - Q13i5j1I * dm.y;
+    x5.y += Q13i5j1R * dp.y + Q13i5j1I * dm.x;
+    x8.x += Q13i5j1R * dp.x + Q13i5j1I * dm.y;
+    x8.y += Q13i5j1R * dp.y - Q13i5j1I * dm.x;
+    x6.x += Q13i6j1R * dp.x - Q13i6j1I * dm.y;
+    x6.y += Q13i6j1R * dp.y + Q13i6j1I * dm.x;
+    x7.x += Q13i6j1R * dp.x + Q13i6j1I * dm.y;
+    x7.y += Q13i6j1R * dp.y - Q13i6j1I * dm.x;
+    dp = (*R2) + (*R11);
+    dm = (*R2) - (*R11);
+    x1.x += Q13i1j2R * dp.x - Q13i1j2I * dm.y;
+    x1.y += Q13i1j2R * dp.y + Q13i1j2I * dm.x;
+    x12.x += Q13i1j2R * dp.x + Q13i1j2I * dm.y;
+    x12.y += Q13i1j2R * dp.y - Q13i1j2I * dm.x;
+    x2.x += Q13i2j2R * dp.x - Q13i2j2I * dm.y;
+    x2.y += Q13i2j2R * dp.y + Q13i2j2I * dm.x;
+    x11.x += Q13i2j2R * dp.x + Q13i2j2I * dm.y;
+    x11.y += Q13i2j2R * dp.y - Q13i2j2I * dm.x;
+    x3.x += Q13i3j2R * dp.x - Q13i3j2I * dm.y;
+    x3.y += Q13i3j2R * dp.y + Q13i3j2I * dm.x;
+    x10.x += Q13i3j2R * dp.x + Q13i3j2I * dm.y;
+    x10.y += Q13i3j2R * dp.y - Q13i3j2I * dm.x;
+    x4.x += Q13i4j2R * dp.x - Q13i4j2I * dm.y;
+    x4.y += Q13i4j2R * dp.y + Q13i4j2I * dm.x;
+    x9.x += Q13i4j2R * dp.x + Q13i4j2I * dm.y;
+    x9.y += Q13i4j2R * dp.y - Q13i4j2I * dm.x;
+    x5.x += Q13i5j2R * dp.x - Q13i5j2I * dm.y;
+    x5.y += Q13i5j2R * dp.y + Q13i5j2I * dm.x;
+    x8.x += Q13i5j2R * dp.x + Q13i5j2I * dm.y;
+    x8.y += Q13i5j2R * dp.y - Q13i5j2I * dm.x;
+    x6.x += Q13i6j2R * dp.x - Q13i6j2I * dm.y;
+    x6.y += Q13i6j2R * dp.y + Q13i6j2I * dm.x;
+    x7.x += Q13i6j2R * dp.x + Q13i6j2I * dm.y;
+    x7.y += Q13i6j2R * dp.y - Q13i6j2I * dm.x;
+    dp = (*R3) + (*R10);
+    dm = (*R3) - (*R10);
+    x1.x += Q13i1j3R * dp.x - Q13i1j3I * dm.y;
+    x1.y += Q13i1j3R * dp.y + Q13i1j3I * dm.x;
+    x12.x += Q13i1j3R * dp.x + Q13i1j3I * dm.y;
+    x12.y += Q13i1j3R * dp.y - Q13i1j3I * dm.x;
+    x2.x += Q13i2j3R * dp.x - Q13i2j3I * dm.y;
+    x2.y += Q13i2j3R * dp.y + Q13i2j3I * dm.x;
+    x11.x += Q13i2j3R * dp.x + Q13i2j3I * dm.y;
+    x11.y += Q13i2j3R * dp.y - Q13i2j3I * dm.x;
+    x3.x += Q13i3j3R * dp.x - Q13i3j3I * dm.y;
+    x3.y += Q13i3j3R * dp.y + Q13i3j3I * dm.x;
+    x10.x += Q13i3j3R * dp.x + Q13i3j3I * dm.y;
+    x10.y += Q13i3j3R * dp.y - Q13i3j3I * dm.x;
+    x4.x += Q13i4j3R * dp.x - Q13i4j3I * dm.y;
+    x4.y += Q13i4j3R * dp.y + Q13i4j3I * dm.x;
+    x9.x += Q13i4j3R * dp.x + Q13i4j3I * dm.y;
+    x9.y += Q13i4j3R * dp.y - Q13i4j3I * dm.x;
+    x5.x += Q13i5j3R * dp.x - Q13i5j3I * dm.y;
+    x5.y += Q13i5j3R * dp.y + Q13i5j3I * dm.x;
+    x8.x += Q13i5j3R * dp.x + Q13i5j3I * dm.y;
+    x8.y += Q13i5j3R * dp.y - Q13i5j3I * dm.x;
+    x6.x += Q13i6j3R * dp.x - Q13i6j3I * dm.y;
+    x6.y += Q13i6j3R * dp.y + Q13i6j3I * dm.x;
+    x7.x += Q13i6j3R * dp.x + Q13i6j3I * dm.y;
+    x7.y += Q13i6j3R * dp.y - Q13i6j3I * dm.x;
+    dp = (*R4) + (*R9);
+    dm = (*R4) - (*R9);
+    x1.x += Q13i1j4R * dp.x - Q13i1j4I * dm.y;
+    x1.y += Q13i1j4R * dp.y + Q13i1j4I * dm.x;
+    x12.x += Q13i1j4R * dp.x + Q13i1j4I * dm.y;
+    x12.y += Q13i1j4R * dp.y - Q13i1j4I * dm.x;
+    x2.x += Q13i2j4R * dp.x - Q13i2j4I * dm.y;
+    x2.y += Q13i2j4R * dp.y + Q13i2j4I * dm.x;
+    x11.x += Q13i2j4R * dp.x + Q13i2j4I * dm.y;
+    x11.y += Q13i2j4R * dp.y - Q13i2j4I * dm.x;
+    x3.x += Q13i3j4R * dp.x - Q13i3j4I * dm.y;
+    x3.y += Q13i3j4R * dp.y + Q13i3j4I * dm.x;
+    x10.x += Q13i3j4R * dp.x + Q13i3j4I * dm.y;
+    x10.y += Q13i3j4R * dp.y - Q13i3j4I * dm.x;
+    x4.x += Q13i4j4R * dp.x - Q13i4j4I * dm.y;
+    x4.y += Q13i4j4R * dp.y + Q13i4j4I * dm.x;
+    x9.x += Q13i4j4R * dp.x + Q13i4j4I * dm.y;
+    x9.y += Q13i4j4R * dp.y - Q13i4j4I * dm.x;
+    x5.x += Q13i5j4R * dp.x - Q13i5j4I * dm.y;
+    x5.y += Q13i5j4R * dp.y + Q13i5j4I * dm.x;
+    x8.x += Q13i5j4R * dp.x + Q13i5j4I * dm.y;
+    x8.y += Q13i5j4R * dp.y - Q13i5j4I * dm.x;
+    x6.x += Q13i6j4R * dp.x - Q13i6j4I * dm.y;
+    x6.y += Q13i6j4R * dp.y + Q13i6j4I * dm.x;
+    x7.x += Q13i6j4R * dp.x + Q13i6j4I * dm.y;
+    x7.y += Q13i6j4R * dp.y - Q13i6j4I * dm.x;
+    dp = (*R5) + (*R8);
+    dm = (*R5) - (*R8);
+    x1.x += Q13i1j5R * dp.x - Q13i1j5I * dm.y;
+    x1.y += Q13i1j5R * dp.y + Q13i1j5I * dm.x;
+    x12.x += Q13i1j5R * dp.x + Q13i1j5I * dm.y;
+    x12.y += Q13i1j5R * dp.y - Q13i1j5I * dm.x;
+    x2.x += Q13i2j5R * dp.x - Q13i2j5I * dm.y;
+    x2.y += Q13i2j5R * dp.y + Q13i2j5I * dm.x;
+    x11.x += Q13i2j5R * dp.x + Q13i2j5I * dm.y;
+    x11.y += Q13i2j5R * dp.y - Q13i2j5I * dm.x;
+    x3.x += Q13i3j5R * dp.x - Q13i3j5I * dm.y;
+    x3.y += Q13i3j5R * dp.y + Q13i3j5I * dm.x;
+    x10.x += Q13i3j5R * dp.x + Q13i3j5I * dm.y;
+    x10.y += Q13i3j5R * dp.y - Q13i3j5I * dm.x;
+    x4.x += Q13i4j5R * dp.x - Q13i4j5I * dm.y;
+    x4.y += Q13i4j5R * dp.y + Q13i4j5I * dm.x;
+    x9.x += Q13i4j5R * dp.x + Q13i4j5I * dm.y;
+    x9.y += Q13i4j5R * dp.y - Q13i4j5I * dm.x;
+    x5.x += Q13i5j5R * dp.x - Q13i5j5I * dm.y;
+    x5.y += Q13i5j5R * dp.y + Q13i5j5I * dm.x;
+    x8.x += Q13i5j5R * dp.x + Q13i5j5I * dm.y;
+    x8.y += Q13i5j5R * dp.y - Q13i5j5I * dm.x;
+    x6.x += Q13i6j5R * dp.x - Q13i6j5I * dm.y;
+    x6.y += Q13i6j5R * dp.y + Q13i6j5I * dm.x;
+    x7.x += Q13i6j5R * dp.x + Q13i6j5I * dm.y;
+    x7.y += Q13i6j5R * dp.y - Q13i6j5I * dm.x;
+    dp = (*R6) + (*R7);
+    dm = (*R6) - (*R7);
+    x1.x += Q13i1j6R * dp.x - Q13i1j6I * dm.y;
+    x1.y += Q13i1j6R * dp.y + Q13i1j6I * dm.x;
+    x12.x += Q13i1j6R * dp.x + Q13i1j6I * dm.y;
+    x12.y += Q13i1j6R * dp.y - Q13i1j6I * dm.x;
+    x2.x += Q13i2j6R * dp.x - Q13i2j6I * dm.y;
+    x2.y += Q13i2j6R * dp.y + Q13i2j6I * dm.x;
+    x11.x += Q13i2j6R * dp.x + Q13i2j6I * dm.y;
+    x11.y += Q13i2j6R * dp.y - Q13i2j6I * dm.x;
+    x3.x += Q13i3j6R * dp.x - Q13i3j6I * dm.y;
+    x3.y += Q13i3j6R * dp.y + Q13i3j6I * dm.x;
+    x10.x += Q13i3j6R * dp.x + Q13i3j6I * dm.y;
+    x10.y += Q13i3j6R * dp.y - Q13i3j6I * dm.x;
+    x4.x += Q13i4j6R * dp.x - Q13i4j6I * dm.y;
+    x4.y += Q13i4j6R * dp.y + Q13i4j6I * dm.x;
+    x9.x += Q13i4j6R * dp.x + Q13i4j6I * dm.y;
+    x9.y += Q13i4j6R * dp.y - Q13i4j6I * dm.x;
+    x5.x += Q13i5j6R * dp.x - Q13i5j6I * dm.y;
+    x5.y += Q13i5j6R * dp.y + Q13i5j6I * dm.x;
+    x8.x += Q13i5j6R * dp.x + Q13i5j6I * dm.y;
+    x8.y += Q13i5j6R * dp.y - Q13i5j6I * dm.x;
+    x6.x += Q13i6j6R * dp.x - Q13i6j6I * dm.y;
+    x6.y += Q13i6j6R * dp.y + Q13i6j6I * dm.x;
+    x7.x += Q13i6j6R * dp.x + Q13i6j6I * dm.y;
+    x7.y += Q13i6j6R * dp.y - Q13i6j6I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+    (*R11) = x11;
+    (*R12) = x12;
+}
+
+template <typename T>
+__device__ void InvRad13B1(
+    T* R0, T* R1, T* R2, T* R3, T* R4, T* R5, T* R6, T* R7, T* R8, T* R9, T* R10, T* R11, T* R12)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, dp, dm;
+
+    x0 = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10)
+         + (*R11) + (*R12);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    x11 = (*R0);
+    x12 = (*R0);
+    dp  = (*R1) + (*R12);
+    dm  = (*R1) - (*R12);
+    x1.x += Q13i1j1R * dp.x + Q13i1j1I * dm.y;
+    x1.y += Q13i1j1R * dp.y - Q13i1j1I * dm.x;
+    x12.x += Q13i1j1R * dp.x - Q13i1j1I * dm.y;
+    x12.y += Q13i1j1R * dp.y + Q13i1j1I * dm.x;
+    x2.x += Q13i2j1R * dp.x + Q13i2j1I * dm.y;
+    x2.y += Q13i2j1R * dp.y - Q13i2j1I * dm.x;
+    x11.x += Q13i2j1R * dp.x - Q13i2j1I * dm.y;
+    x11.y += Q13i2j1R * dp.y + Q13i2j1I * dm.x;
+    x3.x += Q13i3j1R * dp.x + Q13i3j1I * dm.y;
+    x3.y += Q13i3j1R * dp.y - Q13i3j1I * dm.x;
+    x10.x += Q13i3j1R * dp.x - Q13i3j1I * dm.y;
+    x10.y += Q13i3j1R * dp.y + Q13i3j1I * dm.x;
+    x4.x += Q13i4j1R * dp.x + Q13i4j1I * dm.y;
+    x4.y += Q13i4j1R * dp.y - Q13i4j1I * dm.x;
+    x9.x += Q13i4j1R * dp.x - Q13i4j1I * dm.y;
+    x9.y += Q13i4j1R * dp.y + Q13i4j1I * dm.x;
+    x5.x += Q13i5j1R * dp.x + Q13i5j1I * dm.y;
+    x5.y += Q13i5j1R * dp.y - Q13i5j1I * dm.x;
+    x8.x += Q13i5j1R * dp.x - Q13i5j1I * dm.y;
+    x8.y += Q13i5j1R * dp.y + Q13i5j1I * dm.x;
+    x6.x += Q13i6j1R * dp.x + Q13i6j1I * dm.y;
+    x6.y += Q13i6j1R * dp.y - Q13i6j1I * dm.x;
+    x7.x += Q13i6j1R * dp.x - Q13i6j1I * dm.y;
+    x7.y += Q13i6j1R * dp.y + Q13i6j1I * dm.x;
+    dp = (*R2) + (*R11);
+    dm = (*R2) - (*R11);
+    x1.x += Q13i1j2R * dp.x + Q13i1j2I * dm.y;
+    x1.y += Q13i1j2R * dp.y - Q13i1j2I * dm.x;
+    x12.x += Q13i1j2R * dp.x - Q13i1j2I * dm.y;
+    x12.y += Q13i1j2R * dp.y + Q13i1j2I * dm.x;
+    x2.x += Q13i2j2R * dp.x + Q13i2j2I * dm.y;
+    x2.y += Q13i2j2R * dp.y - Q13i2j2I * dm.x;
+    x11.x += Q13i2j2R * dp.x - Q13i2j2I * dm.y;
+    x11.y += Q13i2j2R * dp.y + Q13i2j2I * dm.x;
+    x3.x += Q13i3j2R * dp.x + Q13i3j2I * dm.y;
+    x3.y += Q13i3j2R * dp.y - Q13i3j2I * dm.x;
+    x10.x += Q13i3j2R * dp.x - Q13i3j2I * dm.y;
+    x10.y += Q13i3j2R * dp.y + Q13i3j2I * dm.x;
+    x4.x += Q13i4j2R * dp.x + Q13i4j2I * dm.y;
+    x4.y += Q13i4j2R * dp.y - Q13i4j2I * dm.x;
+    x9.x += Q13i4j2R * dp.x - Q13i4j2I * dm.y;
+    x9.y += Q13i4j2R * dp.y + Q13i4j2I * dm.x;
+    x5.x += Q13i5j2R * dp.x + Q13i5j2I * dm.y;
+    x5.y += Q13i5j2R * dp.y - Q13i5j2I * dm.x;
+    x8.x += Q13i5j2R * dp.x - Q13i5j2I * dm.y;
+    x8.y += Q13i5j2R * dp.y + Q13i5j2I * dm.x;
+    x6.x += Q13i6j2R * dp.x + Q13i6j2I * dm.y;
+    x6.y += Q13i6j2R * dp.y - Q13i6j2I * dm.x;
+    x7.x += Q13i6j2R * dp.x - Q13i6j2I * dm.y;
+    x7.y += Q13i6j2R * dp.y + Q13i6j2I * dm.x;
+    dp = (*R3) + (*R10);
+    dm = (*R3) - (*R10);
+    x1.x += Q13i1j3R * dp.x + Q13i1j3I * dm.y;
+    x1.y += Q13i1j3R * dp.y - Q13i1j3I * dm.x;
+    x12.x += Q13i1j3R * dp.x - Q13i1j3I * dm.y;
+    x12.y += Q13i1j3R * dp.y + Q13i1j3I * dm.x;
+    x2.x += Q13i2j3R * dp.x + Q13i2j3I * dm.y;
+    x2.y += Q13i2j3R * dp.y - Q13i2j3I * dm.x;
+    x11.x += Q13i2j3R * dp.x - Q13i2j3I * dm.y;
+    x11.y += Q13i2j3R * dp.y + Q13i2j3I * dm.x;
+    x3.x += Q13i3j3R * dp.x + Q13i3j3I * dm.y;
+    x3.y += Q13i3j3R * dp.y - Q13i3j3I * dm.x;
+    x10.x += Q13i3j3R * dp.x - Q13i3j3I * dm.y;
+    x10.y += Q13i3j3R * dp.y + Q13i3j3I * dm.x;
+    x4.x += Q13i4j3R * dp.x + Q13i4j3I * dm.y;
+    x4.y += Q13i4j3R * dp.y - Q13i4j3I * dm.x;
+    x9.x += Q13i4j3R * dp.x - Q13i4j3I * dm.y;
+    x9.y += Q13i4j3R * dp.y + Q13i4j3I * dm.x;
+    x5.x += Q13i5j3R * dp.x + Q13i5j3I * dm.y;
+    x5.y += Q13i5j3R * dp.y - Q13i5j3I * dm.x;
+    x8.x += Q13i5j3R * dp.x - Q13i5j3I * dm.y;
+    x8.y += Q13i5j3R * dp.y + Q13i5j3I * dm.x;
+    x6.x += Q13i6j3R * dp.x + Q13i6j3I * dm.y;
+    x6.y += Q13i6j3R * dp.y - Q13i6j3I * dm.x;
+    x7.x += Q13i6j3R * dp.x - Q13i6j3I * dm.y;
+    x7.y += Q13i6j3R * dp.y + Q13i6j3I * dm.x;
+    dp = (*R4) + (*R9);
+    dm = (*R4) - (*R9);
+    x1.x += Q13i1j4R * dp.x + Q13i1j4I * dm.y;
+    x1.y += Q13i1j4R * dp.y - Q13i1j4I * dm.x;
+    x12.x += Q13i1j4R * dp.x - Q13i1j4I * dm.y;
+    x12.y += Q13i1j4R * dp.y + Q13i1j4I * dm.x;
+    x2.x += Q13i2j4R * dp.x + Q13i2j4I * dm.y;
+    x2.y += Q13i2j4R * dp.y - Q13i2j4I * dm.x;
+    x11.x += Q13i2j4R * dp.x - Q13i2j4I * dm.y;
+    x11.y += Q13i2j4R * dp.y + Q13i2j4I * dm.x;
+    x3.x += Q13i3j4R * dp.x + Q13i3j4I * dm.y;
+    x3.y += Q13i3j4R * dp.y - Q13i3j4I * dm.x;
+    x10.x += Q13i3j4R * dp.x - Q13i3j4I * dm.y;
+    x10.y += Q13i3j4R * dp.y + Q13i3j4I * dm.x;
+    x4.x += Q13i4j4R * dp.x + Q13i4j4I * dm.y;
+    x4.y += Q13i4j4R * dp.y - Q13i4j4I * dm.x;
+    x9.x += Q13i4j4R * dp.x - Q13i4j4I * dm.y;
+    x9.y += Q13i4j4R * dp.y + Q13i4j4I * dm.x;
+    x5.x += Q13i5j4R * dp.x + Q13i5j4I * dm.y;
+    x5.y += Q13i5j4R * dp.y - Q13i5j4I * dm.x;
+    x8.x += Q13i5j4R * dp.x - Q13i5j4I * dm.y;
+    x8.y += Q13i5j4R * dp.y + Q13i5j4I * dm.x;
+    x6.x += Q13i6j4R * dp.x + Q13i6j4I * dm.y;
+    x6.y += Q13i6j4R * dp.y - Q13i6j4I * dm.x;
+    x7.x += Q13i6j4R * dp.x - Q13i6j4I * dm.y;
+    x7.y += Q13i6j4R * dp.y + Q13i6j4I * dm.x;
+    dp = (*R5) + (*R8);
+    dm = (*R5) - (*R8);
+    x1.x += Q13i1j5R * dp.x + Q13i1j5I * dm.y;
+    x1.y += Q13i1j5R * dp.y - Q13i1j5I * dm.x;
+    x12.x += Q13i1j5R * dp.x - Q13i1j5I * dm.y;
+    x12.y += Q13i1j5R * dp.y + Q13i1j5I * dm.x;
+    x2.x += Q13i2j5R * dp.x + Q13i2j5I * dm.y;
+    x2.y += Q13i2j5R * dp.y - Q13i2j5I * dm.x;
+    x11.x += Q13i2j5R * dp.x - Q13i2j5I * dm.y;
+    x11.y += Q13i2j5R * dp.y + Q13i2j5I * dm.x;
+    x3.x += Q13i3j5R * dp.x + Q13i3j5I * dm.y;
+    x3.y += Q13i3j5R * dp.y - Q13i3j5I * dm.x;
+    x10.x += Q13i3j5R * dp.x - Q13i3j5I * dm.y;
+    x10.y += Q13i3j5R * dp.y + Q13i3j5I * dm.x;
+    x4.x += Q13i4j5R * dp.x + Q13i4j5I * dm.y;
+    x4.y += Q13i4j5R * dp.y - Q13i4j5I * dm.x;
+    x9.x += Q13i4j5R * dp.x - Q13i4j5I * dm.y;
+    x9.y += Q13i4j5R * dp.y + Q13i4j5I * dm.x;
+    x5.x += Q13i5j5R * dp.x + Q13i5j5I * dm.y;
+    x5.y += Q13i5j5R * dp.y - Q13i5j5I * dm.x;
+    x8.x += Q13i5j5R * dp.x - Q13i5j5I * dm.y;
+    x8.y += Q13i5j5R * dp.y + Q13i5j5I * dm.x;
+    x6.x += Q13i6j5R * dp.x + Q13i6j5I * dm.y;
+    x6.y += Q13i6j5R * dp.y - Q13i6j5I * dm.x;
+    x7.x += Q13i6j5R * dp.x - Q13i6j5I * dm.y;
+    x7.y += Q13i6j5R * dp.y + Q13i6j5I * dm.x;
+    dp = (*R6) + (*R7);
+    dm = (*R6) - (*R7);
+    x1.x += Q13i1j6R * dp.x + Q13i1j6I * dm.y;
+    x1.y += Q13i1j6R * dp.y - Q13i1j6I * dm.x;
+    x12.x += Q13i1j6R * dp.x - Q13i1j6I * dm.y;
+    x12.y += Q13i1j6R * dp.y + Q13i1j6I * dm.x;
+    x2.x += Q13i2j6R * dp.x + Q13i2j6I * dm.y;
+    x2.y += Q13i2j6R * dp.y - Q13i2j6I * dm.x;
+    x11.x += Q13i2j6R * dp.x - Q13i2j6I * dm.y;
+    x11.y += Q13i2j6R * dp.y + Q13i2j6I * dm.x;
+    x3.x += Q13i3j6R * dp.x + Q13i3j6I * dm.y;
+    x3.y += Q13i3j6R * dp.y - Q13i3j6I * dm.x;
+    x10.x += Q13i3j6R * dp.x - Q13i3j6I * dm.y;
+    x10.y += Q13i3j6R * dp.y + Q13i3j6I * dm.x;
+    x4.x += Q13i4j6R * dp.x + Q13i4j6I * dm.y;
+    x4.y += Q13i4j6R * dp.y - Q13i4j6I * dm.x;
+    x9.x += Q13i4j6R * dp.x - Q13i4j6I * dm.y;
+    x9.y += Q13i4j6R * dp.y + Q13i4j6I * dm.x;
+    x5.x += Q13i5j6R * dp.x + Q13i5j6I * dm.y;
+    x5.y += Q13i5j6R * dp.y - Q13i5j6I * dm.x;
+    x8.x += Q13i5j6R * dp.x - Q13i5j6I * dm.y;
+    x8.y += Q13i5j6R * dp.y + Q13i5j6I * dm.x;
+    x6.x += Q13i6j6R * dp.x + Q13i6j6I * dm.y;
+    x6.y += Q13i6j6R * dp.y - Q13i6j6I * dm.x;
+    x7.x += Q13i6j6R * dp.x - Q13i6j6I * dm.y;
+    x7.y += Q13i6j6R * dp.y + Q13i6j6I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+    (*R11) = x11;
+    (*R12) = x12;
+}
+
+template <typename T>
+__device__ void FwdRad17B1(T* R0,
+                           T* R1,
+                           T* R2,
+                           T* R3,
+                           T* R4,
+                           T* R5,
+                           T* R6,
+                           T* R7,
+                           T* R8,
+                           T* R9,
+                           T* R10,
+                           T* R11,
+                           T* R12,
+                           T* R13,
+                           T* R14,
+                           T* R15,
+                           T* R16)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, dp, dm;
+
+    x0 = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10)
+         + (*R11) + (*R12) + (*R13) + (*R14) + (*R15) + (*R16);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    x11 = (*R0);
+    x12 = (*R0);
+    x13 = (*R0);
+    x14 = (*R0);
+    x15 = (*R0);
+    x16 = (*R0);
+    dp  = (*R1) + (*R16);
+    dm  = (*R1) - (*R16);
+    x1.x += Q17i1j1R * dp.x - Q17i1j1I * dm.y;
+    x1.y += Q17i1j1R * dp.y + Q17i1j1I * dm.x;
+    x16.x += Q17i1j1R * dp.x + Q17i1j1I * dm.y;
+    x16.y += Q17i1j1R * dp.y - Q17i1j1I * dm.x;
+    x2.x += Q17i2j1R * dp.x - Q17i2j1I * dm.y;
+    x2.y += Q17i2j1R * dp.y + Q17i2j1I * dm.x;
+    x15.x += Q17i2j1R * dp.x + Q17i2j1I * dm.y;
+    x15.y += Q17i2j1R * dp.y - Q17i2j1I * dm.x;
+    x3.x += Q17i3j1R * dp.x - Q17i3j1I * dm.y;
+    x3.y += Q17i3j1R * dp.y + Q17i3j1I * dm.x;
+    x14.x += Q17i3j1R * dp.x + Q17i3j1I * dm.y;
+    x14.y += Q17i3j1R * dp.y - Q17i3j1I * dm.x;
+    x4.x += Q17i4j1R * dp.x - Q17i4j1I * dm.y;
+    x4.y += Q17i4j1R * dp.y + Q17i4j1I * dm.x;
+    x13.x += Q17i4j1R * dp.x + Q17i4j1I * dm.y;
+    x13.y += Q17i4j1R * dp.y - Q17i4j1I * dm.x;
+    x5.x += Q17i5j1R * dp.x - Q17i5j1I * dm.y;
+    x5.y += Q17i5j1R * dp.y + Q17i5j1I * dm.x;
+    x12.x += Q17i5j1R * dp.x + Q17i5j1I * dm.y;
+    x12.y += Q17i5j1R * dp.y - Q17i5j1I * dm.x;
+    x6.x += Q17i6j1R * dp.x - Q17i6j1I * dm.y;
+    x6.y += Q17i6j1R * dp.y + Q17i6j1I * dm.x;
+    x11.x += Q17i6j1R * dp.x + Q17i6j1I * dm.y;
+    x11.y += Q17i6j1R * dp.y - Q17i6j1I * dm.x;
+    x7.x += Q17i7j1R * dp.x - Q17i7j1I * dm.y;
+    x7.y += Q17i7j1R * dp.y + Q17i7j1I * dm.x;
+    x10.x += Q17i7j1R * dp.x + Q17i7j1I * dm.y;
+    x10.y += Q17i7j1R * dp.y - Q17i7j1I * dm.x;
+    x8.x += Q17i8j1R * dp.x - Q17i8j1I * dm.y;
+    x8.y += Q17i8j1R * dp.y + Q17i8j1I * dm.x;
+    x9.x += Q17i8j1R * dp.x + Q17i8j1I * dm.y;
+    x9.y += Q17i8j1R * dp.y - Q17i8j1I * dm.x;
+    dp = (*R2) + (*R15);
+    dm = (*R2) - (*R15);
+    x1.x += Q17i1j2R * dp.x - Q17i1j2I * dm.y;
+    x1.y += Q17i1j2R * dp.y + Q17i1j2I * dm.x;
+    x16.x += Q17i1j2R * dp.x + Q17i1j2I * dm.y;
+    x16.y += Q17i1j2R * dp.y - Q17i1j2I * dm.x;
+    x2.x += Q17i2j2R * dp.x - Q17i2j2I * dm.y;
+    x2.y += Q17i2j2R * dp.y + Q17i2j2I * dm.x;
+    x15.x += Q17i2j2R * dp.x + Q17i2j2I * dm.y;
+    x15.y += Q17i2j2R * dp.y - Q17i2j2I * dm.x;
+    x3.x += Q17i3j2R * dp.x - Q17i3j2I * dm.y;
+    x3.y += Q17i3j2R * dp.y + Q17i3j2I * dm.x;
+    x14.x += Q17i3j2R * dp.x + Q17i3j2I * dm.y;
+    x14.y += Q17i3j2R * dp.y - Q17i3j2I * dm.x;
+    x4.x += Q17i4j2R * dp.x - Q17i4j2I * dm.y;
+    x4.y += Q17i4j2R * dp.y + Q17i4j2I * dm.x;
+    x13.x += Q17i4j2R * dp.x + Q17i4j2I * dm.y;
+    x13.y += Q17i4j2R * dp.y - Q17i4j2I * dm.x;
+    x5.x += Q17i5j2R * dp.x - Q17i5j2I * dm.y;
+    x5.y += Q17i5j2R * dp.y + Q17i5j2I * dm.x;
+    x12.x += Q17i5j2R * dp.x + Q17i5j2I * dm.y;
+    x12.y += Q17i5j2R * dp.y - Q17i5j2I * dm.x;
+    x6.x += Q17i6j2R * dp.x - Q17i6j2I * dm.y;
+    x6.y += Q17i6j2R * dp.y + Q17i6j2I * dm.x;
+    x11.x += Q17i6j2R * dp.x + Q17i6j2I * dm.y;
+    x11.y += Q17i6j2R * dp.y - Q17i6j2I * dm.x;
+    x7.x += Q17i7j2R * dp.x - Q17i7j2I * dm.y;
+    x7.y += Q17i7j2R * dp.y + Q17i7j2I * dm.x;
+    x10.x += Q17i7j2R * dp.x + Q17i7j2I * dm.y;
+    x10.y += Q17i7j2R * dp.y - Q17i7j2I * dm.x;
+    x8.x += Q17i8j2R * dp.x - Q17i8j2I * dm.y;
+    x8.y += Q17i8j2R * dp.y + Q17i8j2I * dm.x;
+    x9.x += Q17i8j2R * dp.x + Q17i8j2I * dm.y;
+    x9.y += Q17i8j2R * dp.y - Q17i8j2I * dm.x;
+    dp = (*R3) + (*R14);
+    dm = (*R3) - (*R14);
+    x1.x += Q17i1j3R * dp.x - Q17i1j3I * dm.y;
+    x1.y += Q17i1j3R * dp.y + Q17i1j3I * dm.x;
+    x16.x += Q17i1j3R * dp.x + Q17i1j3I * dm.y;
+    x16.y += Q17i1j3R * dp.y - Q17i1j3I * dm.x;
+    x2.x += Q17i2j3R * dp.x - Q17i2j3I * dm.y;
+    x2.y += Q17i2j3R * dp.y + Q17i2j3I * dm.x;
+    x15.x += Q17i2j3R * dp.x + Q17i2j3I * dm.y;
+    x15.y += Q17i2j3R * dp.y - Q17i2j3I * dm.x;
+    x3.x += Q17i3j3R * dp.x - Q17i3j3I * dm.y;
+    x3.y += Q17i3j3R * dp.y + Q17i3j3I * dm.x;
+    x14.x += Q17i3j3R * dp.x + Q17i3j3I * dm.y;
+    x14.y += Q17i3j3R * dp.y - Q17i3j3I * dm.x;
+    x4.x += Q17i4j3R * dp.x - Q17i4j3I * dm.y;
+    x4.y += Q17i4j3R * dp.y + Q17i4j3I * dm.x;
+    x13.x += Q17i4j3R * dp.x + Q17i4j3I * dm.y;
+    x13.y += Q17i4j3R * dp.y - Q17i4j3I * dm.x;
+    x5.x += Q17i5j3R * dp.x - Q17i5j3I * dm.y;
+    x5.y += Q17i5j3R * dp.y + Q17i5j3I * dm.x;
+    x12.x += Q17i5j3R * dp.x + Q17i5j3I * dm.y;
+    x12.y += Q17i5j3R * dp.y - Q17i5j3I * dm.x;
+    x6.x += Q17i6j3R * dp.x - Q17i6j3I * dm.y;
+    x6.y += Q17i6j3R * dp.y + Q17i6j3I * dm.x;
+    x11.x += Q17i6j3R * dp.x + Q17i6j3I * dm.y;
+    x11.y += Q17i6j3R * dp.y - Q17i6j3I * dm.x;
+    x7.x += Q17i7j3R * dp.x - Q17i7j3I * dm.y;
+    x7.y += Q17i7j3R * dp.y + Q17i7j3I * dm.x;
+    x10.x += Q17i7j3R * dp.x + Q17i7j3I * dm.y;
+    x10.y += Q17i7j3R * dp.y - Q17i7j3I * dm.x;
+    x8.x += Q17i8j3R * dp.x - Q17i8j3I * dm.y;
+    x8.y += Q17i8j3R * dp.y + Q17i8j3I * dm.x;
+    x9.x += Q17i8j3R * dp.x + Q17i8j3I * dm.y;
+    x9.y += Q17i8j3R * dp.y - Q17i8j3I * dm.x;
+    dp = (*R4) + (*R13);
+    dm = (*R4) - (*R13);
+    x1.x += Q17i1j4R * dp.x - Q17i1j4I * dm.y;
+    x1.y += Q17i1j4R * dp.y + Q17i1j4I * dm.x;
+    x16.x += Q17i1j4R * dp.x + Q17i1j4I * dm.y;
+    x16.y += Q17i1j4R * dp.y - Q17i1j4I * dm.x;
+    x2.x += Q17i2j4R * dp.x - Q17i2j4I * dm.y;
+    x2.y += Q17i2j4R * dp.y + Q17i2j4I * dm.x;
+    x15.x += Q17i2j4R * dp.x + Q17i2j4I * dm.y;
+    x15.y += Q17i2j4R * dp.y - Q17i2j4I * dm.x;
+    x3.x += Q17i3j4R * dp.x - Q17i3j4I * dm.y;
+    x3.y += Q17i3j4R * dp.y + Q17i3j4I * dm.x;
+    x14.x += Q17i3j4R * dp.x + Q17i3j4I * dm.y;
+    x14.y += Q17i3j4R * dp.y - Q17i3j4I * dm.x;
+    x4.x += Q17i4j4R * dp.x - Q17i4j4I * dm.y;
+    x4.y += Q17i4j4R * dp.y + Q17i4j4I * dm.x;
+    x13.x += Q17i4j4R * dp.x + Q17i4j4I * dm.y;
+    x13.y += Q17i4j4R * dp.y - Q17i4j4I * dm.x;
+    x5.x += Q17i5j4R * dp.x - Q17i5j4I * dm.y;
+    x5.y += Q17i5j4R * dp.y + Q17i5j4I * dm.x;
+    x12.x += Q17i5j4R * dp.x + Q17i5j4I * dm.y;
+    x12.y += Q17i5j4R * dp.y - Q17i5j4I * dm.x;
+    x6.x += Q17i6j4R * dp.x - Q17i6j4I * dm.y;
+    x6.y += Q17i6j4R * dp.y + Q17i6j4I * dm.x;
+    x11.x += Q17i6j4R * dp.x + Q17i6j4I * dm.y;
+    x11.y += Q17i6j4R * dp.y - Q17i6j4I * dm.x;
+    x7.x += Q17i7j4R * dp.x - Q17i7j4I * dm.y;
+    x7.y += Q17i7j4R * dp.y + Q17i7j4I * dm.x;
+    x10.x += Q17i7j4R * dp.x + Q17i7j4I * dm.y;
+    x10.y += Q17i7j4R * dp.y - Q17i7j4I * dm.x;
+    x8.x += Q17i8j4R * dp.x - Q17i8j4I * dm.y;
+    x8.y += Q17i8j4R * dp.y + Q17i8j4I * dm.x;
+    x9.x += Q17i8j4R * dp.x + Q17i8j4I * dm.y;
+    x9.y += Q17i8j4R * dp.y - Q17i8j4I * dm.x;
+    dp = (*R5) + (*R12);
+    dm = (*R5) - (*R12);
+    x1.x += Q17i1j5R * dp.x - Q17i1j5I * dm.y;
+    x1.y += Q17i1j5R * dp.y + Q17i1j5I * dm.x;
+    x16.x += Q17i1j5R * dp.x + Q17i1j5I * dm.y;
+    x16.y += Q17i1j5R * dp.y - Q17i1j5I * dm.x;
+    x2.x += Q17i2j5R * dp.x - Q17i2j5I * dm.y;
+    x2.y += Q17i2j5R * dp.y + Q17i2j5I * dm.x;
+    x15.x += Q17i2j5R * dp.x + Q17i2j5I * dm.y;
+    x15.y += Q17i2j5R * dp.y - Q17i2j5I * dm.x;
+    x3.x += Q17i3j5R * dp.x - Q17i3j5I * dm.y;
+    x3.y += Q17i3j5R * dp.y + Q17i3j5I * dm.x;
+    x14.x += Q17i3j5R * dp.x + Q17i3j5I * dm.y;
+    x14.y += Q17i3j5R * dp.y - Q17i3j5I * dm.x;
+    x4.x += Q17i4j5R * dp.x - Q17i4j5I * dm.y;
+    x4.y += Q17i4j5R * dp.y + Q17i4j5I * dm.x;
+    x13.x += Q17i4j5R * dp.x + Q17i4j5I * dm.y;
+    x13.y += Q17i4j5R * dp.y - Q17i4j5I * dm.x;
+    x5.x += Q17i5j5R * dp.x - Q17i5j5I * dm.y;
+    x5.y += Q17i5j5R * dp.y + Q17i5j5I * dm.x;
+    x12.x += Q17i5j5R * dp.x + Q17i5j5I * dm.y;
+    x12.y += Q17i5j5R * dp.y - Q17i5j5I * dm.x;
+    x6.x += Q17i6j5R * dp.x - Q17i6j5I * dm.y;
+    x6.y += Q17i6j5R * dp.y + Q17i6j5I * dm.x;
+    x11.x += Q17i6j5R * dp.x + Q17i6j5I * dm.y;
+    x11.y += Q17i6j5R * dp.y - Q17i6j5I * dm.x;
+    x7.x += Q17i7j5R * dp.x - Q17i7j5I * dm.y;
+    x7.y += Q17i7j5R * dp.y + Q17i7j5I * dm.x;
+    x10.x += Q17i7j5R * dp.x + Q17i7j5I * dm.y;
+    x10.y += Q17i7j5R * dp.y - Q17i7j5I * dm.x;
+    x8.x += Q17i8j5R * dp.x - Q17i8j5I * dm.y;
+    x8.y += Q17i8j5R * dp.y + Q17i8j5I * dm.x;
+    x9.x += Q17i8j5R * dp.x + Q17i8j5I * dm.y;
+    x9.y += Q17i8j5R * dp.y - Q17i8j5I * dm.x;
+    dp = (*R6) + (*R11);
+    dm = (*R6) - (*R11);
+    x1.x += Q17i1j6R * dp.x - Q17i1j6I * dm.y;
+    x1.y += Q17i1j6R * dp.y + Q17i1j6I * dm.x;
+    x16.x += Q17i1j6R * dp.x + Q17i1j6I * dm.y;
+    x16.y += Q17i1j6R * dp.y - Q17i1j6I * dm.x;
+    x2.x += Q17i2j6R * dp.x - Q17i2j6I * dm.y;
+    x2.y += Q17i2j6R * dp.y + Q17i2j6I * dm.x;
+    x15.x += Q17i2j6R * dp.x + Q17i2j6I * dm.y;
+    x15.y += Q17i2j6R * dp.y - Q17i2j6I * dm.x;
+    x3.x += Q17i3j6R * dp.x - Q17i3j6I * dm.y;
+    x3.y += Q17i3j6R * dp.y + Q17i3j6I * dm.x;
+    x14.x += Q17i3j6R * dp.x + Q17i3j6I * dm.y;
+    x14.y += Q17i3j6R * dp.y - Q17i3j6I * dm.x;
+    x4.x += Q17i4j6R * dp.x - Q17i4j6I * dm.y;
+    x4.y += Q17i4j6R * dp.y + Q17i4j6I * dm.x;
+    x13.x += Q17i4j6R * dp.x + Q17i4j6I * dm.y;
+    x13.y += Q17i4j6R * dp.y - Q17i4j6I * dm.x;
+    x5.x += Q17i5j6R * dp.x - Q17i5j6I * dm.y;
+    x5.y += Q17i5j6R * dp.y + Q17i5j6I * dm.x;
+    x12.x += Q17i5j6R * dp.x + Q17i5j6I * dm.y;
+    x12.y += Q17i5j6R * dp.y - Q17i5j6I * dm.x;
+    x6.x += Q17i6j6R * dp.x - Q17i6j6I * dm.y;
+    x6.y += Q17i6j6R * dp.y + Q17i6j6I * dm.x;
+    x11.x += Q17i6j6R * dp.x + Q17i6j6I * dm.y;
+    x11.y += Q17i6j6R * dp.y - Q17i6j6I * dm.x;
+    x7.x += Q17i7j6R * dp.x - Q17i7j6I * dm.y;
+    x7.y += Q17i7j6R * dp.y + Q17i7j6I * dm.x;
+    x10.x += Q17i7j6R * dp.x + Q17i7j6I * dm.y;
+    x10.y += Q17i7j6R * dp.y - Q17i7j6I * dm.x;
+    x8.x += Q17i8j6R * dp.x - Q17i8j6I * dm.y;
+    x8.y += Q17i8j6R * dp.y + Q17i8j6I * dm.x;
+    x9.x += Q17i8j6R * dp.x + Q17i8j6I * dm.y;
+    x9.y += Q17i8j6R * dp.y - Q17i8j6I * dm.x;
+    dp = (*R7) + (*R10);
+    dm = (*R7) - (*R10);
+    x1.x += Q17i1j7R * dp.x - Q17i1j7I * dm.y;
+    x1.y += Q17i1j7R * dp.y + Q17i1j7I * dm.x;
+    x16.x += Q17i1j7R * dp.x + Q17i1j7I * dm.y;
+    x16.y += Q17i1j7R * dp.y - Q17i1j7I * dm.x;
+    x2.x += Q17i2j7R * dp.x - Q17i2j7I * dm.y;
+    x2.y += Q17i2j7R * dp.y + Q17i2j7I * dm.x;
+    x15.x += Q17i2j7R * dp.x + Q17i2j7I * dm.y;
+    x15.y += Q17i2j7R * dp.y - Q17i2j7I * dm.x;
+    x3.x += Q17i3j7R * dp.x - Q17i3j7I * dm.y;
+    x3.y += Q17i3j7R * dp.y + Q17i3j7I * dm.x;
+    x14.x += Q17i3j7R * dp.x + Q17i3j7I * dm.y;
+    x14.y += Q17i3j7R * dp.y - Q17i3j7I * dm.x;
+    x4.x += Q17i4j7R * dp.x - Q17i4j7I * dm.y;
+    x4.y += Q17i4j7R * dp.y + Q17i4j7I * dm.x;
+    x13.x += Q17i4j7R * dp.x + Q17i4j7I * dm.y;
+    x13.y += Q17i4j7R * dp.y - Q17i4j7I * dm.x;
+    x5.x += Q17i5j7R * dp.x - Q17i5j7I * dm.y;
+    x5.y += Q17i5j7R * dp.y + Q17i5j7I * dm.x;
+    x12.x += Q17i5j7R * dp.x + Q17i5j7I * dm.y;
+    x12.y += Q17i5j7R * dp.y - Q17i5j7I * dm.x;
+    x6.x += Q17i6j7R * dp.x - Q17i6j7I * dm.y;
+    x6.y += Q17i6j7R * dp.y + Q17i6j7I * dm.x;
+    x11.x += Q17i6j7R * dp.x + Q17i6j7I * dm.y;
+    x11.y += Q17i6j7R * dp.y - Q17i6j7I * dm.x;
+    x7.x += Q17i7j7R * dp.x - Q17i7j7I * dm.y;
+    x7.y += Q17i7j7R * dp.y + Q17i7j7I * dm.x;
+    x10.x += Q17i7j7R * dp.x + Q17i7j7I * dm.y;
+    x10.y += Q17i7j7R * dp.y - Q17i7j7I * dm.x;
+    x8.x += Q17i8j7R * dp.x - Q17i8j7I * dm.y;
+    x8.y += Q17i8j7R * dp.y + Q17i8j7I * dm.x;
+    x9.x += Q17i8j7R * dp.x + Q17i8j7I * dm.y;
+    x9.y += Q17i8j7R * dp.y - Q17i8j7I * dm.x;
+    dp = (*R8) + (*R9);
+    dm = (*R8) - (*R9);
+    x1.x += Q17i1j8R * dp.x - Q17i1j8I * dm.y;
+    x1.y += Q17i1j8R * dp.y + Q17i1j8I * dm.x;
+    x16.x += Q17i1j8R * dp.x + Q17i1j8I * dm.y;
+    x16.y += Q17i1j8R * dp.y - Q17i1j8I * dm.x;
+    x2.x += Q17i2j8R * dp.x - Q17i2j8I * dm.y;
+    x2.y += Q17i2j8R * dp.y + Q17i2j8I * dm.x;
+    x15.x += Q17i2j8R * dp.x + Q17i2j8I * dm.y;
+    x15.y += Q17i2j8R * dp.y - Q17i2j8I * dm.x;
+    x3.x += Q17i3j8R * dp.x - Q17i3j8I * dm.y;
+    x3.y += Q17i3j8R * dp.y + Q17i3j8I * dm.x;
+    x14.x += Q17i3j8R * dp.x + Q17i3j8I * dm.y;
+    x14.y += Q17i3j8R * dp.y - Q17i3j8I * dm.x;
+    x4.x += Q17i4j8R * dp.x - Q17i4j8I * dm.y;
+    x4.y += Q17i4j8R * dp.y + Q17i4j8I * dm.x;
+    x13.x += Q17i4j8R * dp.x + Q17i4j8I * dm.y;
+    x13.y += Q17i4j8R * dp.y - Q17i4j8I * dm.x;
+    x5.x += Q17i5j8R * dp.x - Q17i5j8I * dm.y;
+    x5.y += Q17i5j8R * dp.y + Q17i5j8I * dm.x;
+    x12.x += Q17i5j8R * dp.x + Q17i5j8I * dm.y;
+    x12.y += Q17i5j8R * dp.y - Q17i5j8I * dm.x;
+    x6.x += Q17i6j8R * dp.x - Q17i6j8I * dm.y;
+    x6.y += Q17i6j8R * dp.y + Q17i6j8I * dm.x;
+    x11.x += Q17i6j8R * dp.x + Q17i6j8I * dm.y;
+    x11.y += Q17i6j8R * dp.y - Q17i6j8I * dm.x;
+    x7.x += Q17i7j8R * dp.x - Q17i7j8I * dm.y;
+    x7.y += Q17i7j8R * dp.y + Q17i7j8I * dm.x;
+    x10.x += Q17i7j8R * dp.x + Q17i7j8I * dm.y;
+    x10.y += Q17i7j8R * dp.y - Q17i7j8I * dm.x;
+    x8.x += Q17i8j8R * dp.x - Q17i8j8I * dm.y;
+    x8.y += Q17i8j8R * dp.y + Q17i8j8I * dm.x;
+    x9.x += Q17i8j8R * dp.x + Q17i8j8I * dm.y;
+    x9.y += Q17i8j8R * dp.y - Q17i8j8I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+    (*R11) = x11;
+    (*R12) = x12;
+    (*R13) = x13;
+    (*R14) = x14;
+    (*R15) = x15;
+    (*R16) = x16;
+}
+
+template <typename T>
+__device__ void InvRad17B1(T* R0,
+                           T* R1,
+                           T* R2,
+                           T* R3,
+                           T* R4,
+                           T* R5,
+                           T* R6,
+                           T* R7,
+                           T* R8,
+                           T* R9,
+                           T* R10,
+                           T* R11,
+                           T* R12,
+                           T* R13,
+                           T* R14,
+                           T* R15,
+                           T* R16)
+{
+    T x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, dp, dm;
+
+    x0 = (*R0) + (*R1) + (*R2) + (*R3) + (*R4) + (*R5) + (*R6) + (*R7) + (*R8) + (*R9) + (*R10)
+         + (*R11) + (*R12) + (*R13) + (*R14) + (*R15) + (*R16);
+    x1  = (*R0);
+    x2  = (*R0);
+    x3  = (*R0);
+    x4  = (*R0);
+    x5  = (*R0);
+    x6  = (*R0);
+    x7  = (*R0);
+    x8  = (*R0);
+    x9  = (*R0);
+    x10 = (*R0);
+    x11 = (*R0);
+    x12 = (*R0);
+    x13 = (*R0);
+    x14 = (*R0);
+    x15 = (*R0);
+    x16 = (*R0);
+    dp  = (*R1) + (*R16);
+    dm  = (*R1) - (*R16);
+    x1.x += Q17i1j1R * dp.x + Q17i1j1I * dm.y;
+    x1.y += Q17i1j1R * dp.y - Q17i1j1I * dm.x;
+    x16.x += Q17i1j1R * dp.x - Q17i1j1I * dm.y;
+    x16.y += Q17i1j1R * dp.y + Q17i1j1I * dm.x;
+    x2.x += Q17i2j1R * dp.x + Q17i2j1I * dm.y;
+    x2.y += Q17i2j1R * dp.y - Q17i2j1I * dm.x;
+    x15.x += Q17i2j1R * dp.x - Q17i2j1I * dm.y;
+    x15.y += Q17i2j1R * dp.y + Q17i2j1I * dm.x;
+    x3.x += Q17i3j1R * dp.x + Q17i3j1I * dm.y;
+    x3.y += Q17i3j1R * dp.y - Q17i3j1I * dm.x;
+    x14.x += Q17i3j1R * dp.x - Q17i3j1I * dm.y;
+    x14.y += Q17i3j1R * dp.y + Q17i3j1I * dm.x;
+    x4.x += Q17i4j1R * dp.x + Q17i4j1I * dm.y;
+    x4.y += Q17i4j1R * dp.y - Q17i4j1I * dm.x;
+    x13.x += Q17i4j1R * dp.x - Q17i4j1I * dm.y;
+    x13.y += Q17i4j1R * dp.y + Q17i4j1I * dm.x;
+    x5.x += Q17i5j1R * dp.x + Q17i5j1I * dm.y;
+    x5.y += Q17i5j1R * dp.y - Q17i5j1I * dm.x;
+    x12.x += Q17i5j1R * dp.x - Q17i5j1I * dm.y;
+    x12.y += Q17i5j1R * dp.y + Q17i5j1I * dm.x;
+    x6.x += Q17i6j1R * dp.x + Q17i6j1I * dm.y;
+    x6.y += Q17i6j1R * dp.y - Q17i6j1I * dm.x;
+    x11.x += Q17i6j1R * dp.x - Q17i6j1I * dm.y;
+    x11.y += Q17i6j1R * dp.y + Q17i6j1I * dm.x;
+    x7.x += Q17i7j1R * dp.x + Q17i7j1I * dm.y;
+    x7.y += Q17i7j1R * dp.y - Q17i7j1I * dm.x;
+    x10.x += Q17i7j1R * dp.x - Q17i7j1I * dm.y;
+    x10.y += Q17i7j1R * dp.y + Q17i7j1I * dm.x;
+    x8.x += Q17i8j1R * dp.x + Q17i8j1I * dm.y;
+    x8.y += Q17i8j1R * dp.y - Q17i8j1I * dm.x;
+    x9.x += Q17i8j1R * dp.x - Q17i8j1I * dm.y;
+    x9.y += Q17i8j1R * dp.y + Q17i8j1I * dm.x;
+    dp = (*R2) + (*R15);
+    dm = (*R2) - (*R15);
+    x1.x += Q17i1j2R * dp.x + Q17i1j2I * dm.y;
+    x1.y += Q17i1j2R * dp.y - Q17i1j2I * dm.x;
+    x16.x += Q17i1j2R * dp.x - Q17i1j2I * dm.y;
+    x16.y += Q17i1j2R * dp.y + Q17i1j2I * dm.x;
+    x2.x += Q17i2j2R * dp.x + Q17i2j2I * dm.y;
+    x2.y += Q17i2j2R * dp.y - Q17i2j2I * dm.x;
+    x15.x += Q17i2j2R * dp.x - Q17i2j2I * dm.y;
+    x15.y += Q17i2j2R * dp.y + Q17i2j2I * dm.x;
+    x3.x += Q17i3j2R * dp.x + Q17i3j2I * dm.y;
+    x3.y += Q17i3j2R * dp.y - Q17i3j2I * dm.x;
+    x14.x += Q17i3j2R * dp.x - Q17i3j2I * dm.y;
+    x14.y += Q17i3j2R * dp.y + Q17i3j2I * dm.x;
+    x4.x += Q17i4j2R * dp.x + Q17i4j2I * dm.y;
+    x4.y += Q17i4j2R * dp.y - Q17i4j2I * dm.x;
+    x13.x += Q17i4j2R * dp.x - Q17i4j2I * dm.y;
+    x13.y += Q17i4j2R * dp.y + Q17i4j2I * dm.x;
+    x5.x += Q17i5j2R * dp.x + Q17i5j2I * dm.y;
+    x5.y += Q17i5j2R * dp.y - Q17i5j2I * dm.x;
+    x12.x += Q17i5j2R * dp.x - Q17i5j2I * dm.y;
+    x12.y += Q17i5j2R * dp.y + Q17i5j2I * dm.x;
+    x6.x += Q17i6j2R * dp.x + Q17i6j2I * dm.y;
+    x6.y += Q17i6j2R * dp.y - Q17i6j2I * dm.x;
+    x11.x += Q17i6j2R * dp.x - Q17i6j2I * dm.y;
+    x11.y += Q17i6j2R * dp.y + Q17i6j2I * dm.x;
+    x7.x += Q17i7j2R * dp.x + Q17i7j2I * dm.y;
+    x7.y += Q17i7j2R * dp.y - Q17i7j2I * dm.x;
+    x10.x += Q17i7j2R * dp.x - Q17i7j2I * dm.y;
+    x10.y += Q17i7j2R * dp.y + Q17i7j2I * dm.x;
+    x8.x += Q17i8j2R * dp.x + Q17i8j2I * dm.y;
+    x8.y += Q17i8j2R * dp.y - Q17i8j2I * dm.x;
+    x9.x += Q17i8j2R * dp.x - Q17i8j2I * dm.y;
+    x9.y += Q17i8j2R * dp.y + Q17i8j2I * dm.x;
+    dp = (*R3) + (*R14);
+    dm = (*R3) - (*R14);
+    x1.x += Q17i1j3R * dp.x + Q17i1j3I * dm.y;
+    x1.y += Q17i1j3R * dp.y - Q17i1j3I * dm.x;
+    x16.x += Q17i1j3R * dp.x - Q17i1j3I * dm.y;
+    x16.y += Q17i1j3R * dp.y + Q17i1j3I * dm.x;
+    x2.x += Q17i2j3R * dp.x + Q17i2j3I * dm.y;
+    x2.y += Q17i2j3R * dp.y - Q17i2j3I * dm.x;
+    x15.x += Q17i2j3R * dp.x - Q17i2j3I * dm.y;
+    x15.y += Q17i2j3R * dp.y + Q17i2j3I * dm.x;
+    x3.x += Q17i3j3R * dp.x + Q17i3j3I * dm.y;
+    x3.y += Q17i3j3R * dp.y - Q17i3j3I * dm.x;
+    x14.x += Q17i3j3R * dp.x - Q17i3j3I * dm.y;
+    x14.y += Q17i3j3R * dp.y + Q17i3j3I * dm.x;
+    x4.x += Q17i4j3R * dp.x + Q17i4j3I * dm.y;
+    x4.y += Q17i4j3R * dp.y - Q17i4j3I * dm.x;
+    x13.x += Q17i4j3R * dp.x - Q17i4j3I * dm.y;
+    x13.y += Q17i4j3R * dp.y + Q17i4j3I * dm.x;
+    x5.x += Q17i5j3R * dp.x + Q17i5j3I * dm.y;
+    x5.y += Q17i5j3R * dp.y - Q17i5j3I * dm.x;
+    x12.x += Q17i5j3R * dp.x - Q17i5j3I * dm.y;
+    x12.y += Q17i5j3R * dp.y + Q17i5j3I * dm.x;
+    x6.x += Q17i6j3R * dp.x + Q17i6j3I * dm.y;
+    x6.y += Q17i6j3R * dp.y - Q17i6j3I * dm.x;
+    x11.x += Q17i6j3R * dp.x - Q17i6j3I * dm.y;
+    x11.y += Q17i6j3R * dp.y + Q17i6j3I * dm.x;
+    x7.x += Q17i7j3R * dp.x + Q17i7j3I * dm.y;
+    x7.y += Q17i7j3R * dp.y - Q17i7j3I * dm.x;
+    x10.x += Q17i7j3R * dp.x - Q17i7j3I * dm.y;
+    x10.y += Q17i7j3R * dp.y + Q17i7j3I * dm.x;
+    x8.x += Q17i8j3R * dp.x + Q17i8j3I * dm.y;
+    x8.y += Q17i8j3R * dp.y - Q17i8j3I * dm.x;
+    x9.x += Q17i8j3R * dp.x - Q17i8j3I * dm.y;
+    x9.y += Q17i8j3R * dp.y + Q17i8j3I * dm.x;
+    dp = (*R4) + (*R13);
+    dm = (*R4) - (*R13);
+    x1.x += Q17i1j4R * dp.x + Q17i1j4I * dm.y;
+    x1.y += Q17i1j4R * dp.y - Q17i1j4I * dm.x;
+    x16.x += Q17i1j4R * dp.x - Q17i1j4I * dm.y;
+    x16.y += Q17i1j4R * dp.y + Q17i1j4I * dm.x;
+    x2.x += Q17i2j4R * dp.x + Q17i2j4I * dm.y;
+    x2.y += Q17i2j4R * dp.y - Q17i2j4I * dm.x;
+    x15.x += Q17i2j4R * dp.x - Q17i2j4I * dm.y;
+    x15.y += Q17i2j4R * dp.y + Q17i2j4I * dm.x;
+    x3.x += Q17i3j4R * dp.x + Q17i3j4I * dm.y;
+    x3.y += Q17i3j4R * dp.y - Q17i3j4I * dm.x;
+    x14.x += Q17i3j4R * dp.x - Q17i3j4I * dm.y;
+    x14.y += Q17i3j4R * dp.y + Q17i3j4I * dm.x;
+    x4.x += Q17i4j4R * dp.x + Q17i4j4I * dm.y;
+    x4.y += Q17i4j4R * dp.y - Q17i4j4I * dm.x;
+    x13.x += Q17i4j4R * dp.x - Q17i4j4I * dm.y;
+    x13.y += Q17i4j4R * dp.y + Q17i4j4I * dm.x;
+    x5.x += Q17i5j4R * dp.x + Q17i5j4I * dm.y;
+    x5.y += Q17i5j4R * dp.y - Q17i5j4I * dm.x;
+    x12.x += Q17i5j4R * dp.x - Q17i5j4I * dm.y;
+    x12.y += Q17i5j4R * dp.y + Q17i5j4I * dm.x;
+    x6.x += Q17i6j4R * dp.x + Q17i6j4I * dm.y;
+    x6.y += Q17i6j4R * dp.y - Q17i6j4I * dm.x;
+    x11.x += Q17i6j4R * dp.x - Q17i6j4I * dm.y;
+    x11.y += Q17i6j4R * dp.y + Q17i6j4I * dm.x;
+    x7.x += Q17i7j4R * dp.x + Q17i7j4I * dm.y;
+    x7.y += Q17i7j4R * dp.y - Q17i7j4I * dm.x;
+    x10.x += Q17i7j4R * dp.x - Q17i7j4I * dm.y;
+    x10.y += Q17i7j4R * dp.y + Q17i7j4I * dm.x;
+    x8.x += Q17i8j4R * dp.x + Q17i8j4I * dm.y;
+    x8.y += Q17i8j4R * dp.y - Q17i8j4I * dm.x;
+    x9.x += Q17i8j4R * dp.x - Q17i8j4I * dm.y;
+    x9.y += Q17i8j4R * dp.y + Q17i8j4I * dm.x;
+    dp = (*R5) + (*R12);
+    dm = (*R5) - (*R12);
+    x1.x += Q17i1j5R * dp.x + Q17i1j5I * dm.y;
+    x1.y += Q17i1j5R * dp.y - Q17i1j5I * dm.x;
+    x16.x += Q17i1j5R * dp.x - Q17i1j5I * dm.y;
+    x16.y += Q17i1j5R * dp.y + Q17i1j5I * dm.x;
+    x2.x += Q17i2j5R * dp.x + Q17i2j5I * dm.y;
+    x2.y += Q17i2j5R * dp.y - Q17i2j5I * dm.x;
+    x15.x += Q17i2j5R * dp.x - Q17i2j5I * dm.y;
+    x15.y += Q17i2j5R * dp.y + Q17i2j5I * dm.x;
+    x3.x += Q17i3j5R * dp.x + Q17i3j5I * dm.y;
+    x3.y += Q17i3j5R * dp.y - Q17i3j5I * dm.x;
+    x14.x += Q17i3j5R * dp.x - Q17i3j5I * dm.y;
+    x14.y += Q17i3j5R * dp.y + Q17i3j5I * dm.x;
+    x4.x += Q17i4j5R * dp.x + Q17i4j5I * dm.y;
+    x4.y += Q17i4j5R * dp.y - Q17i4j5I * dm.x;
+    x13.x += Q17i4j5R * dp.x - Q17i4j5I * dm.y;
+    x13.y += Q17i4j5R * dp.y + Q17i4j5I * dm.x;
+    x5.x += Q17i5j5R * dp.x + Q17i5j5I * dm.y;
+    x5.y += Q17i5j5R * dp.y - Q17i5j5I * dm.x;
+    x12.x += Q17i5j5R * dp.x - Q17i5j5I * dm.y;
+    x12.y += Q17i5j5R * dp.y + Q17i5j5I * dm.x;
+    x6.x += Q17i6j5R * dp.x + Q17i6j5I * dm.y;
+    x6.y += Q17i6j5R * dp.y - Q17i6j5I * dm.x;
+    x11.x += Q17i6j5R * dp.x - Q17i6j5I * dm.y;
+    x11.y += Q17i6j5R * dp.y + Q17i6j5I * dm.x;
+    x7.x += Q17i7j5R * dp.x + Q17i7j5I * dm.y;
+    x7.y += Q17i7j5R * dp.y - Q17i7j5I * dm.x;
+    x10.x += Q17i7j5R * dp.x - Q17i7j5I * dm.y;
+    x10.y += Q17i7j5R * dp.y + Q17i7j5I * dm.x;
+    x8.x += Q17i8j5R * dp.x + Q17i8j5I * dm.y;
+    x8.y += Q17i8j5R * dp.y - Q17i8j5I * dm.x;
+    x9.x += Q17i8j5R * dp.x - Q17i8j5I * dm.y;
+    x9.y += Q17i8j5R * dp.y + Q17i8j5I * dm.x;
+    dp = (*R6) + (*R11);
+    dm = (*R6) - (*R11);
+    x1.x += Q17i1j6R * dp.x + Q17i1j6I * dm.y;
+    x1.y += Q17i1j6R * dp.y - Q17i1j6I * dm.x;
+    x16.x += Q17i1j6R * dp.x - Q17i1j6I * dm.y;
+    x16.y += Q17i1j6R * dp.y + Q17i1j6I * dm.x;
+    x2.x += Q17i2j6R * dp.x + Q17i2j6I * dm.y;
+    x2.y += Q17i2j6R * dp.y - Q17i2j6I * dm.x;
+    x15.x += Q17i2j6R * dp.x - Q17i2j6I * dm.y;
+    x15.y += Q17i2j6R * dp.y + Q17i2j6I * dm.x;
+    x3.x += Q17i3j6R * dp.x + Q17i3j6I * dm.y;
+    x3.y += Q17i3j6R * dp.y - Q17i3j6I * dm.x;
+    x14.x += Q17i3j6R * dp.x - Q17i3j6I * dm.y;
+    x14.y += Q17i3j6R * dp.y + Q17i3j6I * dm.x;
+    x4.x += Q17i4j6R * dp.x + Q17i4j6I * dm.y;
+    x4.y += Q17i4j6R * dp.y - Q17i4j6I * dm.x;
+    x13.x += Q17i4j6R * dp.x - Q17i4j6I * dm.y;
+    x13.y += Q17i4j6R * dp.y + Q17i4j6I * dm.x;
+    x5.x += Q17i5j6R * dp.x + Q17i5j6I * dm.y;
+    x5.y += Q17i5j6R * dp.y - Q17i5j6I * dm.x;
+    x12.x += Q17i5j6R * dp.x - Q17i5j6I * dm.y;
+    x12.y += Q17i5j6R * dp.y + Q17i5j6I * dm.x;
+    x6.x += Q17i6j6R * dp.x + Q17i6j6I * dm.y;
+    x6.y += Q17i6j6R * dp.y - Q17i6j6I * dm.x;
+    x11.x += Q17i6j6R * dp.x - Q17i6j6I * dm.y;
+    x11.y += Q17i6j6R * dp.y + Q17i6j6I * dm.x;
+    x7.x += Q17i7j6R * dp.x + Q17i7j6I * dm.y;
+    x7.y += Q17i7j6R * dp.y - Q17i7j6I * dm.x;
+    x10.x += Q17i7j6R * dp.x - Q17i7j6I * dm.y;
+    x10.y += Q17i7j6R * dp.y + Q17i7j6I * dm.x;
+    x8.x += Q17i8j6R * dp.x + Q17i8j6I * dm.y;
+    x8.y += Q17i8j6R * dp.y - Q17i8j6I * dm.x;
+    x9.x += Q17i8j6R * dp.x - Q17i8j6I * dm.y;
+    x9.y += Q17i8j6R * dp.y + Q17i8j6I * dm.x;
+    dp = (*R7) + (*R10);
+    dm = (*R7) - (*R10);
+    x1.x += Q17i1j7R * dp.x + Q17i1j7I * dm.y;
+    x1.y += Q17i1j7R * dp.y - Q17i1j7I * dm.x;
+    x16.x += Q17i1j7R * dp.x - Q17i1j7I * dm.y;
+    x16.y += Q17i1j7R * dp.y + Q17i1j7I * dm.x;
+    x2.x += Q17i2j7R * dp.x + Q17i2j7I * dm.y;
+    x2.y += Q17i2j7R * dp.y - Q17i2j7I * dm.x;
+    x15.x += Q17i2j7R * dp.x - Q17i2j7I * dm.y;
+    x15.y += Q17i2j7R * dp.y + Q17i2j7I * dm.x;
+    x3.x += Q17i3j7R * dp.x + Q17i3j7I * dm.y;
+    x3.y += Q17i3j7R * dp.y - Q17i3j7I * dm.x;
+    x14.x += Q17i3j7R * dp.x - Q17i3j7I * dm.y;
+    x14.y += Q17i3j7R * dp.y + Q17i3j7I * dm.x;
+    x4.x += Q17i4j7R * dp.x + Q17i4j7I * dm.y;
+    x4.y += Q17i4j7R * dp.y - Q17i4j7I * dm.x;
+    x13.x += Q17i4j7R * dp.x - Q17i4j7I * dm.y;
+    x13.y += Q17i4j7R * dp.y + Q17i4j7I * dm.x;
+    x5.x += Q17i5j7R * dp.x + Q17i5j7I * dm.y;
+    x5.y += Q17i5j7R * dp.y - Q17i5j7I * dm.x;
+    x12.x += Q17i5j7R * dp.x - Q17i5j7I * dm.y;
+    x12.y += Q17i5j7R * dp.y + Q17i5j7I * dm.x;
+    x6.x += Q17i6j7R * dp.x + Q17i6j7I * dm.y;
+    x6.y += Q17i6j7R * dp.y - Q17i6j7I * dm.x;
+    x11.x += Q17i6j7R * dp.x - Q17i6j7I * dm.y;
+    x11.y += Q17i6j7R * dp.y + Q17i6j7I * dm.x;
+    x7.x += Q17i7j7R * dp.x + Q17i7j7I * dm.y;
+    x7.y += Q17i7j7R * dp.y - Q17i7j7I * dm.x;
+    x10.x += Q17i7j7R * dp.x - Q17i7j7I * dm.y;
+    x10.y += Q17i7j7R * dp.y + Q17i7j7I * dm.x;
+    x8.x += Q17i8j7R * dp.x + Q17i8j7I * dm.y;
+    x8.y += Q17i8j7R * dp.y - Q17i8j7I * dm.x;
+    x9.x += Q17i8j7R * dp.x - Q17i8j7I * dm.y;
+    x9.y += Q17i8j7R * dp.y + Q17i8j7I * dm.x;
+    dp = (*R8) + (*R9);
+    dm = (*R8) - (*R9);
+    x1.x += Q17i1j8R * dp.x + Q17i1j8I * dm.y;
+    x1.y += Q17i1j8R * dp.y - Q17i1j8I * dm.x;
+    x16.x += Q17i1j8R * dp.x - Q17i1j8I * dm.y;
+    x16.y += Q17i1j8R * dp.y + Q17i1j8I * dm.x;
+    x2.x += Q17i2j8R * dp.x + Q17i2j8I * dm.y;
+    x2.y += Q17i2j8R * dp.y - Q17i2j8I * dm.x;
+    x15.x += Q17i2j8R * dp.x - Q17i2j8I * dm.y;
+    x15.y += Q17i2j8R * dp.y + Q17i2j8I * dm.x;
+    x3.x += Q17i3j8R * dp.x + Q17i3j8I * dm.y;
+    x3.y += Q17i3j8R * dp.y - Q17i3j8I * dm.x;
+    x14.x += Q17i3j8R * dp.x - Q17i3j8I * dm.y;
+    x14.y += Q17i3j8R * dp.y + Q17i3j8I * dm.x;
+    x4.x += Q17i4j8R * dp.x + Q17i4j8I * dm.y;
+    x4.y += Q17i4j8R * dp.y - Q17i4j8I * dm.x;
+    x13.x += Q17i4j8R * dp.x - Q17i4j8I * dm.y;
+    x13.y += Q17i4j8R * dp.y + Q17i4j8I * dm.x;
+    x5.x += Q17i5j8R * dp.x + Q17i5j8I * dm.y;
+    x5.y += Q17i5j8R * dp.y - Q17i5j8I * dm.x;
+    x12.x += Q17i5j8R * dp.x - Q17i5j8I * dm.y;
+    x12.y += Q17i5j8R * dp.y + Q17i5j8I * dm.x;
+    x6.x += Q17i6j8R * dp.x + Q17i6j8I * dm.y;
+    x6.y += Q17i6j8R * dp.y - Q17i6j8I * dm.x;
+    x11.x += Q17i6j8R * dp.x - Q17i6j8I * dm.y;
+    x11.y += Q17i6j8R * dp.y + Q17i6j8I * dm.x;
+    x7.x += Q17i7j8R * dp.x + Q17i7j8I * dm.y;
+    x7.y += Q17i7j8R * dp.y - Q17i7j8I * dm.x;
+    x10.x += Q17i7j8R * dp.x - Q17i7j8I * dm.y;
+    x10.y += Q17i7j8R * dp.y + Q17i7j8I * dm.x;
+    x8.x += Q17i8j8R * dp.x + Q17i8j8I * dm.y;
+    x8.y += Q17i8j8R * dp.y - Q17i8j8I * dm.x;
+    x9.x += Q17i8j8R * dp.x - Q17i8j8I * dm.y;
+    x9.y += Q17i8j8R * dp.y + Q17i8j8I * dm.x;
+    (*R0)  = x0;
+    (*R1)  = x1;
+    (*R2)  = x2;
+    (*R3)  = x3;
+    (*R4)  = x4;
+    (*R5)  = x5;
+    (*R6)  = x6;
+    (*R7)  = x7;
+    (*R8)  = x8;
+    (*R9)  = x9;
+    (*R10) = x10;
+    (*R11) = x11;
+    (*R12) = x12;
+    (*R13) = x13;
+    (*R14) = x14;
+    (*R15) = x15;
+    (*R16) = x16;
+}
+
+#endif // ROCFFT_BUTTERFLY_TEMPLATE_H
+
+// Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+#ifndef REAL_TO_COMPLEX_DEVICE_H
+#define REAL_TO_COMPLEX_DEVICE_H
+
+// The even-length real to complex post process device kernel
+template <typename Tcomplex, bool Ndiv4, CallbackType cbtype, bool SCALE = false>
+__device__ inline void post_process_interleaved(const size_t    idx_p,
+                                                const size_t    idx_q,
+                                                const size_t    half_N,
+                                                const size_t    quarter_N,
+                                                const Tcomplex* input,
+                                                Tcomplex*       output,
+                                                size_t          output_base,
+                                                const Tcomplex* twiddles,
+                                                void* __restrict__ load_cb_fn,
+                                                void* __restrict__ load_cb_data,
+                                                uint32_t load_cb_lds_bytes,
+                                                void* __restrict__ store_cb_fn,
+                                                void* __restrict__ store_cb_data,
+                                                const real_type_t<Tcomplex> scale_factor = 0.0)
+{
+    // post process can't be the first kernel, so don't bother
+    // going through the load cb to read global memory
+    auto store_cb = get_store_cb<Tcomplex, cbtype>(store_cb_fn);
+
+    Tcomplex outval;
+
+    if(idx_p == 0)
+    {
+        outval.x = input[0].x - input[0].y;
+        outval.y = 0;
+        store_cb(output,
+                 output_base + half_N,
+                 SCALE ? (outval * scale_factor) : outval,
+                 store_cb_data,
+                 nullptr);
+
+        outval.x = input[0].x + input[0].y;
+        outval.y = 0;
+        store_cb(output,
+                 output_base + 0,
+                 SCALE ? (outval * scale_factor) : outval,
+                 store_cb_data,
+                 nullptr);
+
+        if(Ndiv4)
+        {
+            outval.x = input[quarter_N].x;
+            outval.y = -input[quarter_N].y;
+
+            store_cb(output,
+                     output_base + quarter_N,
+                     SCALE ? (outval * scale_factor) : outval,
+                     store_cb_data,
+                     nullptr);
+        }
+    }
+    else
+    {
+        const Tcomplex p = input[idx_p];
+        const Tcomplex q = input[idx_q];
+        const Tcomplex u = 0.5 * (p + q);
+        const Tcomplex v = 0.5 * (p - q);
+
+        const Tcomplex twd_p = twiddles[idx_p];
+        // NB: twd_q = -conj(twd_p) = (-twd_p.x, twd_p.y);
+
+        outval.x = u.x + v.x * twd_p.y + u.y * twd_p.x;
+        outval.y = v.y + u.y * twd_p.y - v.x * twd_p.x;
+        store_cb(output,
+                 output_base + idx_p,
+                 SCALE ? (outval * scale_factor) : outval,
+                 store_cb_data,
+                 nullptr);
+
+        outval.x = u.x - v.x * twd_p.y - u.y * twd_p.x;
+        outval.y = -v.y + u.y * twd_p.y - v.x * twd_p.x;
+        store_cb(output,
+                 output_base + idx_q,
+                 SCALE ? (outval * scale_factor) : outval,
+                 store_cb_data,
+                 nullptr);
+    }
+}
+
+// TODO: rework pre/post processing
+template <typename T, bool Ndiv4, CallbackType cbtype>
+__device__ inline void post_process_interleaved_inplace(const size_t idx_p,
+                                                        const size_t idx_q,
+                                                        const size_t half_N,
+                                                        const size_t quarter_N,
+                                                        T*           inout,
+                                                        size_t       offset_base,
+                                                        const T*     twiddles,
+                                                        void* __restrict__ load_cb_fn,
+                                                        void* __restrict__ load_cb_data,
+                                                        uint32_t load_cb_lds_bytes,
+                                                        void* __restrict__ store_cb_fn,
+                                                        void* __restrict__ store_cb_data)
+{
+    // post process can't be the first kernel, so don't bother
+    // going through the load cb to read global memory
+    auto store_cb = get_store_cb<T, cbtype>(store_cb_fn);
+
+    T p, q, outval;
+    if(idx_p < quarter_N)
+    {
+        p = inout[offset_base + idx_p];
+        q = inout[offset_base + idx_q];
+    }
+
+    __syncthreads();
+
+    if(idx_p == 0)
+    {
+        outval.x = p.x + p.y;
+        outval.y = 0;
+        store_cb(inout, offset_base + idx_p, outval, store_cb_data, nullptr);
+
+        outval.x = p.x - p.y;
+        outval.y = 0;
+        store_cb(inout, offset_base + idx_q, outval, store_cb_data, nullptr);
+
+        if(Ndiv4)
+        {
+            outval   = inout[offset_base + quarter_N];
+            outval.y = -outval.y;
+            store_cb(inout, offset_base + quarter_N, outval, store_cb_data, nullptr);
+        }
+    }
+    else if(idx_p < quarter_N)
+    {
+        const T u = 0.5 * (p + q);
+        const T v = 0.5 * (p - q);
+
+        const T twd_p = twiddles[idx_p];
+        // NB: twd_q = -conj(twd_p) = (-twd_p.x, twd_p.y);
+
+        outval.x = u.x + v.x * twd_p.y + u.y * twd_p.x;
+        outval.y = v.y + u.y * twd_p.y - v.x * twd_p.x;
+        store_cb(inout, offset_base + idx_p, outval, store_cb_data, nullptr);
+
+        outval.x = u.x - v.x * twd_p.y - u.y * twd_p.x;
+        outval.y = -v.y + u.y * twd_p.y - v.x * twd_p.x;
+        store_cb(inout, offset_base + idx_q, outval, store_cb_data, nullptr);
+    }
+}
+
+// The below 2 functions are only for inplace in lds. So no callback.
+template <typename Tcomplex, bool Ndiv4>
+__device__ inline void real_post_process_kernel_inplace(const size_t    idx_p,
+                                                        const size_t    idx_q,
+                                                        const size_t    quarter_N,
+                                                        Tcomplex*       inout,
+                                                        size_t          offset_base,
+                                                        const Tcomplex* twiddles)
+{
+    if(idx_p < quarter_N)
+    {
+        Tcomplex p = inout[offset_base + idx_p];
+        Tcomplex q = inout[offset_base + idx_q];
+
+        if(idx_p == 0)
+        {
+            inout[offset_base + idx_p].x = p.x + p.y;
+            inout[offset_base + idx_p].y = 0;
+
+            inout[offset_base + idx_q].x = p.x - p.y;
+            inout[offset_base + idx_q].y = 0;
+
+            if(Ndiv4)
+            {
+                inout[offset_base + quarter_N].y = -inout[offset_base + quarter_N].y;
+            }
+        }
+        else
+        {
+            const Tcomplex u = 0.5 * (p + q);
+            const Tcomplex v = 0.5 * (p - q);
+
+            const Tcomplex twd_p = twiddles[idx_p];
+            // NB: twd_q = -conj(twd_p) = (-twd_p.x, twd_p.y);
+
+            inout[offset_base + idx_p].x = u.x + v.x * twd_p.y + u.y * twd_p.x;
+            inout[offset_base + idx_p].y = v.y + u.y * twd_p.y - v.x * twd_p.x;
+
+            inout[offset_base + idx_q].x = u.x - v.x * twd_p.y - u.y * twd_p.x;
+            inout[offset_base + idx_q].y = -v.y + u.y * twd_p.y - v.x * twd_p.x;
+        }
+    }
+}
+
+template <typename Tcomplex, bool Ndiv4>
+__device__ inline void real_pre_process_kernel_inplace(const size_t    idx_p,
+                                                       const size_t    idx_q,
+                                                       const size_t    quarter_N,
+                                                       Tcomplex*       inout,
+                                                       size_t          offset_base,
+                                                       const Tcomplex* twiddles)
+{
+    if(idx_p < quarter_N)
+    {
+        Tcomplex p = inout[offset_base + idx_p];
+        Tcomplex q = inout[offset_base + idx_q];
+
+        if(idx_p == 0)
+        {
+            // NB: multi-dimensional transforms may have non-zero
+            // imaginary part at index 0 or at the Nyquist frequency.
+            inout[offset_base + idx_p].x = p.x - p.y + q.x + q.y;
+            inout[offset_base + idx_p].y = p.x + p.y - q.x + q.y;
+
+            if(Ndiv4)
+            {
+                auto quarter_elem                = inout[offset_base + quarter_N];
+                inout[offset_base + quarter_N].x = 2.0 * quarter_elem.x;
+                inout[offset_base + quarter_N].y = -2.0 * quarter_elem.y;
+            }
+        }
+        else
+        {
+            const Tcomplex u = p + q;
+            const Tcomplex v = p - q;
+
+            const Tcomplex twd_p = twiddles[idx_p];
+            // NB: twd_q = -conj(twd_p);
+
+            inout[offset_base + idx_p].x = u.x + v.x * twd_p.y - u.y * twd_p.x;
+            inout[offset_base + idx_p].y = v.y + u.y * twd_p.y + v.x * twd_p.x;
+
+            inout[offset_base + idx_q].x = u.x - v.x * twd_p.y + u.y * twd_p.x;
+            inout[offset_base + idx_q].y = -v.y + u.y * twd_p.y + v.x * twd_p.x;
+        }
+    }
+}
+
+#endif
+
 // Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1742,8 +3993,11 @@ __device__ double2 operator-(double2 f2)
 }
 
 #endif // ROCFFT_RTC_WORKAROUND_H
+
+#ifndef RIDER_LDS_TO_REG
+#define RIDER_LDS_TO_REG
 template <typename scalar_type, StrideBin sb>
-__device__ void lds_to_reg_input_length168_device(scalar_type* R,
+__device__ void lds_to_reg_input_length125_device(scalar_type* R,
                                                   scalar_type* __restrict__ lds_complex,
                                                   unsigned int stride_lds,
                                                   unsigned int offset_lds,
@@ -1755,21 +4009,17 @@ __device__ void lds_to_reg_input_length168_device(scalar_type* R,
     __syncthreads();
     l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
     R[0]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 24) * lstride;
+    l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
     R[1]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 48) * lstride;
+    l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
     R[2]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 72) * lstride;
+    l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
     R[3]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 96) * lstride;
+    l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
     R[4]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 120) * lstride;
-    R[5]     = lds_complex[l_offset];
-    l_offset = offset_lds + ((thread + 0 + 0) + 144) * lstride;
-    R[6]     = lds_complex[l_offset];
 }
 template <typename scalar_type, StrideBin sb>
-__device__ void lds_from_reg_output_length168_device(scalar_type* R,
+__device__ void lds_from_reg_output_length125_device(scalar_type* R,
                                                      scalar_type* __restrict__ lds_complex,
                                                      unsigned int stride_lds,
                                                      unsigned int offset_lds,
@@ -1779,15 +4029,20 @@ __device__ void lds_from_reg_output_length168_device(scalar_type* R,
     const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
     unsigned int       l_offset;
     __syncthreads();
-    l_offset = offset_lds + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 0) * lstride;
+    l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0) * lstride;
     lds_complex[l_offset] = R[0];
-    l_offset = offset_lds + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 42) * lstride;
+    l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25) * lstride;
     lds_complex[l_offset] = R[1];
-    l_offset = offset_lds + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 84) * lstride;
+    l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50) * lstride;
     lds_complex[l_offset] = R[2];
-    l_offset = offset_lds + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 126) * lstride;
+    l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75) * lstride;
     lds_complex[l_offset] = R[3];
+    l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100) * lstride;
+    lds_complex[l_offset] = R[4];
 }
+
+#endif
+
 template <typename scalar_type,
           const bool lds_is_real,
           StrideBin  sb,
@@ -1796,7 +4051,7 @@ template <typename scalar_type,
           bool       apply_large_twiddle,
           size_t     large_twiddle_steps = 3,
           size_t     large_twiddle_base  = 8>
-__device__ void forward_length168_SBCC_device(scalar_type* R,
+__device__ void forward_length125_SBCC_device(scalar_type* R,
                                               real_type_t<scalar_type>* __restrict__ lds_real,
                                               scalar_type* __restrict__ lds_complex,
                                               const scalar_type* __restrict__ twiddles,
@@ -1812,10 +4067,10 @@ __device__ void forward_length168_SBCC_device(scalar_type* R,
     const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
     unsigned int       l_offset;
 
-    // pass 0, width 7
-    // using 42 threads we need to do 24 radix-7 butterflies
-    // therefore each thread will do 0.571429 butterflies
-    FwdRad7B1(R + 0, R + 1, R + 2, R + 3, R + 4, R + 5, R + 6);
+    // pass 0, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
     if(!lds_is_real)
     {
         if(!direct_load_to_reg)
@@ -1823,349 +4078,251 @@ __device__ void forward_length168_SBCC_device(scalar_type* R,
             __syncthreads();
         }
 
-        // more than enough threads, some do nothing
-        if(thread < 24)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 0) * lstride;
-            lds_complex[l_offset] = R[0];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 1) * lstride;
-            lds_complex[l_offset] = R[1];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 2) * lstride;
-            lds_complex[l_offset] = R[2];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 3) * lstride;
-            lds_complex[l_offset] = R[3];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 4) * lstride;
-            lds_complex[l_offset] = R[4];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 5) * lstride;
-            lds_complex[l_offset] = R[5];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 6) * lstride;
-            lds_complex[l_offset] = R[6];
-        }
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_complex[l_offset] = R[0];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_complex[l_offset] = R[1];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_complex[l_offset] = R[2];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_complex[l_offset] = R[3];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_complex[l_offset] = R[4];
     }
 
     else
     {
-        // more than enough threads, some do nothing
-        if(thread < 24)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 0) * lstride;
-            lds_real[l_offset] = R[0].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 1) * lstride;
-            lds_real[l_offset] = R[1].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 2) * lstride;
-            lds_real[l_offset] = R[2].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 3) * lstride;
-            lds_real[l_offset] = R[3].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 4) * lstride;
-            lds_real[l_offset] = R[4].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 5) * lstride;
-            lds_real[l_offset] = R[5].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 6) * lstride;
-            lds_real[l_offset] = R[6].x;
-        }
-
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-            R[0].x   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 28) * lstride;
-            R[1].x   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-            R[2].x   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
-            R[3].x   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 112) * lstride;
-            R[4].x   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 140) * lstride;
-            R[5].x   = lds_real[l_offset];
-        }
-
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 24)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 0) * lstride;
-            lds_real[l_offset] = R[0].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 1) * lstride;
-            lds_real[l_offset] = R[1].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 2) * lstride;
-            lds_real[l_offset] = R[2].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 3) * lstride;
-            lds_real[l_offset] = R[3].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 4) * lstride;
-            lds_real[l_offset] = R[4].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 5) * lstride;
-            lds_real[l_offset] = R[5].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 1) * 7 + (thread + 0 + 0) % 1 + 6) * lstride;
-            lds_real[l_offset] = R[6].y;
-        }
-
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-            R[0].y   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 28) * lstride;
-            R[1].y   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-            R[2].y   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
-            R[3].y   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 112) * lstride;
-            R[4].y   = lds_real[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 140) * lstride;
-            R[5].y   = lds_real[l_offset];
-        }
-    }
-
-    // pass 1, width 6
-    // using 42 threads we need to do 28 radix-6 butterflies
-    // therefore each thread will do 0.666667 butterflies
-    if(!lds_is_real)
-    {
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
-            R[0]     = lds_complex[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 28) * lstride;
-            R[1]     = lds_complex[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 56) * lstride;
-            R[2]     = lds_complex[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
-            R[3]     = lds_complex[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 112) * lstride;
-            R[4]     = lds_complex[l_offset];
-            l_offset = offset_lds + ((thread + 0 + 0) + 140) * lstride;
-            R[5]     = lds_complex[l_offset];
-        }
-    }
-
-    W    = twiddles[0 + 5 * ((thread + 0 + 0) % 7)];
-    t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
-    R[1] = t;
-    W    = twiddles[1 + 5 * ((thread + 0 + 0) % 7)];
-    t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
-    R[2] = t;
-    W    = twiddles[2 + 5 * ((thread + 0 + 0) % 7)];
-    t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
-    R[3] = t;
-    W    = twiddles[3 + 5 * ((thread + 0 + 0) % 7)];
-    t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
-    R[4] = t;
-    W    = twiddles[4 + 5 * ((thread + 0 + 0) % 7)];
-    t    = {R[5].x * W.x - R[5].y * W.y, R[5].y * W.x + R[5].x * W.y};
-    R[5] = t;
-    FwdRad6B1(R + 0, R + 1, R + 2, R + 3, R + 4, R + 5);
-    if(!lds_is_real)
-    {
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 0) * lstride;
-            lds_complex[l_offset] = R[0];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 7) * lstride;
-            lds_complex[l_offset] = R[1];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 14) * lstride;
-            lds_complex[l_offset] = R[2];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 21) * lstride;
-            lds_complex[l_offset] = R[3];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 28) * lstride;
-            lds_complex[l_offset] = R[4];
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 35) * lstride;
-            lds_complex[l_offset] = R[5];
-        }
-    }
-
-    else
-    {
-        __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 0) * lstride;
-            lds_real[l_offset] = R[0].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 7) * lstride;
-            lds_real[l_offset] = R[1].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 14) * lstride;
-            lds_real[l_offset] = R[2].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 21) * lstride;
-            lds_real[l_offset] = R[3].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 28) * lstride;
-            lds_real[l_offset] = R[4].x;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 35) * lstride;
-            lds_real[l_offset] = R[5].x;
-        }
-
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_real[l_offset] = R[0].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_real[l_offset] = R[1].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_real[l_offset] = R[2].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_real[l_offset] = R[3].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_real[l_offset] = R[4].x;
         __syncthreads();
         l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
         R[0].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 42) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
         R[1].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
         R[2].x   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 126) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
         R[3].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].x   = lds_real[l_offset];
         __syncthreads();
-        // more than enough threads, some do nothing
-        if(thread < 28)
-        {
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 0) * lstride;
-            lds_real[l_offset] = R[0].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 7) * lstride;
-            lds_real[l_offset] = R[1].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 14) * lstride;
-            lds_real[l_offset] = R[2].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 21) * lstride;
-            lds_real[l_offset] = R[3].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 28) * lstride;
-            lds_real[l_offset] = R[4].y;
-            l_offset
-                = offset_lds + (((thread + 0 + 0) / 7) * 42 + (thread + 0 + 0) % 7 + 35) * lstride;
-            lds_real[l_offset] = R[5].y;
-        }
-
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_real[l_offset] = R[0].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_real[l_offset] = R[1].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_real[l_offset] = R[2].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_real[l_offset] = R[3].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_real[l_offset] = R[4].y;
         __syncthreads();
         l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
         R[0].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 42) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
         R[1].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
         R[2].y   = lds_real[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 126) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
         R[3].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].y   = lds_real[l_offset];
     }
 
-    // pass 2, width 4
-    // using 42 threads we need to do 42 radix-4 butterflies
+    // pass 1, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
     // therefore each thread will do 1.000000 butterflies
     if(!lds_is_real)
     {
         __syncthreads();
         l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
         R[0]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 42) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
         R[1]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 84) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
         R[2]     = lds_complex[l_offset];
-        l_offset = offset_lds + ((thread + 0 + 0) + 126) * lstride;
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
         R[3]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4]     = lds_complex[l_offset];
     }
 
-    W    = twiddles[35 + 3 * ((thread + 0 + 0) % 42)];
+    W    = twiddles[0 + 4 * ((thread + 0 + 0) % 5)];
     t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
     R[1] = t;
-    W    = twiddles[36 + 3 * ((thread + 0 + 0) % 42)];
+    W    = twiddles[1 + 4 * ((thread + 0 + 0) % 5)];
     t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
     R[2] = t;
-    W    = twiddles[37 + 3 * ((thread + 0 + 0) % 42)];
+    W    = twiddles[2 + 4 * ((thread + 0 + 0) % 5)];
     t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
     R[3] = t;
-    FwdRad4B1(R + 0, R + 1, R + 2, R + 3);
+    W    = twiddles[3 + 4 * ((thread + 0 + 0) % 5)];
+    t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
+    R[4] = t;
+    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_complex[l_offset] = R[0];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_complex[l_offset] = R[1];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_complex[l_offset] = R[2];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_complex[l_offset] = R[3];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_complex[l_offset] = R[4];
+    }
+
+    else
+    {
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_real[l_offset] = R[0].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_real[l_offset] = R[1].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_real[l_offset] = R[2].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_real[l_offset] = R[3].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_real[l_offset] = R[4].x;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].x   = lds_real[l_offset];
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_real[l_offset] = R[0].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_real[l_offset] = R[1].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_real[l_offset] = R[2].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_real[l_offset] = R[3].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_real[l_offset] = R[4].y;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].y   = lds_real[l_offset];
+    }
+
+    // pass 2, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4]     = lds_complex[l_offset];
+    }
+
+    W    = twiddles[20 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
+    R[1] = t;
+    W    = twiddles[21 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
+    R[2] = t;
+    W    = twiddles[22 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
+    R[3] = t;
+    W    = twiddles[23 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
+    R[4] = t;
+    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
     if(apply_large_twiddle)
     {
         // large twiddle multiplication
         W = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 42) + 0 * 42) * trans_local);
+            large_twiddles, (((int)(thread + 0 + 0) % 25) + 0 * 25) * trans_local);
         t    = {R[0].x * W.x - R[0].y * W.y, R[0].y * W.x + R[0].x * W.y};
         R[0] = t;
         W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 42) + 1 * 42) * trans_local);
+            large_twiddles, (((int)(thread + 0 + 0) % 25) + 1 * 25) * trans_local);
         t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
         R[1] = t;
         W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 42) + 2 * 42) * trans_local);
+            large_twiddles, (((int)(thread + 0 + 0) % 25) + 2 * 25) * trans_local);
         t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
         R[2] = t;
         W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 42) + 3 * 42) * trans_local);
+            large_twiddles, (((int)(thread + 0 + 0) % 25) + 3 * 25) * trans_local);
         t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
         R[3] = t;
+        W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
+            large_twiddles, (((int)(thread + 0 + 0) % 25) + 4 * 25) * trans_local);
+        t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
+        R[4] = t;
     }
 }
-typedef double2                  scalar_type;
+typedef float2                   scalar_type;
 static const StrideBin           sb                  = SB_NONUNIT;
 static const EmbeddedType        ebtype              = EmbeddedType::NONE;
 static const SBRC_TYPE           sbrc_type           = SBRC_2D;
 static const SBRC_TRANSPOSE_TYPE transpose_type      = NONE;
 static const CallbackType        cbtype              = CallbackType::NONE;
 static const DirectRegType       drtype              = DirectRegType::TRY_ENABLE_IF_SUPPORT;
-static const bool                apply_large_twiddle = true;
+static const bool                apply_large_twiddle = false;
 static const IntrinsicAccessType intrinsic_mode      = IntrinsicAccessType::DISABLE_BOTH;
 static const size_t              large_twiddle_base  = 8;
-static const size_t              large_twiddle_steps = 2;
-extern "C" __global__
-    __launch_bounds__(252) void fft_rtc_fwd_len168_dp_op_CI_CI_sbcc_twdbase8_2step_dirReg(
-        const scalar_type* __restrict__ twiddles,
-        const scalar_type* large_twiddles,
-        const size_t       dim,
-        const size_t* __restrict__ lengths,
-        const size_t* __restrict__ stride_in,
-        const size_t* __restrict__ stride_out,
-        const size_t       nbatch,
-        const unsigned int lds_padding,
-        void* __restrict__ load_cb_fn,
-        void* __restrict__ load_cb_data,
-        unsigned int load_cb_lds_bytes,
-        void* __restrict__ store_cb_fn,
-        void* __restrict__ store_cb_data,
-        scalar_type* __restrict__ buf_in,
-        scalar_type* __restrict__ buf_out)
+static const size_t              large_twiddle_steps = 0;
+extern "C" __global__ __launch_bounds__(400) void fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg(
+    const scalar_type* __restrict__ twiddles,
+    const scalar_type* large_twiddles,
+    const size_t       dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    uint32_t load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    scalar_type* __restrict__ buf)
 {
     // this kernel:
-    //   uses 42 threads per transform
-    //   does 6 transforms per thread block
-    // therefore it should be called with 252 threads per thread block
-    scalar_type R[7];
+    //   uses 25 threads per transform
+    //   does 16 transforms per thread block
+    // therefore it should be called with 400 threads per thread block
+    scalar_type R[5];
     extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
     real_type_t<scalar_type>* __restrict__ lds_real
         = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
     scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
-    size_t       offset_in                = 0;
-    size_t       offset_out               = 0;
+    size_t       offset                   = 0;
     unsigned int offset_lds;
     unsigned int stride_lds;
     size_t       batch;
@@ -2173,7 +4330,7 @@ extern "C" __global__
     const bool   direct_load_to_reg    = drtype == DirectRegType::TRY_ENABLE_IF_SUPPORT;
     const bool   direct_store_from_reg = direct_load_to_reg;
     const bool   lds_linear            = !direct_load_to_reg;
-    const bool   lds_is_real           = true;
+    const bool   lds_is_real           = false;
     auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
     auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
 
@@ -2187,13 +4344,12 @@ extern "C" __global__
         while(ltwd_id < (1 << large_twiddle_base) * 3)
         {
             large_twd_lds[ltwd_id] = large_twiddles[ltwd_id];
-            ltwd_id += 252;
+            ltwd_id += 400;
         }
     }
 
     // offsets
-    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
-    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
     size_t       tile_index;
     size_t       num_of_tiles;
 
@@ -2203,31 +4359,29 @@ extern "C" __global__
     size_t plength = 1;
     size_t remaining;
     size_t index_along_d;
-    num_of_tiles = (lengths[1] - 1) / 6 + 1;
+    num_of_tiles = (lengths[1] - 1) / 16 + 1;
     plength      = num_of_tiles;
     tile_index   = blockIdx.x % num_of_tiles;
     remaining    = blockIdx.x / num_of_tiles;
-    offset_in    = tile_index * 6 * stride_in[1];
-    offset_out   = tile_index * 6 * stride_out[1];
+    offset       = tile_index * 16 * stride[1];
     for(int d = 2; d < dim; ++d)
     {
         plength       = plength * lengths[d];
         index_along_d = remaining % lengths[d];
         remaining     = remaining / lengths[d];
-        offset_in     = offset_in + index_along_d * stride_in[d];
-        offset_out    = offset_out + index_along_d * stride_out[d];
+        offset        = offset + index_along_d * stride[d];
     }
 
-    batch      = blockIdx.x / plength;
-    offset_in  = offset_in + batch * stride_in[dim];
-    offset_out = offset_out + batch * stride_out[dim];
-    transform  = lds_linear ? tile_index * 6 + threadIdx.x / 42 : tile_index * 6 + threadIdx.x % 6;
-    stride_lds = lds_linear ? 168 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding)
-                            : 6 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
-    offset_lds = lds_linear ? stride_lds * (transform % 6) : threadIdx.x % 6;
-    bool         in_bound = ((tile_index + 1) * 6 > lengths[1]) ? false : true;
-    unsigned int thread   = threadIdx.x / 6;
-    unsigned int tid_hor  = threadIdx.x % 6;
+    batch  = blockIdx.x / plength;
+    offset = offset + batch * stride[dim];
+    transform
+        = lds_linear ? tile_index * 16 + threadIdx.x / 25 : tile_index * 16 + threadIdx.x % 16;
+    stride_lds            = lds_linear ? 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding)
+                                       : 16 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds            = lds_linear ? stride_lds * (transform % 16) : threadIdx.x % 16;
+    bool         in_bound = ((tile_index + 1) * 16 > lengths[1]) ? false : true;
+    unsigned int thread   = threadIdx.x / 16;
+    unsigned int tid_hor  = threadIdx.x % 16;
 
     if(direct_load_to_reg)
     {
@@ -2236,41 +4390,26 @@ extern "C" __global__
         {
             // use intrinsic load
             // evaluate all flags as one rw argument
-            R[0] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 0)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[1] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 24)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[2] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 48)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[3] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 72)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[4] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 96)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[5] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 120)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            R[6] = intrinsic_load(buf_in,
-                                  tid_hor * stride_in[1] + (((thread + 0 + 0) + 144)) * stride0_in,
-                                  offset_in,
-                                  thread < 24
-                                      && (in_bound || tile_index * 6 + tid_hor < lengths[1]));
+            R[0] = intrinsic_load(buf,
+                                  tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
+                                  offset,
+                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            R[1] = intrinsic_load(buf,
+                                  tid_hor * stride[1] + (((thread + 0 + 0) + 25)) * stride0,
+                                  offset,
+                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            R[2] = intrinsic_load(buf,
+                                  tid_hor * stride[1] + (((thread + 0 + 0) + 50)) * stride0,
+                                  offset,
+                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            R[3] = intrinsic_load(buf,
+                                  tid_hor * stride[1] + (((thread + 0 + 0) + 75)) * stride0,
+                                  offset,
+                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            R[4] = intrinsic_load(buf,
+                                  tid_hor * stride[1] + (((thread + 0 + 0) + 100)) * stride0,
+                                  offset,
+                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
         }
 
         else
@@ -2278,90 +4417,57 @@ extern "C" __global__
             // can't use intrinsic load
             if(in_bound)
             {
-                // more than enough threads, some do nothing
-                if(thread < 24)
-                {
-                    R[0] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 0)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[1] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 24)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[2] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 48)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[3] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 72)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[4] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 96)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[5] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 120)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                    R[6] = load_cb(buf_in,
-                                   offset_in + tid_hor * stride_in[1]
-                                       + (((thread + 0 + 0) + 144)) * stride0_in,
-                                   load_cb_data,
-                                   nullptr);
-                }
+                R[0] = load_cb(buf,
+                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
+                               load_cb_data,
+                               nullptr);
+                R[1] = load_cb(buf,
+                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 25)) * stride0,
+                               load_cb_data,
+                               nullptr);
+                R[2] = load_cb(buf,
+                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 50)) * stride0,
+                               load_cb_data,
+                               nullptr);
+                R[3] = load_cb(buf,
+                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 75)) * stride0,
+                               load_cb_data,
+                               nullptr);
+                R[4] = load_cb(buf,
+                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 100)) * stride0,
+                               load_cb_data,
+                               nullptr);
             }
 
             if(!in_bound)
             {
-                if(tile_index * 6 + tid_hor < lengths[1])
+                if(tile_index * 16 + tid_hor < lengths[1])
                 {
-                    // more than enough threads, some do nothing
-                    if(thread < 24)
-                    {
-                        R[0] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 0)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[1] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 24)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[2] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 48)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[3] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 72)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[4] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 96)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[5] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 120)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                        R[6] = load_cb(buf_in,
-                                       offset_in + tid_hor * stride_in[1]
-                                           + (((thread + 0 + 0) + 144)) * stride0_in,
-                                       load_cb_data,
-                                       nullptr);
-                    }
+                    R[0]
+                        = load_cb(buf,
+                                  offset + tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
+                                  load_cb_data,
+                                  nullptr);
+                    R[1] = load_cb(buf,
+                                   offset + tid_hor * stride[1]
+                                       + (((thread + 0 + 0) + 25)) * stride0,
+                                   load_cb_data,
+                                   nullptr);
+                    R[2] = load_cb(buf,
+                                   offset + tid_hor * stride[1]
+                                       + (((thread + 0 + 0) + 50)) * stride0,
+                                   load_cb_data,
+                                   nullptr);
+                    R[3] = load_cb(buf,
+                                   offset + tid_hor * stride[1]
+                                       + (((thread + 0 + 0) + 75)) * stride0,
+                                   load_cb_data,
+                                   nullptr);
+                    R[4] = load_cb(buf,
+                                   offset + tid_hor * stride[1]
+                                       + (((thread + 0 + 0) + 100)) * stride0,
+                                   load_cb_data,
+                                   nullptr);
                 }
             }
         }
@@ -2373,50 +4479,48 @@ extern "C" __global__
         // no intrinsic when load to lds. FIXME- check why use nested branch is better
         if(in_bound)
         {
-            lds_complex[tid_hor * stride_lds + (thread + 0) * 1]
-                = load_cb(buf_in,
-                          offset_in + (tid_hor * stride_in[1] + (thread + 0) * stride0_in),
-                          load_cb_data,
-                          nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 42) * 1]
-                = load_cb(buf_in,
-                          offset_in + (tid_hor * stride_in[1] + (thread + 42) * stride0_in),
-                          load_cb_data,
-                          nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 84) * 1]
-                = load_cb(buf_in,
-                          offset_in + (tid_hor * stride_in[1] + (thread + 84) * stride0_in),
-                          load_cb_data,
-                          nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 126) * 1]
-                = load_cb(buf_in,
-                          offset_in + (tid_hor * stride_in[1] + (thread + 126) * stride0_in),
+            lds_complex[tid_hor * stride_lds + (thread + 0) * 1] = load_cb(
+                buf, offset + tid_hor * stride[1] + (thread + 0) * stride0, load_cb_data, nullptr);
+            lds_complex[tid_hor * stride_lds + (thread + 25) * 1] = load_cb(
+                buf, offset + tid_hor * stride[1] + (thread + 25) * stride0, load_cb_data, nullptr);
+            lds_complex[tid_hor * stride_lds + (thread + 50) * 1] = load_cb(
+                buf, offset + tid_hor * stride[1] + (thread + 50) * stride0, load_cb_data, nullptr);
+            lds_complex[tid_hor * stride_lds + (thread + 75) * 1] = load_cb(
+                buf, offset + tid_hor * stride[1] + (thread + 75) * stride0, load_cb_data, nullptr);
+            lds_complex[tid_hor * stride_lds + (thread + 100) * 1]
+                = load_cb(buf,
+                          offset + tid_hor * stride[1] + (thread + 100) * stride0,
                           load_cb_data,
                           nullptr);
         }
 
         if(!in_bound)
         {
-            if(tile_index * 6 + tid_hor < lengths[1])
+            if(tile_index * 16 + tid_hor < lengths[1])
             {
                 lds_complex[tid_hor * stride_lds + (thread + 0) * 1]
-                    = load_cb(buf_in,
-                              offset_in + (tid_hor * stride_in[1] + (thread + 0) * stride0_in),
+                    = load_cb(buf,
+                              offset + tid_hor * stride[1] + (thread + 0) * stride0,
                               load_cb_data,
                               nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 42) * 1]
-                    = load_cb(buf_in,
-                              offset_in + (tid_hor * stride_in[1] + (thread + 42) * stride0_in),
+                lds_complex[tid_hor * stride_lds + (thread + 25) * 1]
+                    = load_cb(buf,
+                              offset + tid_hor * stride[1] + (thread + 25) * stride0,
                               load_cb_data,
                               nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 84) * 1]
-                    = load_cb(buf_in,
-                              offset_in + (tid_hor * stride_in[1] + (thread + 84) * stride0_in),
+                lds_complex[tid_hor * stride_lds + (thread + 50) * 1]
+                    = load_cb(buf,
+                              offset + tid_hor * stride[1] + (thread + 50) * stride0,
                               load_cb_data,
                               nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 126) * 1]
-                    = load_cb(buf_in,
-                              offset_in + (tid_hor * stride_in[1] + (thread + 126) * stride0_in),
+                lds_complex[tid_hor * stride_lds + (thread + 75) * 1]
+                    = load_cb(buf,
+                              offset + tid_hor * stride[1] + (thread + 75) * stride0,
+                              load_cb_data,
+                              nullptr);
+                lds_complex[tid_hor * stride_lds + (thread + 100) * 1]
+                    = load_cb(buf,
+                              offset + tid_hor * stride[1] + (thread + 100) * stride0,
                               load_cb_data,
                               nullptr);
             }
@@ -2424,17 +4528,17 @@ extern "C" __global__
     }
 
     // calc the thread_in_device value once and for all device funcs
-    unsigned int thread_in_device = lds_linear ? threadIdx.x % 42 : threadIdx.x / 6;
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 16;
 
     // call a pre-load from lds to registers (if necessary)
     if(!direct_load_to_reg)
     {
-        lds_to_reg_input_length168_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
             R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
     }
 
     // transform
-    forward_length168_SBCC_device<scalar_type,
+    forward_length125_SBCC_device<scalar_type,
                                   lds_is_real,
                                   lds_linear ? SB_UNIT : SB_NONUNIT,
                                   lds_linear,
@@ -2456,7 +4560,7 @@ extern "C" __global__
     // call a post-store from registers to lds (if necessary)
     if(!direct_store_from_reg)
     {
-        lds_from_reg_output_length168_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
             R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
     }
 
@@ -2466,34 +4570,41 @@ extern "C" __global__
         if(intrinsic_mode == IntrinsicAccessType::ENABLE_BOTH)
         {
             // use intrinsic store
-            store_intrinsic(buf_out,
-                            tid_hor * stride_out[1]
-                                + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 0)
-                                      * stride0_out,
-                            offset_out,
+            store_intrinsic(buf,
+                            tid_hor * stride[1]
+                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
+                                      * stride0,
+                            offset,
                             R[0],
-                            (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            store_intrinsic(buf_out,
-                            tid_hor * stride_out[1]
-                                + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 42)
-                                      * stride0_out,
-                            offset_out,
+                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            store_intrinsic(buf,
+                            tid_hor * stride[1]
+                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
+                                      * stride0,
+                            offset,
                             R[1],
-                            (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            store_intrinsic(buf_out,
-                            tid_hor * stride_out[1]
-                                + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 84)
-                                      * stride0_out,
-                            offset_out,
+                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            store_intrinsic(buf,
+                            tid_hor * stride[1]
+                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
+                                      * stride0,
+                            offset,
                             R[2],
-                            (in_bound || tile_index * 6 + tid_hor < lengths[1]));
-            store_intrinsic(buf_out,
-                            tid_hor * stride_out[1]
-                                + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 126)
-                                      * stride0_out,
-                            offset_out,
+                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            store_intrinsic(buf,
+                            tid_hor * stride[1]
+                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
+                                      * stride0,
+                            offset,
                             R[3],
-                            (in_bound || tile_index * 6 + tid_hor < lengths[1]));
+                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
+            store_intrinsic(buf,
+                            tid_hor * stride[1]
+                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
+                                      * stride0,
+                            offset,
+                            R[4],
+                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
         }
 
         else
@@ -2501,66 +4612,80 @@ extern "C" __global__
             // can't use intrinsic store
             if(in_bound)
             {
-                store_cb(buf_out,
-                         offset_out + tid_hor * stride_out[1]
-                             + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 0)
-                                   * stride0_out,
+                store_cb(buf,
+                         offset + tid_hor * stride[1]
+                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
+                                   * stride0,
                          R[0],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + tid_hor * stride_out[1]
-                             + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 42)
-                                   * stride0_out,
+                store_cb(buf,
+                         offset + tid_hor * stride[1]
+                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
+                                   * stride0,
                          R[1],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + tid_hor * stride_out[1]
-                             + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 84)
-                                   * stride0_out,
+                store_cb(buf,
+                         offset + tid_hor * stride[1]
+                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
+                                   * stride0,
                          R[2],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + tid_hor * stride_out[1]
-                             + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 126)
-                                   * stride0_out,
+                store_cb(buf,
+                         offset + tid_hor * stride[1]
+                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
+                                   * stride0,
                          R[3],
+                         store_cb_data,
+                         nullptr);
+                store_cb(buf,
+                         offset + tid_hor * stride[1]
+                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
+                                   * stride0,
+                         R[4],
                          store_cb_data,
                          nullptr);
             }
 
             if(!in_bound)
             {
-                if(tile_index * 6 + tid_hor < lengths[1])
+                if(tile_index * 16 + tid_hor < lengths[1])
                 {
-                    store_cb(buf_out,
-                             offset_out + tid_hor * stride_out[1]
-                                 + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 0)
-                                       * stride0_out,
+                    store_cb(buf,
+                             offset + tid_hor * stride[1]
+                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
+                                       * stride0,
                              R[0],
                              store_cb_data,
                              nullptr);
-                    store_cb(buf_out,
-                             offset_out + tid_hor * stride_out[1]
-                                 + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 42)
-                                       * stride0_out,
+                    store_cb(buf,
+                             offset + tid_hor * stride[1]
+                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
+                                       * stride0,
                              R[1],
                              store_cb_data,
                              nullptr);
-                    store_cb(buf_out,
-                             offset_out + tid_hor * stride_out[1]
-                                 + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 84)
-                                       * stride0_out,
+                    store_cb(buf,
+                             offset + tid_hor * stride[1]
+                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
+                                       * stride0,
                              R[2],
                              store_cb_data,
                              nullptr);
-                    store_cb(buf_out,
-                             offset_out + tid_hor * stride_out[1]
-                                 + (((thread + 0 + 0) / 42) * 168 + (thread + 0 + 0) % 42 + 126)
-                                       * stride0_out,
+                    store_cb(buf,
+                             offset + tid_hor * stride[1]
+                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
+                                       * stride0,
                              R[3],
+                             store_cb_data,
+                             nullptr);
+                    store_cb(buf,
+                             offset + tid_hor * stride[1]
+                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
+                                       * stride0,
+                             R[4],
                              store_cb_data,
                              nullptr);
                 }
@@ -2576,55 +4701,64 @@ extern "C" __global__
         // no intrinsic when store from lds. FIXME- check why use nested branch is better
         if(in_bound)
         {
-            store_cb(buf_out,
-                     offset_out + (tid_hor * stride_out[1] + (thread + 0) * stride0_out),
+            store_cb(buf,
+                     offset + tid_hor * stride[1] + (thread + 0) * stride0,
                      lds_complex[tid_hor * stride_lds + (thread + 0) * 1],
                      store_cb_data,
                      nullptr);
-            store_cb(buf_out,
-                     offset_out + (tid_hor * stride_out[1] + (thread + 42) * stride0_out),
-                     lds_complex[tid_hor * stride_lds + (thread + 42) * 1],
+            store_cb(buf,
+                     offset + tid_hor * stride[1] + (thread + 25) * stride0,
+                     lds_complex[tid_hor * stride_lds + (thread + 25) * 1],
                      store_cb_data,
                      nullptr);
-            store_cb(buf_out,
-                     offset_out + (tid_hor * stride_out[1] + (thread + 84) * stride0_out),
-                     lds_complex[tid_hor * stride_lds + (thread + 84) * 1],
+            store_cb(buf,
+                     offset + tid_hor * stride[1] + (thread + 50) * stride0,
+                     lds_complex[tid_hor * stride_lds + (thread + 50) * 1],
                      store_cb_data,
                      nullptr);
-            store_cb(buf_out,
-                     offset_out + (tid_hor * stride_out[1] + (thread + 126) * stride0_out),
-                     lds_complex[tid_hor * stride_lds + (thread + 126) * 1],
+            store_cb(buf,
+                     offset + tid_hor * stride[1] + (thread + 75) * stride0,
+                     lds_complex[tid_hor * stride_lds + (thread + 75) * 1],
+                     store_cb_data,
+                     nullptr);
+            store_cb(buf,
+                     offset + tid_hor * stride[1] + (thread + 100) * stride0,
+                     lds_complex[tid_hor * stride_lds + (thread + 100) * 1],
                      store_cb_data,
                      nullptr);
         }
 
         if(!in_bound)
         {
-            if(tile_index * 6 + tid_hor < lengths[1])
+            if(tile_index * 16 + tid_hor < lengths[1])
             {
-                store_cb(buf_out,
-                         offset_out + (tid_hor * stride_out[1] + (thread + 0) * stride0_out),
+                store_cb(buf,
+                         offset + tid_hor * stride[1] + (thread + 0) * stride0,
                          lds_complex[tid_hor * stride_lds + (thread + 0) * 1],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + (tid_hor * stride_out[1] + (thread + 42) * stride0_out),
-                         lds_complex[tid_hor * stride_lds + (thread + 42) * 1],
+                store_cb(buf,
+                         offset + tid_hor * stride[1] + (thread + 25) * stride0,
+                         lds_complex[tid_hor * stride_lds + (thread + 25) * 1],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + (tid_hor * stride_out[1] + (thread + 84) * stride0_out),
-                         lds_complex[tid_hor * stride_lds + (thread + 84) * 1],
+                store_cb(buf,
+                         offset + tid_hor * stride[1] + (thread + 50) * stride0,
+                         lds_complex[tid_hor * stride_lds + (thread + 50) * 1],
                          store_cb_data,
                          nullptr);
-                store_cb(buf_out,
-                         offset_out + (tid_hor * stride_out[1] + (thread + 126) * stride0_out),
-                         lds_complex[tid_hor * stride_lds + (thread + 126) * 1],
+                store_cb(buf,
+                         offset + tid_hor * stride[1] + (thread + 75) * stride0,
+                         lds_complex[tid_hor * stride_lds + (thread + 75) * 1],
+                         store_cb_data,
+                         nullptr);
+                store_cb(buf,
+                         offset + tid_hor * stride[1] + (thread + 100) * stride0,
+                         lds_complex[tid_hor * stride_lds + (thread + 100) * 1],
                          store_cb_data,
                          nullptr);
             }
         }
     }
 }
-
-// ROCFFT_RTC_END fft_rtc_fwd_len168_dp_op_CI_CI_sbcc_twdbase8_2step_dirReg
+// ROCFFT_RTC_END fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg
