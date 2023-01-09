@@ -13,6 +13,24 @@ rocFFT-mp requires [rocFFT] or [FFTW3] libraries to be installed in the system, 
 [OpenMPI]: https://www.open-mpi.org
 [MVAPICH]: https://mvapich.cse.ohio-state.edu
 
+## How it works?
+rocFFT-mp currently takes as input distributed data on slabs configurations as shown below:
+
+![alt text](https://github.com/af-ayala/images/blob/master/slabs_rocfft.jpg?raw=true)
+
+
+The transposition is performed using **MPI_Alltoallw**, the sequence of data types that are needed are created during plan.
+
+Notes:
+* The slab implementation requires only 1 transpose to obtain the result, and 1 extra transpose to put back data in original processor grid alignment.
+
+* The test file includes a validation step in which we calculate the accuracy of the calculation in comparison to FFTW, for double precision data this error is in the order of $10^{-16}$, and it is calculated as:
+
+$$
+|| X - IFFT_{\textnormal{fftw}}(FFT_{\textnormal{rocfft}}(X)) ||_{\max},
+$$
+
+where we measure the max-norm of the input minus the inverse transform (calculated with FFTW) of the forward transform (calculated with rocFFT_mp).
 
 ## Building from source
 
