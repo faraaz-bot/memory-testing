@@ -25,16 +25,16 @@
 #ifndef ROCFFT_MP
 #define ROCFFT_MP
 
-#include <iostream>
-#include <fftw3-mpi.h>
-#include <math.h>
+#include <algorithm>
 #include <complex.h>
-#include <stdlib.h>
-#include <mpi.h>
-#include <vector>
-#include <random>
-#include <algorithm> 
+#include <fftw3-mpi.h>
 #include <iomanip>
+#include <iostream>
+#include <math.h>
+#include <mpi.h>
+#include <random>
+#include <stdlib.h>
+#include <vector>
 
 #include "hip/hip_runtime_api.h"
 #include "hip/hip_vector_types.h"
@@ -47,52 +47,51 @@ enum rocfft_3D_slab_split
     ROCFFT_SLABS_SPLIT_Z
 };
 
-struct rocfft_mp_plan_slabs{
+struct rocfft_mp_plan_slabs
+{
     // Default constructor
-    rocfft_mp_plan_slabs(int np): 
-                                  subarrays_input(new MPI_Datatype[np]),
-                                  subarrays_output(new MPI_Datatype[np])
-    {}
+    rocfft_mp_plan_slabs(int np)
+        : subarrays_input(new MPI_Datatype[np])
+        , subarrays_output(new MPI_Datatype[np])
+    {
+    }
 
     std::vector<int> transpose_input_shape;
     std::vector<int> transpose_output_shape;
-    
+
     MPI_Comm comm;
-    int nprocs;
+    int      nprocs;
 
     int axis;
     int dim_fast, dim_mid;
 
-    int nkia;
+    int          nkia;
     MPI_Datatype data_type;
-    
-    MPI_Datatype *subarrays_input;
-    MPI_Datatype *subarrays_output;
 
-    private:
-        size_t local_fft_size;
+    MPI_Datatype* subarrays_input;
+    MPI_Datatype* subarrays_output;
+
+private:
+    size_t local_fft_size;
 };
 
-
-void split_array(int N, int M, int p, int *n, int *s)
+void split_array(int N, int M, int p, int* n, int* s)
 {
     int q = N / M;
     int r = N % M;
-    *n = q + (r > p);
-    *s = q * p + std::min(r, p);
+    *n    = q + (r > p);
+    *s    = q * p + std::min(r, p);
 }
 
 // Geometry splitting for slab decomposition
-std::vector<size_t> geometry_splitting(std::vector<size_t> N,
-                                       int axis,
-                                       MPI_Comm comm)
+std::vector<size_t> geometry_splitting(std::vector<size_t> N, int axis, MPI_Comm comm)
 {
     int my_rank, nprocs;
     MPI_Comm_rank(comm, &my_rank);
     MPI_Comm_size(comm, &nprocs);
 
     size_t dim = N.size();
-    
+
     // local_dims contains an extra entry to save the axis
     std::vector<size_t> local_dims(dim);
 
@@ -106,35 +105,36 @@ std::vector<size_t> geometry_splitting(std::vector<size_t> N,
     return local_dims;
 }
 
-
 // Print 3-D array for testing
-void rocfft_mp_print_array(char* message,
-                           int my_rank,
+void rocfft_mp_print_array(char*                              message,
+                           int                                my_rank,
                            std::vector<std::complex<double>>& data,
-                           int ld)
+                           int                                ld)
 {
     printf("Proc[%d]: %s \n", my_rank, message);
-    for(int i=0; i<data.size(); i++){
+    for(int i = 0; i < data.size(); i++)
+    {
         std::cout << std::setw(20);
         std::cout << data[i] << " ";
-        if((i+1)%ld==0)
+        if((i + 1) % ld == 0)
             std::cout << "\n";
     }
 
     std::cout << std::endl;
     std::cout << std::endl;
-}      
+}
 
 // Parallel rocFFT plan
-std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
-                                            const std::vector<size_t>&    local_dims,
-                                            const int axis,
-                                            const MPI_Datatype my_type, 
-                                            std::vector<int>&    in_shape,
-                                            std::vector<int>&    out_shape,
-                                            MPI_Comm comm, rocfft_mp_plan_slabs &options)
+std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>& N,
+                                           const std::vector<size_t>& local_dims,
+                                           const int                  axis,
+                                           const MPI_Datatype         my_type,
+                                           std::vector<int>&          in_shape,
+                                           std::vector<int>&          out_shape,
+                                           MPI_Comm                   comm,
+                                           rocfft_mp_plan_slabs&      options)
 {
-    
+
     int my_rank, nprocs;
     MPI_Comm_rank(comm, &my_rank);
     MPI_Comm_size(comm, &nprocs);
@@ -146,18 +146,18 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     std::vector<rocfft_plan> plan_xyz;
 
     // Find axes that define slabs:
-    std::vector<int> axes = {0,1,2};
+    std::vector<int> axes = {0, 1, 2};
     std::vector<int> slabs;
 
     std::vector<int>::iterator it = axes.begin();
-    while ((it = std::find_if(it, axes.end(), [axis](int x){return x != axis; })) != axes.end())
+    while((it = std::find_if(it, axes.end(), [axis](int x) { return x != axis; })) != axes.end())
     {
         slabs.push_back(std::distance(axes.begin(), it));
         it++;
     }
 
     // Length of transform:
-    std::vector<size_t> length = {local_dims[ slabs[0] ], local_dims[ slabs[1] ]};
+    std::vector<size_t> length = {local_dims[slabs[0]], local_dims[slabs[1]]};
 
     // Set up the strides and buffer size for the input:
     std::vector<size_t> istride = {1};
@@ -177,9 +177,9 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
 
     // Create plan description for computing a batch of slabs
     rocfft_plan_description desc_1 = NULL;
-    rocfft_status st = rocfft_plan_description_create(&desc_1);
+    rocfft_status           st     = rocfft_plan_description_create(&desc_1);
     if(st != rocfft_status_success)
-        throw std::runtime_error("failed to create plan description for the first direction"); 
+        throw std::runtime_error("failed to create plan description for the first direction");
 
     st = rocfft_plan_description_set_data_layout(desc_1,
                                                  rocfft_array_type_complex_interleaved,
@@ -198,7 +198,7 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
 
     // Create rocFFT plan for slabs in the first two dimensions
     rocfft_plan plan_1 = NULL;
-    st                   = rocfft_plan_create(&plan_1,
+    st                 = rocfft_plan_create(&plan_1,
                             rocfft_placement_notinplace,
                             rocfft_transform_type_complex_forward,
                             rocfft_precision_double,
@@ -214,7 +214,7 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     // -----------------------------------------
     // Plan_2: for pencils in the last dimension
     // -----------------------------------------
-    
+
     // Length of transform:
     std::vector<size_t> length_pencils = {N[axis]};
 
@@ -226,7 +226,8 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
         axis_fast = slabs[0];
         axis_mid  = slabs[1];
     }
-    else{
+    else
+    {
         axis_fast = slabs[1];
         axis_mid  = slabs[0];
     }
@@ -238,7 +239,6 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     in_shape.push_back(N[axis_mid]);
     in_shape.push_back(N[axis_fast]);
 
-
     // Calculate number of pencil transforms:
     split_array(N[axis_fast], nprocs, my_rank, &n, &s);
 
@@ -246,7 +246,7 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     out_shape.push_back(N[axis_mid]);
     out_shape.push_back(n);
 
-    size_t n_pencils_slow_dim = N[axis_mid]*n;
+    size_t n_pencils_slow_dim = N[axis_mid] * n;
 
     // Set up the strides and buffer size for the input:
     std::vector<size_t> istride_pencils = {n_pencils_slow_dim};
@@ -264,10 +264,9 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
 
     // Create plan description for computing a batch of pencils
     rocfft_plan_description desc_2 = NULL;
-    st = rocfft_plan_description_create(&desc_2);
+    st                             = rocfft_plan_description_create(&desc_2);
     if(st != rocfft_status_success)
         throw std::runtime_error("failed to create plan description for pencils (last dimension)");
-
 
     st = rocfft_plan_description_set_data_layout(desc_2,
                                                  rocfft_array_type_complex_interleaved,
@@ -285,7 +284,7 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
 
     // Create rocFFT plan for slabs in the first two dimensions
     rocfft_plan plan_2 = NULL;
-    st                   = rocfft_plan_create(&plan_2,
+    st                 = rocfft_plan_create(&plan_2,
                             rocfft_placement_notinplace,
                             rocfft_transform_type_complex_forward,
                             rocfft_precision_double,
@@ -301,17 +300,17 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     rocfft_plan_description_destroy(desc_1);
     rocfft_plan_description_destroy(desc_2);
 
-    options.transpose_input_shape = in_shape;
+    options.transpose_input_shape  = in_shape;
     options.transpose_output_shape = out_shape;
-    options.comm = comm;
-    options.axis = axis;
-    options.dim_fast = axis_fast;
-    options.dim_mid = axis_mid;
-    options.data_type = my_type;
-    options.nprocs = nprocs;
+    options.comm                   = comm;
+    options.axis                   = axis;
+    options.dim_fast               = axis_fast;
+    options.dim_mid                = axis_mid;
+    options.data_type              = my_type;
+    options.nprocs                 = nprocs;
 
     // Create subarray sequences for intermediate transposition
-    int dim = in_shape.size();
+    int              dim = in_shape.size();
     std::vector<int> dims_subarray(dim);
     std::vector<int> coords_subarray(dim, 0);
 
@@ -322,11 +321,16 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     {
         split_array(in_shape[axis], nprocs, i, &n, &s);
 
-        dims_subarray[axis] = n;
+        dims_subarray[axis]   = n;
         coords_subarray[axis] = s;
 
-        MPI_Type_create_subarray( dim, in_shape.data(), dims_subarray.data(), coords_subarray.data(),
-                                  MPI_ORDER_C, my_type, &options.subarrays_input[i]);
+        MPI_Type_create_subarray(dim,
+                                 in_shape.data(),
+                                 dims_subarray.data(),
+                                 coords_subarray.data(),
+                                 MPI_ORDER_C,
+                                 my_type,
+                                 &options.subarrays_input[i]);
 
         MPI_Type_commit(&options.subarrays_input[i]);
     }
@@ -339,11 +343,16 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     {
         split_array(out_shape[0], nprocs, i, &n, &s);
 
-        dims_subarray[0] = n;
+        dims_subarray[0]   = n;
         coords_subarray[0] = s;
 
-        MPI_Type_create_subarray( dim, out_shape.data(), dims_subarray.data(), coords_subarray.data(),
-                                  MPI_ORDER_C, my_type, &options.subarrays_output[i]);
+        MPI_Type_create_subarray(dim,
+                                 out_shape.data(),
+                                 dims_subarray.data(),
+                                 coords_subarray.data(),
+                                 MPI_ORDER_C,
+                                 my_type,
+                                 &options.subarrays_output[i]);
 
         MPI_Type_commit(&options.subarrays_output[i]);
     }
@@ -351,45 +360,50 @@ std::vector<rocfft_plan> rocfft_mp_plan_3D(const std::vector<size_t>&    N,
     return plan_xyz;
 }
 
-
 void subarray_sequence(MPI_Datatype datatype,
-            int dimension,
-            int dims_array[3],
-            int axis,
-            int nprocs,
-            MPI_Datatype subarrays[2])
+                       int          dimension,
+                       int          dims_array[3],
+                       int          axis,
+                       int          nprocs,
+                       MPI_Datatype subarrays[2])
 {
     int dims_subarray[3], coords_subarray[3], n, s;
 
-    for (int i = 0; i < dimension; i++){
-        dims_subarray[i] = dims_array[i];
+    for(int i = 0; i < dimension; i++)
+    {
+        dims_subarray[i]   = dims_array[i];
         coords_subarray[i] = 0;
     }
 
-    for (int p = 0; p < nprocs; p++) {
+    for(int p = 0; p < nprocs; p++)
+    {
         split_array(dims_array[axis], nprocs, p, &n, &s);
 
-        dims_subarray[axis] = n;
+        dims_subarray[axis]   = n;
         coords_subarray[axis] = s;
 
-        MPI_Type_create_subarray( dimension, dims_array, dims_subarray, coords_subarray,
-                                  MPI_ORDER_C, datatype, &subarrays[p]);
+        MPI_Type_create_subarray(dimension,
+                                 dims_array,
+                                 dims_subarray,
+                                 coords_subarray,
+                                 MPI_ORDER_C,
+                                 datatype,
+                                 &subarrays[p]);
 
         MPI_Type_commit(&subarrays[p]);
     }
 }
 
-
 // Parallel rocFFT execution
 void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
-                        std::vector<std::complex<double>>&    input,
-                        std::vector<std::complex<double>>&    output,
-                        rocfft_mp_plan_slabs    &options)
+                       std::vector<std::complex<double>>& input,
+                       std::vector<std::complex<double>>& output,
+                       rocfft_mp_plan_slabs&              options)
 {
 
     // Create HIP device buffer and copy data to device
     size_t local_fftsize = input.size();
-    size_t Nbytes = local_fftsize * sizeof(double2);
+    size_t Nbytes        = local_fftsize * sizeof(double2);
 
     float2 *data_device, *output_device;
     hipMalloc(&data_device, Nbytes);
@@ -398,12 +412,11 @@ void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
     hipMemcpy(data_device, input.data(), Nbytes, hipMemcpyHostToDevice);
     hipMemcpy(output_device, output.data(), Nbytes, hipMemcpyHostToDevice);
 
-
     // Check if the plan requires a work buffer
     size_t work_buf_size = 0;
     rocfft_plan_get_work_buffer_size(plan_xyz[0], &work_buf_size);
-    void* work_buf = nullptr;
-    rocfft_execution_info info = nullptr;
+    void*                 work_buf = nullptr;
+    rocfft_execution_info info     = nullptr;
 
     if(work_buf_size)
     {
@@ -413,7 +426,7 @@ void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
     }
 
     // Execute plan
-    rocfft_execute(plan_xyz[0], (void**) &data_device, (void**) &output_device, info);
+    rocfft_execute(plan_xyz[0], (void**)&data_device, (void**)&output_device, info);
 
     // Wait for execution to finish
     hipDeviceSynchronize();
@@ -428,24 +441,28 @@ void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
     // Copying result back to host
     hipMemcpy(output.data(), output_device, Nbytes, hipMemcpyDeviceToHost);
 
-
     // 3-D transposition
     std::vector<int> counts(options.nprocs, 1);
     std::vector<int> displacements(options.nprocs, 0);
 
-    MPI_Alltoallw(output.data(), counts.data(), displacements.data(), options.subarrays_input,
-                  input.data(), counts.data(), displacements.data(), options.subarrays_output, options.comm);
-
+    MPI_Alltoallw(output.data(),
+                  counts.data(),
+                  displacements.data(),
+                  options.subarrays_input,
+                  input.data(),
+                  counts.data(),
+                  displacements.data(),
+                  options.subarrays_output,
+                  options.comm);
 
     // Moving transposed array to the GPU
     hipMemcpy(data_device, input.data(), Nbytes, hipMemcpyHostToDevice);
 
-
     // Check if the plan requires a work buffer
     size_t work_buf_size_2 = 0;
     rocfft_plan_get_work_buffer_size(plan_xyz[1], &work_buf_size_2);
-    void* work_buf_2 = nullptr;
-    rocfft_execution_info info_2 = nullptr;
+    void*                 work_buf_2 = nullptr;
+    rocfft_execution_info info_2     = nullptr;
 
     if(work_buf_size_2)
     {
@@ -455,7 +472,7 @@ void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
     }
 
     // Execute plan
-    rocfft_execute(plan_xyz[1], (void**) &data_device, (void**) &output_device, info_2);
+    rocfft_execute(plan_xyz[1], (void**)&data_device, (void**)&output_device, info_2);
 
     // Wait for execution to finish
     hipDeviceSynchronize();
@@ -471,15 +488,21 @@ void rocfft_mp_execute(const std::vector<rocfft_plan>&    plan_xyz,
     hipMemcpy(output.data(), output_device, Nbytes, hipMemcpyDeviceToHost);
 
     // Transpose back to original shape: final_alignment -> initial_alignment
-    MPI_Alltoallw(output.data(), counts.data(), displacements.data(), options.subarrays_output,
-                  input.data(), counts.data(), displacements.data(), options.subarrays_input, options.comm);        
+    MPI_Alltoallw(output.data(),
+                  counts.data(),
+                  displacements.data(),
+                  options.subarrays_output,
+                  input.data(),
+                  counts.data(),
+                  displacements.data(),
+                  options.subarrays_input,
+                  options.comm);
 
     hipFree(data_device);
     hipFree(output_device);
 }
-                     
 
-void rocfft_mpi_plan_destroy(const std::vector<rocfft_plan>&    plan_xyz)
+void rocfft_mpi_plan_destroy(const std::vector<rocfft_plan>& plan_xyz)
 {
     for(unsigned int i = 0; i < plan_xyz.size(); ++i)
     {
