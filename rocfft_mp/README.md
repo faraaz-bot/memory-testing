@@ -19,12 +19,12 @@ rocFFT-mp currently takes as input distributed data on slabs configurations as s
 ![alt text](https://github.com/af-ayala/images/blob/master/slabs_rocfft.jpg?raw=true)
 
 
-The transposition is performed using **MPI_Alltoallw**, the sequence of data types that are needed are created during plan.
+The transposition is performed using **MPI_Alltoallw**, sequences of subarray data types are created during plan.
 
 Notes:
-* The slab implementation requires only 1 transpose to obtain the result, and 1 extra transpose to put back data in original processor grid alignment.
+* The slab implementation requires only 1 transpose to obtain the FFT result, and 1 extra transpose to put back data in original processor grid alignment.
 
-* The test file includes a validation step in which we calculate the accuracy of the calculation in comparison to FFTW, for double precision data this error is in the order of $10^{-16}$, and it is calculated as:
+* The test file includes a validation step in which we compute the accuracy of the calculation in comparison to FFTW, for double precision data this error is in the order of $10^{-16}$, and it is found as:
 
 $$
 || X - IFFT_{\textnormal{fftw}}(FFT_{\textnormal{rocfft}}(X)) ||_{\max},
@@ -69,6 +69,7 @@ Current tests:
 | Test          | Dependencies                  | Description                            |
 |-----------------|-------------------------------|------------------------------------------|
 | 3-D C2C FFT   | `test_rocfft_mp_3D.cpp`    | Parallel FFT via slab decomposition
+| 3-D transpose  | `test_transpose_3D.cpp`    | Parallel transposition of 3-D slabs
 
 ## Contribution Rules
 
