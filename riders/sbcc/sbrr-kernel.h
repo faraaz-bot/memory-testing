@@ -1,28 +1,9 @@
-// ROCFFT_RTC_BEGIN fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg
-#define ROCFFT_CALLBACKS_ENABLED
-
-// Copyright (C) 2016 - 2022 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+#include <hip/hip_runtime.h>
 
 #ifndef COMMON_H
 #define COMMON_H
+#include <hip/hip_runtime.h>
+#include <hip/hip_vector_types.h>
 
 #ifdef WIN32
 #define ROCFFT_DEVICE_EXPORT __declspec(dllexport)
@@ -39,6 +20,8 @@
 static const unsigned int LAUNCH_BOUNDS_R2C_C2R_KERNEL = 256;
 
 #ifdef __HIP_PLATFORM_NVIDIA__
+#include "vector_types.h"
+#include <cuComplex.h>
 
 __device__ inline float2 operator-(const float2& a, const float2& b)
 {
@@ -344,32 +327,10 @@ __device__ T TWLstep4(const T* twiddles, size_t u)
 
 #endif // COMMON_H
 
-/******************************************************************************
- * Copyright 2021 Advanced Micro Devices, Inc. All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *****************************************************************************/
-/*! \file
-    \brief Architecture-specific operators on memory added for GFX9
-*/
-// reference:
-//   https://github.com/llvm/llvm-project/blob/main/llvm/test/CodeGen/AMDGPU/llvm.amdgcn.raw.buffer.load.ll
+#ifndef ROCFFT_DEVICE_CALLBACK_H
+#define ROCFFT_DEVICE_CALLBACK_H
+
+#include <hip/hip_vector_types.h>
 
 #ifndef INTRINSIC_MEM_ACCESS_H
 #define INTRINSIC_MEM_ACCESS_H
@@ -829,29 +790,6 @@ struct buffer_store<AccessType, 16, cache_op>
 
 #endif // INTRINSIC_MEM_ACCESS_H
 
-// Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-#ifndef ROCFFT_DEVICE_CALLBACK_H
-#define ROCFFT_DEVICE_CALLBACK_H
-
 // user-provided data saying what callbacks to run
 struct UserCallbacks
 {
@@ -999,10 +937,6 @@ static __device__ typename callback_type<T>::store get_store_cb(void* ptr)
 }
 
 #endif
-
-/*******************************************************************************
- * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
- ******************************************************************************/
 
 #ifndef BUTTERFLY_CONSTANT_H
 #define BUTTERFLY_CONSTANT_H
@@ -1357,10 +1291,6 @@ static __device__ typename callback_type<T>::store get_store_cb(void* ptr)
 #define C16B static_cast<real_type_t<T>>(0.382683432365089837)
 
 #endif //  BUTTERFLY_CONSTANT_H
-
-/*******************************************************************************
- * Copyright (C) 2016-2022 Advanced Micro Devices, Inc. All rights reserved.
- ******************************************************************************/
 
 #ifndef ROCFFT_BUTTERFLY_TEMPLATE_H
 #define ROCFFT_BUTTERFLY_TEMPLATE_H
@@ -3690,26 +3620,6 @@ __device__ void InvRad17B1(T* R0,
 
 #endif // ROCFFT_BUTTERFLY_TEMPLATE_H
 
-// Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 #ifndef REAL_TO_COMPLEX_DEVICE_H
 #define REAL_TO_COMPLEX_DEVICE_H
 
@@ -3947,53 +3857,6 @@ __device__ inline void real_pre_process_kernel_inplace(const size_t    idx_p,
 
 #endif
 
-// Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-// complex number operators that are not present in hipRTC
-
-#ifndef ROCFFT_RTC_WORKAROUND_H
-#define ROCFFT_RTC_WORKAROUND_H
-
-__device__ float2& operator*=(float2& f2, const float f)
-{
-    return f2 *= float2{f};
-}
-
-__device__ double2& operator*=(double2& f2, const double f)
-{
-    return f2 *= double2{f};
-}
-
-__device__ float2 operator-(float2 f2)
-{
-    return float2{-f2.x, -f2.y};
-}
-
-__device__ double2 operator-(double2 f2)
-{
-    return double2{-f2.x, -f2.y};
-}
-
-#endif // ROCFFT_RTC_WORKAROUND_H
-
 #ifndef RIDER_LDS_TO_REG
 #define RIDER_LDS_TO_REG
 template <typename scalar_type, StrideBin sb>
@@ -4040,27 +3903,21 @@ __device__ void lds_from_reg_output_length125_device(scalar_type* R,
     l_offset = offset_lds + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100) * lstride;
     lds_complex[l_offset] = R[4];
 }
-
 #endif
 
 template <typename scalar_type,
           const bool lds_is_real,
           StrideBin  sb,
           const bool lds_linear,
-          const bool direct_load_to_reg,
-          bool       apply_large_twiddle,
-          size_t     large_twiddle_steps = 3,
-          size_t     large_twiddle_base  = 8>
-__device__ void forward_length125_SBCC_device(scalar_type* R,
+          const bool direct_load_to_reg>
+__device__ void forward_length125_SBRR_device(scalar_type* R,
                                               real_type_t<scalar_type>* __restrict__ lds_real,
                                               scalar_type* __restrict__ lds_complex,
                                               const scalar_type* __restrict__ twiddles,
-                                              unsigned int       stride_lds,
-                                              unsigned int       offset_lds,
-                                              unsigned int       thread,
-                                              bool               write,
-                                              const scalar_type* large_twiddles,
-                                              size_t             trans_local)
+                                              unsigned int stride_lds,
+                                              unsigned int offset_lds,
+                                              unsigned int thread,
+                                              bool         write)
 {
     scalar_type        W;
     scalar_type        t;
@@ -4070,7 +3927,7 @@ __device__ void forward_length125_SBCC_device(scalar_type* R,
     // pass 0, width 5
     // using 25 threads we need to do 25 radix-5 butterflies
     // therefore each thread will do 1.000000 butterflies
-    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
+    FwdRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
     if(!lds_is_real)
     {
         if(!direct_load_to_reg)
@@ -4167,7 +4024,7 @@ __device__ void forward_length125_SBCC_device(scalar_type* R,
     W    = twiddles[3 + 4 * ((thread + 0 + 0) % 5)];
     t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
     R[4] = t;
-    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
+    FwdRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
     if(!lds_is_real)
     {
         __syncthreads();
@@ -4261,62 +4118,31 @@ __device__ void forward_length125_SBCC_device(scalar_type* R,
     W    = twiddles[23 + 4 * ((thread + 0 + 0) % 25)];
     t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
     R[4] = t;
-    FwdRad5B1(&R[0], &R[1], &R[2], &R[3], &R[4]);
-    if(apply_large_twiddle)
-    {
-        // large twiddle multiplication
-        W = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 25) + 0 * 25) * trans_local);
-        t    = {R[0].x * W.x - R[0].y * W.y, R[0].y * W.x + R[0].x * W.y};
-        R[0] = t;
-        W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 25) + 1 * 25) * trans_local);
-        t    = {R[1].x * W.x - R[1].y * W.y, R[1].y * W.x + R[1].x * W.y};
-        R[1] = t;
-        W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 25) + 2 * 25) * trans_local);
-        t    = {R[2].x * W.x - R[2].y * W.y, R[2].y * W.x + R[2].x * W.y};
-        R[2] = t;
-        W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 25) + 3 * 25) * trans_local);
-        t    = {R[3].x * W.x - R[3].y * W.y, R[3].y * W.x + R[3].x * W.y};
-        R[3] = t;
-        W    = TW_NSteps<scalar_type, large_twiddle_base, large_twiddle_steps>(
-            large_twiddles, (((int)(thread + 0 + 0) % 25) + 4 * 25) * trans_local);
-        t    = {R[4].x * W.x - R[4].y * W.y, R[4].y * W.x + R[4].x * W.y};
-        R[4] = t;
-    }
+    FwdRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
 }
-typedef float2                   scalar_type;
-static const StrideBin           sb                  = SB_NONUNIT;
-static const EmbeddedType        ebtype              = EmbeddedType::NONE;
-static const SBRC_TYPE           sbrc_type           = SBRC_2D;
-static const SBRC_TRANSPOSE_TYPE transpose_type      = NONE;
-static const CallbackType        cbtype              = CallbackType::NONE;
-static const DirectRegType       drtype              = DirectRegType::TRY_ENABLE_IF_SUPPORT;
-static const bool                apply_large_twiddle = false;
-static const IntrinsicAccessType intrinsic_mode      = IntrinsicAccessType::DISABLE_BOTH;
-static const size_t              large_twiddle_base  = 8;
-static const size_t              large_twiddle_steps = 0;
-extern "C" __global__ __launch_bounds__(400) void fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg(
-    const scalar_type* __restrict__ twiddles,
-    const scalar_type* large_twiddles,
-    const size_t       dim,
-    const size_t* __restrict__ lengths,
-    const size_t* __restrict__ stride,
-    const size_t       nbatch,
-    const unsigned int lds_padding,
-    void* __restrict__ load_cb_fn,
-    void* __restrict__ load_cb_data,
-    uint32_t load_cb_lds_bytes,
-    void* __restrict__ store_cb_fn,
-    void* __restrict__ store_cb_data,
-    scalar_type* __restrict__ buf)
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__
+    __launch_bounds__(250) void ip_forward_length125_SBRR(const scalar_type* __restrict__ twiddles,
+                                                          const size_t dim,
+                                                          const size_t* __restrict__ lengths,
+                                                          const size_t* __restrict__ stride,
+                                                          const size_t       nbatch,
+                                                          const unsigned int lds_padding,
+                                                          void* __restrict__ load_cb_fn,
+                                                          void* __restrict__ load_cb_data,
+                                                          unsigned int load_cb_lds_bytes,
+                                                          void* __restrict__ store_cb_fn,
+                                                          void* __restrict__ store_cb_data,
+                                                          scalar_type* __restrict__ buf)
 {
     // this kernel:
     //   uses 25 threads per transform
-    //   does 16 transforms per thread block
-    // therefore it should be called with 400 threads per thread block
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
     scalar_type R[5];
     extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
     real_type_t<scalar_type>* __restrict__ lds_real
@@ -4327,438 +4153,2669 @@ extern "C" __global__ __launch_bounds__(400) void fft_rtc_fwd_len125_sp_ip_CI_sb
     unsigned int stride_lds;
     size_t       batch;
     size_t       transform;
-    const bool   direct_load_to_reg    = drtype == DirectRegType::TRY_ENABLE_IF_SUPPORT;
-    const bool   direct_store_from_reg = direct_load_to_reg;
-    const bool   lds_linear            = !direct_load_to_reg;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
     const bool   lds_is_real           = false;
     auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
     auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
 
     // large twiddles
-    __shared__ scalar_type large_twd_lds[(apply_large_twiddle && large_twiddle_base < 8)
-                                             ? ((1 << large_twiddle_base) * 3)
-                                             : (0)];
-    if(apply_large_twiddle && large_twiddle_base < 8)
-    {
-        size_t ltwd_id = threadIdx.x;
-        while(ltwd_id < (1 << large_twiddle_base) * 3)
-        {
-            large_twd_lds[ltwd_id] = large_twiddles[ltwd_id];
-            ltwd_id += 400;
-        }
-    }
+    // - no large twiddles
 
     // offsets
     const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
-    size_t       tile_index;
-    size_t       num_of_tiles;
-
-    // calculate offset for each tile:
-    //   tile_index  now means index of the tile along dim1
-    //   num_of_tiles now means number of tiles along dim1
-    size_t plength = 1;
-    size_t remaining;
-    size_t index_along_d;
-    num_of_tiles = (lengths[1] - 1) / 16 + 1;
-    plength      = num_of_tiles;
-    tile_index   = blockIdx.x % num_of_tiles;
-    remaining    = blockIdx.x / num_of_tiles;
-    offset       = tile_index * 16 * stride[1];
-    for(int d = 2; d < dim; ++d)
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
     {
-        plength       = plength * lengths[d];
         index_along_d = remaining % lengths[d];
         remaining     = remaining / lengths[d];
         offset        = offset + index_along_d * stride[d];
     }
+    batch        = remaining;
+    offset       = offset + batch * stride[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
 
-    batch  = blockIdx.x / plength;
-    offset = offset + batch * stride[dim];
-    transform
-        = lds_linear ? tile_index * 16 + threadIdx.x / 25 : tile_index * 16 + threadIdx.x % 16;
-    stride_lds            = lds_linear ? 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding)
-                                       : 16 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
-    offset_lds            = lds_linear ? stride_lds * (transform % 16) : threadIdx.x % 16;
-    bool         in_bound = ((tile_index + 1) * 16 > lengths[1]) ? false : true;
-    unsigned int thread   = threadIdx.x / 16;
-    unsigned int tid_hor  = threadIdx.x % 16;
-
-    if(direct_load_to_reg)
+    // load global into lds
+    if(inbound)
     {
-        // load global into registers
-        if(intrinsic_mode != IntrinsicAccessType::DISABLE_BOTH)
-        {
-            // use intrinsic load
-            // evaluate all flags as one rw argument
-            R[0] = intrinsic_load(buf,
-                                  tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
-                                  offset,
-                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            R[1] = intrinsic_load(buf,
-                                  tid_hor * stride[1] + (((thread + 0 + 0) + 25)) * stride0,
-                                  offset,
-                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            R[2] = intrinsic_load(buf,
-                                  tid_hor * stride[1] + (((thread + 0 + 0) + 50)) * stride0,
-                                  offset,
-                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            R[3] = intrinsic_load(buf,
-                                  tid_hor * stride[1] + (((thread + 0 + 0) + 75)) * stride0,
-                                  offset,
-                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            R[4] = intrinsic_load(buf,
-                                  tid_hor * stride[1] + (((thread + 0 + 0) + 100)) * stride0,
-                                  offset,
-                                  (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-        }
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf, offset + (thread + 0) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf, offset + (thread + 25) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf, offset + (thread + 50) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf, offset + (thread + 75) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf, offset + (thread + 100) * stride0, load_cb_data, nullptr);
 
-        else
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
         {
-            // can't use intrinsic load
-            if(in_bound)
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
             {
-                R[0] = load_cb(buf,
-                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
-                               load_cb_data,
-                               nullptr);
-                R[1] = load_cb(buf,
-                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 25)) * stride0,
-                               load_cb_data,
-                               nullptr);
-                R[2] = load_cb(buf,
-                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 50)) * stride0,
-                               load_cb_data,
-                               nullptr);
-                R[3] = load_cb(buf,
-                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 75)) * stride0,
-                               load_cb_data,
-                               nullptr);
-                R[4] = load_cb(buf,
-                               offset + tid_hor * stride[1] + (((thread + 0 + 0) + 100)) * stride0,
-                               load_cb_data,
-                               nullptr);
-            }
-
-            if(!in_bound)
-            {
-                if(tile_index * 16 + tid_hor < lengths[1])
-                {
-                    R[0]
-                        = load_cb(buf,
-                                  offset + tid_hor * stride[1] + (((thread + 0 + 0) + 0)) * stride0,
-                                  load_cb_data,
-                                  nullptr);
-                    R[1] = load_cb(buf,
-                                   offset + tid_hor * stride[1]
-                                       + (((thread + 0 + 0) + 25)) * stride0,
-                                   load_cb_data,
-                                   nullptr);
-                    R[2] = load_cb(buf,
-                                   offset + tid_hor * stride[1]
-                                       + (((thread + 0 + 0) + 50)) * stride0,
-                                   load_cb_data,
-                                   nullptr);
-                    R[3] = load_cb(buf,
-                                   offset + tid_hor * stride[1]
-                                       + (((thread + 0 + 0) + 75)) * stride0,
-                                   load_cb_data,
-                                   nullptr);
-                    R[4] = load_cb(buf,
-                                   offset + tid_hor * stride[1]
-                                       + (((thread + 0 + 0) + 100)) * stride0,
-                                   load_cb_data,
-                                   nullptr);
-                }
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = load_cb(buf, offset + (thread + 100 + 1) * stride0, load_cb_data, nullptr);
             }
         }
     }
 
-    else
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
     {
-        // load global into lds
-        // no intrinsic when load to lds. FIXME- check why use nested branch is better
-        if(in_bound)
-        {
-            lds_complex[tid_hor * stride_lds + (thread + 0) * 1] = load_cb(
-                buf, offset + tid_hor * stride[1] + (thread + 0) * stride0, load_cb_data, nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 25) * 1] = load_cb(
-                buf, offset + tid_hor * stride[1] + (thread + 25) * stride0, load_cb_data, nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 50) * 1] = load_cb(
-                buf, offset + tid_hor * stride[1] + (thread + 50) * stride0, load_cb_data, nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 75) * 1] = load_cb(
-                buf, offset + tid_hor * stride[1] + (thread + 75) * stride0, load_cb_data, nullptr);
-            lds_complex[tid_hor * stride_lds + (thread + 100) * 1]
-                = load_cb(buf,
-                          offset + tid_hor * stride[1] + (thread + 100) * stride0,
-                          load_cb_data,
-                          nullptr);
-        }
+        __syncthreads();
 
-        if(!in_bound)
-        {
-            if(tile_index * 16 + tid_hor < lengths[1])
-            {
-                lds_complex[tid_hor * stride_lds + (thread + 0) * 1]
-                    = load_cb(buf,
-                              offset + tid_hor * stride[1] + (thread + 0) * stride0,
-                              load_cb_data,
-                              nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 25) * 1]
-                    = load_cb(buf,
-                              offset + tid_hor * stride[1] + (thread + 25) * stride0,
-                              load_cb_data,
-                              nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 50) * 1]
-                    = load_cb(buf,
-                              offset + tid_hor * stride[1] + (thread + 50) * stride0,
-                              load_cb_data,
-                              nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 75) * 1]
-                    = load_cb(buf,
-                              offset + tid_hor * stride[1] + (thread + 75) * stride0,
-                              load_cb_data,
-                              nullptr);
-                lds_complex[tid_hor * stride_lds + (thread + 100) * 1]
-                    = load_cb(buf,
-                              offset + tid_hor * stride[1] + (thread + 100) * stride0,
-                              load_cb_data,
-                              nullptr);
-            }
-        }
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
     }
 
     // calc the thread_in_device value once and for all device funcs
-    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 16;
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
 
     // call a pre-load from lds to registers (if necessary)
-    if(!direct_load_to_reg)
-    {
-        lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
-            R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
-    }
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
 
     // transform
-    forward_length125_SBCC_device<scalar_type,
+    forward_length125_SBRR_device<scalar_type,
                                   lds_is_real,
                                   lds_linear ? SB_UNIT : SB_NONUNIT,
                                   lds_linear,
-                                  direct_load_to_reg,
-                                  apply_large_twiddle,
-                                  large_twiddle_steps,
-                                  large_twiddle_base>(
-        R,
-        lds_real,
-        lds_complex,
-        twiddles,
-        stride_lds,
-        offset_lds,
-        thread_in_device,
-        true,
-        (apply_large_twiddle && large_twiddle_base < 8) ? (large_twd_lds) : (large_twiddles),
-        transform);
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
 
     // call a post-store from registers to lds (if necessary)
-    if(!direct_store_from_reg)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
     {
-        lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
-            R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
-    }
-
-    if(direct_store_from_reg)
-    {
-        // store registers into global
-        if(intrinsic_mode == IntrinsicAccessType::ENABLE_BOTH)
-        {
-            // use intrinsic store
-            store_intrinsic(buf,
-                            tid_hor * stride[1]
-                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
-                                      * stride0,
-                            offset,
-                            R[0],
-                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            store_intrinsic(buf,
-                            tid_hor * stride[1]
-                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
-                                      * stride0,
-                            offset,
-                            R[1],
-                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            store_intrinsic(buf,
-                            tid_hor * stride[1]
-                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
-                                      * stride0,
-                            offset,
-                            R[2],
-                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            store_intrinsic(buf,
-                            tid_hor * stride[1]
-                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
-                                      * stride0,
-                            offset,
-                            R[3],
-                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-            store_intrinsic(buf,
-                            tid_hor * stride[1]
-                                + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
-                                      * stride0,
-                            offset,
-                            R[4],
-                            (in_bound || tile_index * 16 + tid_hor < lengths[1]));
-        }
-
-        else
-        {
-            // can't use intrinsic store
-            if(in_bound)
-            {
-                store_cb(buf,
-                         offset + tid_hor * stride[1]
-                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
-                                   * stride0,
-                         R[0],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1]
-                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
-                                   * stride0,
-                         R[1],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1]
-                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
-                                   * stride0,
-                         R[2],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1]
-                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
-                                   * stride0,
-                         R[3],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1]
-                             + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
-                                   * stride0,
-                         R[4],
-                         store_cb_data,
-                         nullptr);
-            }
-
-            if(!in_bound)
-            {
-                if(tile_index * 16 + tid_hor < lengths[1])
-                {
-                    store_cb(buf,
-                             offset + tid_hor * stride[1]
-                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 0)
-                                       * stride0,
-                             R[0],
-                             store_cb_data,
-                             nullptr);
-                    store_cb(buf,
-                             offset + tid_hor * stride[1]
-                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 25)
-                                       * stride0,
-                             R[1],
-                             store_cb_data,
-                             nullptr);
-                    store_cb(buf,
-                             offset + tid_hor * stride[1]
-                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 50)
-                                       * stride0,
-                             R[2],
-                             store_cb_data,
-                             nullptr);
-                    store_cb(buf,
-                             offset + tid_hor * stride[1]
-                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 75)
-                                       * stride0,
-                             R[3],
-                             store_cb_data,
-                             nullptr);
-                    store_cb(buf,
-                             offset + tid_hor * stride[1]
-                                 + (((thread + 0 + 0) / 25) * 125 + (thread + 0 + 0) % 25 + 100)
-                                       * stride0,
-                             R[4],
-                             store_cb_data,
-                             nullptr);
-                }
-            }
-        }
-    }
-
-    else
-    {
-
-        // store global
         __syncthreads();
-        // no intrinsic when store from lds. FIXME- check why use nested branch is better
-        if(in_bound)
-        {
-            store_cb(buf,
-                     offset + tid_hor * stride[1] + (thread + 0) * stride0,
-                     lds_complex[tid_hor * stride_lds + (thread + 0) * 1],
-                     store_cb_data,
-                     nullptr);
-            store_cb(buf,
-                     offset + tid_hor * stride[1] + (thread + 25) * stride0,
-                     lds_complex[tid_hor * stride_lds + (thread + 25) * 1],
-                     store_cb_data,
-                     nullptr);
-            store_cb(buf,
-                     offset + tid_hor * stride[1] + (thread + 50) * stride0,
-                     lds_complex[tid_hor * stride_lds + (thread + 50) * 1],
-                     store_cb_data,
-                     nullptr);
-            store_cb(buf,
-                     offset + tid_hor * stride[1] + (thread + 75) * stride0,
-                     lds_complex[tid_hor * stride_lds + (thread + 75) * 1],
-                     store_cb_data,
-                     nullptr);
-            store_cb(buf,
-                     offset + tid_hor * stride[1] + (thread + 100) * stride0,
-                     lds_complex[tid_hor * stride_lds + (thread + 100) * 1],
-                     store_cb_data,
-                     nullptr);
-        }
 
-        if(!in_bound)
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf,
+                 offset + (thread + 0) * stride0,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 25) * stride0,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 50) * stride0,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 75) * stride0,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 100) * stride0,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
         {
-            if(tile_index * 16 + tid_hor < lengths[1])
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
             {
                 store_cb(buf,
-                         offset + tid_hor * stride[1] + (thread + 0) * stride0,
-                         lds_complex[tid_hor * stride_lds + (thread + 0) * 1],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1] + (thread + 25) * stride0,
-                         lds_complex[tid_hor * stride_lds + (thread + 25) * 1],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1] + (thread + 50) * stride0,
-                         lds_complex[tid_hor * stride_lds + (thread + 50) * 1],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1] + (thread + 75) * stride0,
-                         lds_complex[tid_hor * stride_lds + (thread + 75) * 1],
-                         store_cb_data,
-                         nullptr);
-                store_cb(buf,
-                         offset + tid_hor * stride[1] + (thread + 100) * stride0,
-                         lds_complex[tid_hor * stride_lds + (thread + 100) * 1],
+                         offset + (thread + 100 + 1) * stride0,
+                         lds_complex[offset_lds + thread + 100 + 1],
                          store_cb_data,
                          nullptr);
             }
         }
     }
 }
-// ROCFFT_RTC_END fft_rtc_fwd_len125_sp_ip_CI_sbcc_dirReg
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void ip_forward_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ bufre,
+    real_type_t<scalar_type>* __restrict__ bufim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset                   = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset        = offset + index_along_d * stride[d];
+    }
+    batch        = remaining;
+    offset       = offset + batch * stride[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = {bufre[offset + (thread + 0) * stride0], bufim[offset + (thread + 0) * stride0]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {bufre[offset + (thread + 25) * stride0], bufim[offset + (thread + 25) * stride0]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {bufre[offset + (thread + 50) * stride0], bufim[offset + (thread + 50) * stride0]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {bufre[offset + (thread + 75) * stride0], bufim[offset + (thread + 75) * stride0]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {bufre[offset + (thread + 100) * stride0], bufim[offset + (thread + 100) * stride0]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {bufre[offset + (thread + 100 + 1) * stride0],
+                       bufim[offset + (thread + 100 + 1) * stride0]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    forward_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        bufre[offset + (thread + 0) * stride0]   = lds_complex[offset_lds + (thread + 0)].x;
+        bufim[offset + (thread + 0) * stride0]   = lds_complex[offset_lds + (thread + 0)].y;
+        bufre[offset + (thread + 25) * stride0]  = lds_complex[offset_lds + (thread + 25)].x;
+        bufim[offset + (thread + 25) * stride0]  = lds_complex[offset_lds + (thread + 25)].y;
+        bufre[offset + (thread + 50) * stride0]  = lds_complex[offset_lds + (thread + 50)].x;
+        bufim[offset + (thread + 50) * stride0]  = lds_complex[offset_lds + (thread + 50)].y;
+        bufre[offset + (thread + 75) * stride0]  = lds_complex[offset_lds + (thread + 75)].x;
+        bufim[offset + (thread + 75) * stride0]  = lds_complex[offset_lds + (thread + 75)].y;
+        bufre[offset + (thread + 100) * stride0] = lds_complex[offset_lds + (thread + 100)].x;
+        bufim[offset + (thread + 100) * stride0] = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                bufre[offset + (thread + 100 + 1) * stride0]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                bufim[offset + (thread + 100 + 1) * stride0]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__
+    __launch_bounds__(250) void op_forward_length125_SBRR(const scalar_type* __restrict__ twiddles,
+                                                          const size_t dim,
+                                                          const size_t* __restrict__ lengths,
+                                                          const size_t* __restrict__ stride_in,
+                                                          const size_t* __restrict__ stride_out,
+                                                          const size_t       nbatch,
+                                                          const unsigned int lds_padding,
+                                                          void* __restrict__ load_cb_fn,
+                                                          void* __restrict__ load_cb_data,
+                                                          unsigned int load_cb_lds_bytes,
+                                                          void* __restrict__ store_cb_fn,
+                                                          void* __restrict__ store_cb_data,
+                                                          scalar_type* __restrict__ buf_in,
+                                                          scalar_type* __restrict__ buf_out)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf_in, offset_in + (thread + 0) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf_in, offset_in + (thread + 25) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf_in, offset_in + (thread + 50) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf_in, offset_in + (thread + 75) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf_in, offset_in + (thread + 100) * stride0_in, load_cb_data, nullptr);
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1] = load_cb(
+                    buf_in, offset_in + (thread + 100 + 1) * stride0_in, load_cb_data, nullptr);
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    forward_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf_out,
+                 offset_out + (thread + 0) * stride0_out,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 25) * stride0_out,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 50) * stride0_out,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 75) * stride0_out,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 100) * stride0_out,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                store_cb(buf_out,
+                         offset_out + (thread + 100 + 1) * stride0_out,
+                         lds_complex[offset_lds + thread + 100 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_forward_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    scalar_type* __restrict__ buf_in,
+    real_type_t<scalar_type>* __restrict__ buf_outre,
+    real_type_t<scalar_type>* __restrict__ buf_outim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf_in, offset_in + (thread + 0) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf_in, offset_in + (thread + 25) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf_in, offset_in + (thread + 50) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf_in, offset_in + (thread + 75) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf_in, offset_in + (thread + 100) * stride0_in, load_cb_data, nullptr);
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1] = load_cb(
+                    buf_in, offset_in + (thread + 100 + 1) * stride0_in, load_cb_data, nullptr);
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    forward_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        buf_outre[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].x;
+        buf_outim[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].y;
+        buf_outre[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].x;
+        buf_outim[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].y;
+        buf_outre[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].x;
+        buf_outim[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].y;
+        buf_outre[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].x;
+        buf_outim[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].y;
+        buf_outre[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].x;
+        buf_outim[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                buf_outre[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                buf_outim[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_forward_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ buf_inre,
+    real_type_t<scalar_type>* __restrict__ buf_inim,
+    scalar_type* __restrict__ buf_out)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread                                 = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)] = {buf_inre[offset_in + (thread + 0) * stride0_in],
+                                                  buf_inim[offset_in + (thread + 0) * stride0_in]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {buf_inre[offset_in + (thread + 25) * stride0_in],
+               buf_inim[offset_in + (thread + 25) * stride0_in]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {buf_inre[offset_in + (thread + 50) * stride0_in],
+               buf_inim[offset_in + (thread + 50) * stride0_in]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {buf_inre[offset_in + (thread + 75) * stride0_in],
+               buf_inim[offset_in + (thread + 75) * stride0_in]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {buf_inre[offset_in + (thread + 100) * stride0_in],
+               buf_inim[offset_in + (thread + 100) * stride0_in]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {buf_inre[offset_in + (thread + 100 + 1) * stride0_in],
+                       buf_inim[offset_in + (thread + 100 + 1) * stride0_in]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    forward_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf_out,
+                 offset_out + (thread + 0) * stride0_out,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 25) * stride0_out,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 50) * stride0_out,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 75) * stride0_out,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 100) * stride0_out,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                store_cb(buf_out,
+                         offset_out + (thread + 100 + 1) * stride0_out,
+                         lds_complex[offset_lds + thread + 100 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_forward_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ buf_inre,
+    real_type_t<scalar_type>* __restrict__ buf_inim,
+    real_type_t<scalar_type>* __restrict__ buf_outre,
+    real_type_t<scalar_type>* __restrict__ buf_outim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread                                 = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)] = {buf_inre[offset_in + (thread + 0) * stride0_in],
+                                                  buf_inim[offset_in + (thread + 0) * stride0_in]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {buf_inre[offset_in + (thread + 25) * stride0_in],
+               buf_inim[offset_in + (thread + 25) * stride0_in]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {buf_inre[offset_in + (thread + 50) * stride0_in],
+               buf_inim[offset_in + (thread + 50) * stride0_in]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {buf_inre[offset_in + (thread + 75) * stride0_in],
+               buf_inim[offset_in + (thread + 75) * stride0_in]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {buf_inre[offset_in + (thread + 100) * stride0_in],
+               buf_inim[offset_in + (thread + 100) * stride0_in]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {buf_inre[offset_in + (thread + 100 + 1) * stride0_in],
+                       buf_inim[offset_in + (thread + 100 + 1) * stride0_in]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    forward_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        buf_outre[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].x;
+        buf_outim[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].y;
+        buf_outre[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].x;
+        buf_outim[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].y;
+        buf_outre[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].x;
+        buf_outim[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].y;
+        buf_outre[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].x;
+        buf_outim[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].y;
+        buf_outre[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].x;
+        buf_outim[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                buf_outre[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                buf_outim[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          const bool lds_is_real,
+          StrideBin  sb,
+          const bool lds_linear,
+          const bool direct_load_to_reg>
+__device__ void inverse_length125_SBRR_device(scalar_type* R,
+                                              real_type_t<scalar_type>* __restrict__ lds_real,
+                                              scalar_type* __restrict__ lds_complex,
+                                              const scalar_type* __restrict__ twiddles,
+                                              unsigned int stride_lds,
+                                              unsigned int offset_lds,
+                                              unsigned int thread,
+                                              bool         write)
+{
+    scalar_type        W;
+    scalar_type        t;
+    const unsigned int lstride = (sb == SB_UNIT) ? (1) : (stride_lds);
+    unsigned int       l_offset;
+
+    // pass 0, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    InvRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
+    if(!lds_is_real)
+    {
+        if(!direct_load_to_reg)
+        {
+            __syncthreads();
+        }
+
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_complex[l_offset] = R[0];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_complex[l_offset] = R[1];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_complex[l_offset] = R[2];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_complex[l_offset] = R[3];
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_complex[l_offset] = R[4];
+    }
+
+    else
+    {
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_real[l_offset] = R[0].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_real[l_offset] = R[1].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_real[l_offset] = R[2].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_real[l_offset] = R[3].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_real[l_offset] = R[4].x;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].x   = lds_real[l_offset];
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 0) * lstride;
+        lds_real[l_offset] = R[0].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 1) * lstride;
+        lds_real[l_offset] = R[1].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 2) * lstride;
+        lds_real[l_offset] = R[2].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 3) * lstride;
+        lds_real[l_offset] = R[3].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 1) * 5 + (thread + 0 + 0) % 1 + 4) * lstride;
+        lds_real[l_offset] = R[4].y;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].y   = lds_real[l_offset];
+    }
+
+    // pass 1, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4]     = lds_complex[l_offset];
+    }
+
+    W    = twiddles[0 + 4 * ((thread + 0 + 0) % 5)];
+    t    = {R[1].x * W.x + R[1].y * W.y, R[1].y * W.x - R[1].x * W.y};
+    R[1] = t;
+    W    = twiddles[1 + 4 * ((thread + 0 + 0) % 5)];
+    t    = {R[2].x * W.x + R[2].y * W.y, R[2].y * W.x - R[2].x * W.y};
+    R[2] = t;
+    W    = twiddles[2 + 4 * ((thread + 0 + 0) % 5)];
+    t    = {R[3].x * W.x + R[3].y * W.y, R[3].y * W.x - R[3].x * W.y};
+    R[3] = t;
+    W    = twiddles[3 + 4 * ((thread + 0 + 0) % 5)];
+    t    = {R[4].x * W.x + R[4].y * W.y, R[4].y * W.x - R[4].x * W.y};
+    R[4] = t;
+    InvRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_complex[l_offset] = R[0];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_complex[l_offset] = R[1];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_complex[l_offset] = R[2];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_complex[l_offset] = R[3];
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_complex[l_offset] = R[4];
+    }
+
+    else
+    {
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_real[l_offset] = R[0].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_real[l_offset] = R[1].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_real[l_offset] = R[2].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_real[l_offset] = R[3].x;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_real[l_offset] = R[4].x;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].x   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].x   = lds_real[l_offset];
+        __syncthreads();
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 0) * lstride;
+        lds_real[l_offset] = R[0].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 5) * lstride;
+        lds_real[l_offset] = R[1].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 10) * lstride;
+        lds_real[l_offset] = R[2].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 15) * lstride;
+        lds_real[l_offset] = R[3].y;
+        l_offset = offset_lds + (((thread + 0 + 0) / 5) * 25 + (thread + 0 + 0) % 5 + 20) * lstride;
+        lds_real[l_offset] = R[4].y;
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3].y   = lds_real[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4].y   = lds_real[l_offset];
+    }
+
+    // pass 2, width 5
+    // using 25 threads we need to do 25 radix-5 butterflies
+    // therefore each thread will do 1.000000 butterflies
+    if(!lds_is_real)
+    {
+        __syncthreads();
+        l_offset = offset_lds + ((thread + 0 + 0) + 0) * lstride;
+        R[0]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 25) * lstride;
+        R[1]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 50) * lstride;
+        R[2]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 75) * lstride;
+        R[3]     = lds_complex[l_offset];
+        l_offset = offset_lds + ((thread + 0 + 0) + 100) * lstride;
+        R[4]     = lds_complex[l_offset];
+    }
+
+    W    = twiddles[20 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[1].x * W.x + R[1].y * W.y, R[1].y * W.x - R[1].x * W.y};
+    R[1] = t;
+    W    = twiddles[21 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[2].x * W.x + R[2].y * W.y, R[2].y * W.x - R[2].x * W.y};
+    R[2] = t;
+    W    = twiddles[22 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[3].x * W.x + R[3].y * W.y, R[3].y * W.x - R[3].x * W.y};
+    R[3] = t;
+    W    = twiddles[23 + 4 * ((thread + 0 + 0) % 25)];
+    t    = {R[4].x * W.x + R[4].y * W.y, R[4].y * W.x - R[4].x * W.y};
+    R[4] = t;
+    InvRad5B1(R + 0, R + 1, R + 2, R + 3, R + 4);
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__
+    __launch_bounds__(250) void ip_inverse_length125_SBRR(const scalar_type* __restrict__ twiddles,
+                                                          const size_t dim,
+                                                          const size_t* __restrict__ lengths,
+                                                          const size_t* __restrict__ stride,
+                                                          const size_t       nbatch,
+                                                          const unsigned int lds_padding,
+                                                          void* __restrict__ load_cb_fn,
+                                                          void* __restrict__ load_cb_data,
+                                                          unsigned int load_cb_lds_bytes,
+                                                          void* __restrict__ store_cb_fn,
+                                                          void* __restrict__ store_cb_data,
+                                                          scalar_type* __restrict__ buf)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset                   = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset        = offset + index_along_d * stride[d];
+    }
+    batch        = remaining;
+    offset       = offset + batch * stride[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf, offset + (thread + 0) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf, offset + (thread + 25) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf, offset + (thread + 50) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf, offset + (thread + 75) * stride0, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf, offset + (thread + 100) * stride0, load_cb_data, nullptr);
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = load_cb(buf, offset + (thread + 100 + 1) * stride0, load_cb_data, nullptr);
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf,
+                 offset + (thread + 0) * stride0,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 25) * stride0,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 50) * stride0,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 75) * stride0,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf,
+                 offset + (thread + 100) * stride0,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                store_cb(buf,
+                         offset + (thread + 100 + 1) * stride0,
+                         lds_complex[offset_lds + thread + 100 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void ip_inverse_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ bufre,
+    real_type_t<scalar_type>* __restrict__ bufim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset                   = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0 = (sb == SB_UNIT) ? (1) : (stride[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset        = offset + index_along_d * stride[d];
+    }
+    batch        = remaining;
+    offset       = offset + batch * stride[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = {bufre[offset + (thread + 0) * stride0], bufim[offset + (thread + 0) * stride0]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {bufre[offset + (thread + 25) * stride0], bufim[offset + (thread + 25) * stride0]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {bufre[offset + (thread + 50) * stride0], bufim[offset + (thread + 50) * stride0]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {bufre[offset + (thread + 75) * stride0], bufim[offset + (thread + 75) * stride0]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {bufre[offset + (thread + 100) * stride0], bufim[offset + (thread + 100) * stride0]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {bufre[offset + (thread + 100 + 1) * stride0],
+                       bufim[offset + (thread + 100 + 1) * stride0]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        bufre[offset + (thread + 0) * stride0]   = lds_complex[offset_lds + (thread + 0)].x;
+        bufim[offset + (thread + 0) * stride0]   = lds_complex[offset_lds + (thread + 0)].y;
+        bufre[offset + (thread + 25) * stride0]  = lds_complex[offset_lds + (thread + 25)].x;
+        bufim[offset + (thread + 25) * stride0]  = lds_complex[offset_lds + (thread + 25)].y;
+        bufre[offset + (thread + 50) * stride0]  = lds_complex[offset_lds + (thread + 50)].x;
+        bufim[offset + (thread + 50) * stride0]  = lds_complex[offset_lds + (thread + 50)].y;
+        bufre[offset + (thread + 75) * stride0]  = lds_complex[offset_lds + (thread + 75)].x;
+        bufim[offset + (thread + 75) * stride0]  = lds_complex[offset_lds + (thread + 75)].y;
+        bufre[offset + (thread + 100) * stride0] = lds_complex[offset_lds + (thread + 100)].x;
+        bufim[offset + (thread + 100) * stride0] = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                bufre[offset + (thread + 100 + 1) * stride0]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                bufim[offset + (thread + 100 + 1) * stride0]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__
+    __launch_bounds__(250) void op_inverse_length125_SBRR(const scalar_type* __restrict__ twiddles,
+                                                          const size_t dim,
+                                                          const size_t* __restrict__ lengths,
+                                                          const size_t* __restrict__ stride_in,
+                                                          const size_t* __restrict__ stride_out,
+                                                          const size_t       nbatch,
+                                                          const unsigned int lds_padding,
+                                                          void* __restrict__ load_cb_fn,
+                                                          void* __restrict__ load_cb_data,
+                                                          unsigned int load_cb_lds_bytes,
+                                                          void* __restrict__ store_cb_fn,
+                                                          void* __restrict__ store_cb_data,
+                                                          scalar_type* __restrict__ buf_in,
+                                                          scalar_type* __restrict__ buf_out)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf_in, offset_in + (thread + 0) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf_in, offset_in + (thread + 25) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf_in, offset_in + (thread + 50) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf_in, offset_in + (thread + 75) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf_in, offset_in + (thread + 100) * stride0_in, load_cb_data, nullptr);
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1] = load_cb(
+                    buf_in, offset_in + (thread + 100 + 1) * stride0_in, load_cb_data, nullptr);
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf_out,
+                 offset_out + (thread + 0) * stride0_out,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 25) * stride0_out,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 50) * stride0_out,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 75) * stride0_out,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 100) * stride0_out,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                store_cb(buf_out,
+                         offset_out + (thread + 100 + 1) * stride0_out,
+                         lds_complex[offset_lds + thread + 100 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_inverse_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    scalar_type* __restrict__ buf_in,
+    real_type_t<scalar_type>* __restrict__ buf_outre,
+    real_type_t<scalar_type>* __restrict__ buf_outim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)]
+            = load_cb(buf_in, offset_in + (thread + 0) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 25)]
+            = load_cb(buf_in, offset_in + (thread + 25) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 50)]
+            = load_cb(buf_in, offset_in + (thread + 50) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 75)]
+            = load_cb(buf_in, offset_in + (thread + 75) * stride0_in, load_cb_data, nullptr);
+        lds_complex[offset_lds + (thread + 100)]
+            = load_cb(buf_in, offset_in + (thread + 100) * stride0_in, load_cb_data, nullptr);
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1] = load_cb(
+                    buf_in, offset_in + (thread + 100 + 1) * stride0_in, load_cb_data, nullptr);
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        buf_outre[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].x;
+        buf_outim[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].y;
+        buf_outre[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].x;
+        buf_outim[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].y;
+        buf_outre[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].x;
+        buf_outim[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].y;
+        buf_outre[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].x;
+        buf_outim[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].y;
+        buf_outre[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].x;
+        buf_outim[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                buf_outre[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                buf_outim[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_inverse_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ buf_inre,
+    real_type_t<scalar_type>* __restrict__ buf_inim,
+    scalar_type* __restrict__ buf_out)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread                                 = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)] = {buf_inre[offset_in + (thread + 0) * stride0_in],
+                                                  buf_inim[offset_in + (thread + 0) * stride0_in]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {buf_inre[offset_in + (thread + 25) * stride0_in],
+               buf_inim[offset_in + (thread + 25) * stride0_in]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {buf_inre[offset_in + (thread + 50) * stride0_in],
+               buf_inim[offset_in + (thread + 50) * stride0_in]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {buf_inre[offset_in + (thread + 75) * stride0_in],
+               buf_inim[offset_in + (thread + 75) * stride0_in]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {buf_inre[offset_in + (thread + 100) * stride0_in],
+               buf_inim[offset_in + (thread + 100) * stride0_in]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {buf_inre[offset_in + (thread + 100 + 1) * stride0_in],
+                       buf_inim[offset_in + (thread + 100 + 1) * stride0_in]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        store_cb(buf_out,
+                 offset_out + (thread + 0) * stride0_out,
+                 lds_complex[offset_lds + (thread + 0)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 25) * stride0_out,
+                 lds_complex[offset_lds + (thread + 25)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 50) * stride0_out,
+                 lds_complex[offset_lds + (thread + 50)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 75) * stride0_out,
+                 lds_complex[offset_lds + (thread + 75)],
+                 store_cb_data,
+                 nullptr);
+        store_cb(buf_out,
+                 offset_out + (thread + 100) * stride0_out,
+                 lds_complex[offset_lds + (thread + 100)],
+                 store_cb_data,
+                 nullptr);
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                store_cb(buf_out,
+                         offset_out + (thread + 100 + 1) * stride0_out,
+                         lds_complex[offset_lds + thread + 100 + 1],
+                         store_cb_data,
+                         nullptr);
+            }
+        }
+    }
+}
+template <typename scalar_type,
+          StrideBin     sb,
+          EmbeddedType  ebtype,
+          CallbackType  cbtype,
+          DirectRegType drtype>
+__global__ __launch_bounds__(250) void op_inverse_length125_SBRR(
+    const scalar_type* __restrict__ twiddles,
+    const size_t dim,
+    const size_t* __restrict__ lengths,
+    const size_t* __restrict__ stride_in,
+    const size_t* __restrict__ stride_out,
+    const size_t       nbatch,
+    const unsigned int lds_padding,
+    void* __restrict__ load_cb_fn,
+    void* __restrict__ load_cb_data,
+    unsigned int load_cb_lds_bytes,
+    void* __restrict__ store_cb_fn,
+    void* __restrict__ store_cb_data,
+    real_type_t<scalar_type>* __restrict__ buf_inre,
+    real_type_t<scalar_type>* __restrict__ buf_inim,
+    real_type_t<scalar_type>* __restrict__ buf_outre,
+    real_type_t<scalar_type>* __restrict__ buf_outim)
+{
+    // this kernel:
+    //   uses 25 threads per transform
+    //   does 10 transforms per thread block
+    // therefore it should be called with 250 threads per thread block
+    scalar_type R[5];
+    extern __shared__ unsigned char __attribute__((aligned(sizeof(scalar_type)))) lds_uchar[];
+    real_type_t<scalar_type>* __restrict__ lds_real
+        = reinterpret_cast<real_type_t<scalar_type>*>(lds_uchar);
+    scalar_type* __restrict__ lds_complex = reinterpret_cast<scalar_type*>(lds_uchar);
+    size_t       offset_in                = 0;
+    size_t       offset_out               = 0;
+    unsigned int offset_lds;
+    unsigned int stride_lds;
+    size_t       batch;
+    size_t       transform;
+    const bool   direct_load_to_reg    = false;
+    const bool   direct_store_from_reg = false;
+    const bool   lds_linear            = true;
+    const bool   lds_is_real           = false;
+    auto         load_cb               = get_load_cb<scalar_type, cbtype>(load_cb_fn);
+    auto         store_cb              = get_store_cb<scalar_type, cbtype>(store_cb_fn);
+
+    // large twiddles
+    // - no large twiddles
+
+    // offsets
+    const size_t stride0_in  = (sb == SB_UNIT) ? (1) : (stride_in[0]);
+    const size_t stride0_out = (sb == SB_UNIT) ? (1) : (stride_out[0]);
+    unsigned int thread;
+    size_t       remaining;
+    size_t       index_along_d;
+    transform = blockIdx.x * 10 + threadIdx.x / 25;
+    remaining = transform;
+    for(int d = 1; d < dim; ++d)
+    {
+        index_along_d = remaining % lengths[d];
+        remaining     = remaining / lengths[d];
+        offset_in     = offset_in + index_along_d * stride_in[d];
+        offset_out    = offset_out + index_along_d * stride_out[d];
+    }
+    batch        = remaining;
+    offset_in    = offset_in + batch * stride_in[dim];
+    offset_out   = offset_out + batch * stride_out[dim];
+    stride_lds   = 125 + (ebtype == EmbeddedType::NONE ? 0 : lds_padding);
+    offset_lds   = stride_lds * (transform % 10);
+    bool inbound = batch < nbatch;
+
+    // load global into lds
+    if(inbound)
+    {
+        thread                                 = threadIdx.x % 25;
+        lds_complex[offset_lds + (thread + 0)] = {buf_inre[offset_in + (thread + 0) * stride0_in],
+                                                  buf_inim[offset_in + (thread + 0) * stride0_in]};
+        lds_complex[offset_lds + (thread + 25)]
+            = {buf_inre[offset_in + (thread + 25) * stride0_in],
+               buf_inim[offset_in + (thread + 25) * stride0_in]};
+        lds_complex[offset_lds + (thread + 50)]
+            = {buf_inre[offset_in + (thread + 50) * stride0_in],
+               buf_inim[offset_in + (thread + 50) * stride0_in]};
+        lds_complex[offset_lds + (thread + 75)]
+            = {buf_inre[offset_in + (thread + 75) * stride0_in],
+               buf_inim[offset_in + (thread + 75) * stride0_in]};
+        lds_complex[offset_lds + (thread + 100)]
+            = {buf_inre[offset_in + (thread + 100) * stride0_in],
+               buf_inim[offset_in + (thread + 100) * stride0_in]};
+
+        // append extra global loading for C2Real pre-process only
+        if(ebtype == EmbeddedType::C2Real_PRE)
+        {
+            // use the last thread of each transform to load one more element per row
+            if(thread == 24)
+            {
+                lds_complex[offset_lds + thread + 100 + 1]
+                    = {buf_inre[offset_in + (thread + 100 + 1) * stride0_in],
+                       buf_inim[offset_in + (thread + 100 + 1) * stride0_in]};
+            }
+        }
+    }
+
+    // handle even-length real to complex pre-process in lds before transform
+    if(ebtype == EmbeddedType::C2Real_PRE)
+    {
+        __syncthreads();
+
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                            125 - threadIdx.x % 25 - 0,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                            125 - threadIdx.x % 25 - 25,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        real_pre_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                            125 - threadIdx.x % 25 - 50,
+                                                            63,
+                                                            lds_complex + offset_lds,
+                                                            0,
+                                                            twiddles + 120);
+        __syncthreads();
+    }
+
+    // calc the thread_in_device value once and for all device funcs
+    unsigned int thread_in_device = lds_linear ? threadIdx.x % 25 : threadIdx.x / 10;
+
+    // call a pre-load from lds to registers (if necessary)
+    lds_to_reg_input_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // transform
+    inverse_length125_SBRR_device<scalar_type,
+                                  lds_is_real,
+                                  lds_linear ? SB_UNIT : SB_NONUNIT,
+                                  lds_linear,
+                                  direct_load_to_reg>(
+        R, lds_real, lds_complex, twiddles, stride_lds, offset_lds, thread_in_device, true);
+
+    // call a post-store from registers to lds (if necessary)
+    lds_from_reg_output_length125_device<scalar_type, lds_linear ? SB_UNIT : SB_NONUNIT>(
+        R, lds_complex, stride_lds, offset_lds, thread_in_device, true);
+
+    // handle even-length real to complex pre-process in lds after transform
+    if(ebtype == EmbeddedType::Real2C_POST)
+    {
+        __syncthreads();
+
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 0,
+                                                             125 - threadIdx.x % 25 - 0,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 25,
+                                                             125 - threadIdx.x % 25 - 25,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+        real_post_process_kernel_inplace<scalar_type, false>(threadIdx.x % 25 + 50,
+                                                             125 - threadIdx.x % 25 - 50,
+                                                             63,
+                                                             lds_complex + offset_lds,
+                                                             0,
+                                                             twiddles + 120);
+    }
+
+    // store global
+    __syncthreads();
+    if(inbound)
+    {
+        buf_outre[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].x;
+        buf_outim[offset_out + (thread + 0) * stride0_out]
+            = lds_complex[offset_lds + (thread + 0)].y;
+        buf_outre[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].x;
+        buf_outim[offset_out + (thread + 25) * stride0_out]
+            = lds_complex[offset_lds + (thread + 25)].y;
+        buf_outre[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].x;
+        buf_outim[offset_out + (thread + 50) * stride0_out]
+            = lds_complex[offset_lds + (thread + 50)].y;
+        buf_outre[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].x;
+        buf_outim[offset_out + (thread + 75) * stride0_out]
+            = lds_complex[offset_lds + (thread + 75)].y;
+        buf_outre[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].x;
+        buf_outim[offset_out + (thread + 100) * stride0_out]
+            = lds_complex[offset_lds + (thread + 100)].y;
+
+        // append extra global write for Real2C post-process only
+        if(ebtype == EmbeddedType::Real2C_POST)
+        {
+            // use the last thread of each transform to write one more element per row
+            if(thread == 24)
+            {
+                buf_outre[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].x;
+                buf_outim[offset_out + (thread + 100 + 1) * stride0_out]
+                    = lds_complex[offset_lds + thread + 100 + 1].y;
+            }
+        }
+    }
+}
+// POWX_SMALL_GENERATOR(rocfft_internal_dfn_dp_ci_ci_stoc_125,
+//                      ip_forward_length125_SBRR,
+//                      ip_inverse_length125_SBRR,
+//                      op_forward_length125_SBRR,
+//                      op_inverse_length125_SBRR,
+//                      double2);
+// POWX_SMALL_GENERATOR(rocfft_internal_dfn_sp_ci_ci_stoc_125,
+//                      ip_forward_length125_SBRR,
+//                      ip_inverse_length125_SBRR,
+//                      op_forward_length125_SBRR,
+//                      op_inverse_length125_SBRR,
+//                      float2);
