@@ -197,8 +197,10 @@ basicstyle=\ttfamily\small,
 
     \medskip
     
-    rocFFT multi-node is currently unscoped.
-    of interest.
+    rocFFT multi-node is currently unscoped.  NVIDIA has
+    \texttt{cuFFTMP} in early access.
+    \href{https://github.com/NVIDIA/cuDecomp}{cuDECOMP} is a new
+    open-source pencil decomposition library from NVIDIA.
 
     \medskip
     
@@ -221,6 +223,22 @@ basicstyle=\ttfamily\small,
 \end{frame}
     
 \begin{frame}
+  \frametitle{Multi-GPU: Framework}
+
+  \begin{itemize}
+  \item \texttt{ROC_SHMEM}.  \texttt{cuFFTMP} uses \texttt{NVSHMEM}.
+    However, \texttt{ROC_SHMEM} is an AMD Research Project, and would
+    need to be fully supported.
+    \item \texttt{RCCL} is an actively supported library offering
+      mostly reduction operations; FFTs would need more all-to-all
+      style operations.
+    \item \texttt{MPI} is used by a majority of HPC applications that need
+      multi-node support, and seems like a reasonable choice.
+  \end{itemize}
+  
+\end{frame}
+  
+\begin{frame}
     \frametitle{Multi-GPU: Strategy}
 
     \begin{enumerate}
@@ -231,7 +249,7 @@ basicstyle=\ttfamily\small,
         up the transpose.
       \item Split the transform between pre- and post-transpose; if 2
         is a factor of the length and the number of processes, then we
-        can do a radix-2 stage
+        can do a radix-2 stage.  (Or even with bricks!)
       \item Compress data for sends/recieves
       \item Combinatorically optimise the data decomposition in order
         to reduce execution time.  Eg: skip doing a whole transpose;
@@ -249,11 +267,14 @@ basicstyle=\ttfamily\small,
   \frametitle{Multi-GPU: Transpose algorithms}
 
   Round-robin (see
-  \url{https://github.com/FFTW/fftw3/blob/master/mpi/testsched.c}
+  \url{https://github.com/FFTW/fftw3/blob/master/mpi/testsched.c}).
+  FFTW uses a variety of algorithms to transpose the data; we can
+  adapt these algorithms to rocFFTMP.
 
   \bigskip
   
-  Recursive transpose
+  Recursive transpose (\texttt{fftw++}), which has better performance
+  for a large number of MPI ranks.
   
 \end{frame}
   
