@@ -3,6 +3,7 @@
 import csv
 import os, sys, getopt
 import numpy as np
+import scipy
 
 def decomment(csvfile):
     for row in csvfile:
@@ -14,21 +15,22 @@ def readdata(filename):
     with open(filename, newline='') as fp:
         reader = csv.reader(decomment(fp), delimiter="\t")
         for row in reader:
-            dimension = int(row[0])
-            size = [int(i) for i in row[1:1+dimension]]
+            token = row[0]
+            nsmaple = int(row[1])
             rdata = []
-            for val in row[1 + dimension + 1 + 1:]:
+            for val in row[2:]:
                 rdata.append(float(val))
-            data.append([size, rdata])
+            data.append([token, rdata])
     return data
         
             
 def main(argv):
     file0 = None
     file1 = None
+    token = None
     
     try:
-        opts, args = getopt.getopt(argv,"ha:b:")
+        opts, args = getopt.getopt(argv,"ha:b:T:")
     except getopt.GetoptError:
         print("error in parsing arguments.")
         print(usage)
@@ -41,9 +43,12 @@ def main(argv):
             file0 = os.path.abspath(arg)
         elif opt in ("-b"):
             file1 = os.path.abspath(arg)
+        elif opt in ("-T"):
+            token = arg
 
     print("file0", file0)
     print("file1", file1)
+    print("token", token)
 
     if file0 == None or file1 == None:
         print("please specify files")
@@ -53,25 +58,37 @@ def main(argv):
     data1 = readdata(file1)
 
     pvals = []
-    
-    import scipy.stats
-    for row0 in data0:
-        N = row0[0]
-        for row1 in data1:
-            if row1[0] == N:
-                #print(len(row0[1]), len(row1[1]))
-                stat, pm, med, tbl = scipy.stats.median_test(row0[1], row1[1], ties="ignore")
-                #w, pw = scipy.stats.wilcoxon(row0[1], row1[1])
-                stat, pwu = scipy.stats.mannwhitneyu(row0[1], row1[1])
-                stat, pkru = scipy.stats.kruskal(row0[1], row1[1])
-                #print(scipy.stats.ttest_ind(row0[1], row1[1]))
-                median0 = np.median(row0[1])
-                median1 = np.median(row1[1])
-                pvals.append([N, pm, median0,median1, median0/median1])
 
-    print("size, p_median_test, median0, median1, speedup")
-    for vals in pvals:
-        print("\t".join(str(x) for x in vals))
+    vals0 = None
+    for row in data0:
+        if row[0] == token:
+            vals0 = row[1]
+            break
+    #print(vals0)
+    
+    vals1 = None
+    for row in data1:
+        if row[0] == token:
+            vals1 = row[1]
+            break
+    #print(vals1)
+    
+
+    stat, pm, med, tbl = scipy.stats.median_test(vals0, vals1, ties="ignore")
+    print("median test:", pm)
+    
+    stat, pwu = scipy.stats.mannwhitneyu(vals0, vals1)
+    print("mwu test:", pwu)
+    
+    stat, pkru = scipy.stats.kruskal(vals0, vals1)
+    print("kruskal test:", pkru)
+    
+    stat, pks = scipy.stats.ks_2samp(vals0, vals1)
+    print("ks test:", pks)
+    
+    stat, pt = scipy.stats.ttest_ind(vals0, vals1)
+    print("t-test:", pt)
+    
         
 if __name__ == "__main__":
     main(sys.argv[1:])
