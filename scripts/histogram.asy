@@ -3,8 +3,8 @@ import stats;
 
 size(400,200,IgnoreAspect);
 
-//scale(Log, Linear);
-scale(Linear, Linear);
+scale(Log, Linear);
+//scale(Linear, Linear);
 
 
 import utils;
