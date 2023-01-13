@@ -687,6 +687,13 @@ int main(int argc, char* argv[])
 #endif
     std::cout << "LDS bytes: " << params.lds_bytes() << std::endl;
 
+#ifdef ROW_MAJOR
+    std::cout << "Row major.\n";
+#else
+    std::cout << "Column major.\n";
+#endif
+
+    
     if(vm.count("ntrial"))
     {
         std::cout << "Running profile with " << ntrial << " samples\n";

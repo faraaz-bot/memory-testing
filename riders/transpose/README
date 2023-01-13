@@ -7,4 +7,6 @@
 # In that case, transpose-rider expects to find transpose-kernel.h in
 # the parent directory when it runs.
 
-cmake -DROCFFT_SRC=/path/to/rocFFT -DUSE_LDS=ON -DCMAKE_CXX_COMPILER=hipcc  ..
+cmake -DROCFFT_SRC=/path/to/rocFFT -DUSE_LDS=ON -DCMAKE_CXX_COMPILER=hipcc ..
+
+cmake -DROCFFT_SRC=/path/to/rocFFT -DUSE_LDS=ON -DROW_MAJOR=ON -DCMAKE_CXX_COMPILER=hipcc ..
