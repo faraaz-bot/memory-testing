@@ -3,9 +3,7 @@
 * Computes parallel 3-D FFTs using 1-D (slabs) decomposition.
 * See online documentation for details.
 * Compilation (replace appropriately where needed):
-    hipcc test_rocfft_mp_3D.cpp -lfftw3 -I/home/ayala/gits/rocFFT-internal/build/rocfft/include \
-     -L/home/ayala/gits/rocFFT-internal/build/library/src/ -lrocfft -I/usr/lib/x86_64-linux-gnu/openmpi/include \ 
-     -I/usr/lib/x86_64-linux-gnu/openmpi/include/openmpi -L/usr/lib/x86_64-linux-gnu/openmpi/lib -lmpi -o test_rocfft_mp_3D 
+    hipcc test_rocfft_mp_3D.cpp -lfftw3 -I/home/ayala/gits/rocFFT-internal/build/rocfft/include -L/home/ayala/gits/rocFFT-internal/build/library/src/ -lrocfft -I/usr/lib/x86_64-linux-gnu/openmpi/include  -I/usr/lib/x86_64-linux-gnu/openmpi/include/openmpi -L/usr/lib/x86_64-linux-gnu/openmpi/lib -lmpi -o test_rocfft_mp_3D 
 // Execution:    
     mpirun -np <N_procs> ./test_rocfft_mp_3D <Nx> <Ny> <Nz>
     mpirun -np 16 ./test_rocfft_mp_3D 128 256 192
@@ -27,8 +25,9 @@ int main(int argc, char* argv[])
 
     // Splitting input amongst MPI processes and return local sizes
     // ROCFFT_SLABS_SPLIT_Z means slabs are obtaining partitioning along the Z-axis
-    auto local_dims = geometry_splitting(N, ROCFFT_SLABS_SPLIT_Z, comm);
+    int axis_split_dimension = ROCFFT_SLABS_SPLIT_Z;
 
+    auto   local_dims    = geometry_splitting(N, axis_split_dimension, comm);
     size_t local_fftsize = local_dims[0] * local_dims[1] * local_dims[2];
 
     // Input data on host
@@ -53,8 +52,7 @@ int main(int argc, char* argv[])
 
     rocfft_mp_plan_slabs options(nprocs);
 
-    MPI_Datatype my_type              = MPI_DOUBLE_COMPLEX;
-    int          axis_split_dimension = ROCFFT_SLABS_SPLIT_Z;
+    MPI_Datatype my_type = MPI_DOUBLE_COMPLEX;
 
     // Create rocfft multi-process 3-D plan
     auto plan_xyz = rocfft_mp_plan_3D(N,
