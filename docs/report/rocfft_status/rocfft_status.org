@@ -1,11 +1,13 @@
+https://amdcloud-my.sharepoint.com/:p:/r/personal/dancyca2_amd_com/_layouts/15/doc2.aspx?sourcedoc=%7B409B03F7-8CCE-4B7C-A7C1-3ABFEDCA2CB1%7D&file=FFT%20Status.pptx
+&PreviousSessionID=2d91445d-dd15-cf44-4648-35949a03d50b
 * vertical tasting:
 
 complex_forward_len_43008_double_ip_batch_500_istride_1_CI_ostride_1_CI_idist_43008_odist_43008_ioffset_0_0_ooffset_0_0
 
    
-./mybootstrap.py -i cholla_mi100.dat -o cholla_mi100.mdat
+./mybootstrap.py -i cholla_mi100.dat -o cholla_mi100.mdat 
 and then use
-asy -f pdf bargraph.asy
+asy -f pdf bargraph.asy -u'dolabel=false;filenames="cholla_mi100.mdat"'
 mv bargraph.pdf vert.pdf
 ./pdf2emf vert.pdf
 
