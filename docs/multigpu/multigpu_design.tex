@@ -1,0 +1,162 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{darkgreen}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Multi-GPU design doc for rocFFT}
+\author{Malcolm Roberts}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Notable use cases}
+
+\subsection{lammps}
+In
+\url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/pppm.cpp}
+\begin{lstlisting}
+void PPPM::compute(...) {
+   // ...
+   brick2fft();
+   poisson();
+   // ...
+}
+\end{lstlisting}
+The function \lstinline{brick2fft} is defined in the same file; it
+takes bricks of arbitrary local dimension and then called
+\lstinline{Remap::perform} which calles \lstinline{remap_3d} in
+\url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/remap.cpp}
+which creates a pencil (ie 2D) decomposition of the data over over the
+given MPI procs.
+
+\subsection{gromacs}
+Gromacs has a slightly different behaviour, where is seems that when
+using, for example, 4 GPUs, then data starts distributed between the
+GPUs, but is gathered onto a single GPU for spectral operations, and
+then presumablky this is presumably scattered to the GPUs.  This is
+either done in an MPI setting, or a process-local setting, depending
+on the runtime mode for gromacs.
+
+\section{Existing implementations}
+
+\subsection{Comparison with existing FFT implementations}
+
+\texttt{vkFFT} Doesn't yet support multi-gpu.
+
+\subsubsection{cuFFTXt}
+From the v12
+\href{https://docs.nvidia.com/cuda/cufft/index.html#multiple-gpu-cufft-transforms}{documentation}
+and
+\href{https://docs.nvidia.com/cuda/cufft/index.html#cufft-code-examples}{examples}:
+\begin{itemize}
+\item Up to 16 GPUs
+\item 1D
+  \subitem only supports power-of-two sizes and power-of-two
+  number of GPUs
+  \subitem only complex-to-complex
+\item 2D and 3D
+  \subitem real/complex: requires even-length for r/c, only supports
+  in-place, shuffled output.
+  \subitem single-transform has permuted output
+  \subitem you can also just call multiple independent transforms
+  \subitem no Bluestein
+  \subitem single-transform multi-GPU output is permuted.
+\end{itemize}
+
+
+\section{Design objectives}
+
+Gromacs and lammps offer interesting use cases where we could design
+and API which would enable us to increase application performance
+while making application developer's lives easier.
+
+\subsection{cuFFTXt features/anti-features}
+The cuFFTXt interface imposes data distributions on the user
+(including restricting problem decomposition) which would seem to
+reduce the usability of the library and the performance of the
+application code.
+
+Multi-GPU 1D transforms are particularly onerous - the FFT is
+bandwidth limited, and this is made worse by going off-device.
+
+Batched multi-GPU transforms are handled independently, with the
+distribution of transforms imposed by the cuFFTXt library.  This seems
+really onerous (what if the data isn't on the right GPU?) and it's
+hard to imagine a use case that is better than the alternative of just
+performing a bunch of independent FFTs on different devices.
+Moreover, the fact that the data layout changed if the batch size
+is/is not equal to one is a bit of a surprise for users.
+
+
+\subsection{Other ROCm libraries}
+
+\texttt{cuFFTXt} uses \lstinline{cudalibxt.h} which also covers some
+\texttt{cuBLAS} functionality.  There are no current plans to add
+multi-GPu support to \texttt{rocBLAS}, but it would be good to keep
+the possibility in mind so that we can avoid having to back-step on an
+API choice.
+
+\subsection{Opportunities}
+
+If we are extending the rocFFT API, we have an option to add some
+functionality.  In particular, multiple batch dimensions is a feature
+that could help 
+
+
+\section{API proposal}
+
+\texttt{rocFFT} has \lstinline{#if 0}'d-out
+\href{https://github.com/ROCmSoftwarePlatform/rocFFT/blob/develop/library/include/rocfft.h#L282}{code}
+for specifying the number of devices; this was present in the first
+commit, and has never been used.  The API for multi-GPU selection is
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_devices(
+  rocfft_plan_description description,
+  void *devices,
+  size_t number_of_devices );
+\end{lstlisting}
+which seems a perfectly reasonable API.  Making use of the rocfft
+description seems like a good way to go.
+
+\end{document}
