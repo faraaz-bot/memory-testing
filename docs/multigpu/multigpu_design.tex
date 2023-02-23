@@ -52,7 +52,9 @@
 
 \section{Notable use cases}
 
-\subsection{lammps}
+\subsection{Molecular simulators}
+
+\subsubsection{lammps}
 In
 \url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/pppm.cpp}
 \begin{lstlisting}
@@ -70,7 +72,7 @@ takes bricks of arbitrary local dimension and then called
 which creates a pencil (ie 2D) decomposition of the data over over the
 given MPI procs.
 
-\subsection{gromacs}
+\subsubsection{gromacs}
 Gromacs has a slightly different behaviour, where is seems that when
 using, for example, 4 GPUs, then data starts distributed between the
 GPUs, but is gathered onto a single GPU for spectral operations, and
@@ -78,12 +80,23 @@ then presumablky this is presumably scattered to the GPUs.  This is
 either done in an MPI setting, or a process-local setting, depending
 on the runtime mode for gromacs.
 
+\subsection{Large-scale fluid solvers}
+
+GESTS, CHOLLA
+
+These are partial differential equation solvers.  GESTS looks at high
+Reynolds-number turbulence, and cholla looks at interstellar fluid
+simulations.  These both make use of very large FFTs.  For GESTS, this
+is definitely the critical performance stage.
+
 \section{Existing implementations}
 
-\subsection{Comparison with existing FFT implementations}
-
-\texttt{vkFFT} Doesn't yet support multi-gpu.
-
+\begin{itemize}
+  \item \texttt{vkFFT} doesn't yet support multi-gpu.
+  \item \texttt{MKL}: not sure about multi-device support.
+\end{itemize}
+    
+\subsection{Single-node multi-GPU}
 \subsubsection{cuFFTXt}
 From the v12
 \href{https://docs.nvidia.com/cuda/cufft/index.html#multiple-gpu-cufft-transforms}{documentation}
@@ -104,6 +117,59 @@ and
   \subitem single-transform multi-GPU output is permuted.
 \end{itemize}
 
+\subsection{Multi-node}
+
+A
+\href{https://icl.utk.edu/files/publications/2022/icl-utk-1548-2022.pdf}{technical
+  report} is available from ICL and the University of Tennessee.
+
+\subsubsection{heFFTe}
+
+\href{https://icl.utk.edu/fft/}{heFFTe}
+
+Pencil and slab decomposition, AMD and NVIDIA back-ends.
+
+
+\subsubsection{AccFFT}
+
+\href{http://accfft.org/}{AccFFT}
+
+Looks to only support cuFFT.
+
+Pencil and slab decomposition.
+
+Spectral operators are mentioned.
+
+
+\subsubsection{FFTE}
+
+\url{https://github.com/certik/ffte}.  Fortran code on CPU/Nvidia GPUs.
+
+\subsubsection{CPU codes}
+
+FFTW: only handles slab.  Interesting algorithm: round-robin based
+send/receive.  Online tuning framework determines the best transpose
+algorithm.
+
+p3dFFT \url{https://github.com/sdsc/p3dfft} handles pencil.
+\url{https://github.com/sdsc/p3dfft.3}{P3DFFT++}.  Mentions a 3D
+domain decomposition (coming soon)?
+
+FFTW++: \url{https://fftwpp.sourceforge.net/},
+\url{https://github.com/dealias/fftwpp}.  Pencil and slab
+decomposition.  Recursive transpose, which helps with latency-bound
+tranposes (\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference proceedings}).
+
+\subsubsection{cuFFTMp}
+
+A recent
+\href{https://developer.nvidia.com/blog/massively-improved-multi-node-nvidia-gpu-scalability-with-gromacs/}{blog
+  post from NVIDIA} shows a good speedup for gromacs, claiming a
+2$\times{}$ speedup over heffte.
+
+Restrictions are similar to cuFFTXt; a little bit more severe.
+
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cuFFTMp documentation}
 
 \section{Design objectives}
 
@@ -141,7 +207,7 @@ API choice.
 
 If we are extending the rocFFT API, we have an option to add some
 functionality.  In particular, multiple batch dimensions is a feature
-that could help 
+that could help.
 
 
 \section{API proposal}
@@ -156,7 +222,118 @@ rocfft_status rocfft_plan_description_set_devices(
   void *devices,
   size_t number_of_devices );
 \end{lstlisting}
-which seems a perfectly reasonable API.  Making use of the rocfft
-description seems like a good way to go.
+which seems a perfectly reasonable API. Since the
+\lstinline{rocfft_plan_description} is created before passing it to
+the plan, we can use this as a vehicle to pass a bunch of information
+to the plan generator.
+
+Without specifying anything further, this should reproduce the
+\texttt{cuFFTMp} data decomposition.  FIXME: specify the default data
+distribution.
+
+This parameters of the data decomposition can be access via a getter
+function.  FIXME: define
+
+In particular, we need to
+specify, for each device,
+\begin{enumerate}
+\item a starting index
+\item a length
+\end{enumerate}
+
+After setting the number of devices, we can then set a per-device data
+distribution.  For a $d$-dimensional transform on $N$ devices, we
+would like to specify a starting and stopping multi-index for each
+device, for both the input and output dimensions.  We would similarly
+like input and output strides on each device.
+
+
+\subsubsection{no struct}
+
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t in_strides_size,
+  size_t* in_strides,
+  size_t out_strides_size,
+  size_t* out_strides,
+  size_t startidx_size,
+  size_t* startidx,
+  size_t stopidx_size,
+  size_t* stopidx);
+\end{lstlisting}
+which specifies the data layout for device \lstinline{device_num}.
+The user loops over the $d$ devices, setting each device's data layout
+via separate function call.  The fields are nullable, at which point
+the default values are loaded.
+
+We would also need \lstinline{get}er functions for each of these
+values.  This is pretty verbose; we would need 
+
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_get_device_startidx(
+  rocfft_plan plan,
+  size_t device_num,
+  size_t dimension,
+  size_t* startidx}
+\end{lstlisting}
+for \lstinline{startidx}, \lstinline{endidx}, \lstinline{in_strides},
+and \lstinline{out_strides}.
+
+\subsubsection{struct}
+
+In particular, adding a struct
+\begin{lstlisting}
+typedef struct {
+  size_t istart;
+  size_t iend;
+  size_t instride;
+  size_t outstride;
+} rocfft_iodim;
+\end{lstlisting}
+Which can be passed to the function 
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t rocfft_iodim_size,
+  rocfft_iodim* rocfft_iodim_s);
+\end{lstlisting}
+
+We can access this data by first getting the dimension
+\begin{lstlisting}
+  size_t rocfft_plan_dimension(... plan);
+\end{lstlisting}
+and then using that to fill an array of iodims for a given device:
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t dimension,
+  rocfft_iodim* rocfft_iodims);
+\end{lstlisting}
+
+\subsubsection{overall behaviour}
+
+We can check whether the parameters are valid at plan generation, and
+then return an error code if things aren't set up correctly
+
+\section{Implimentation plan}
+
+First, get it working.  Just move everything to pencil/slab, send/receive
+to whatever crazy data distribution that they specify.
+
+Optimizations:
+\begin{itemize}
+\item gather/scatter
+\item sub-passes in discontiguous direction
+\item \dots
+\end{itemize}
+
+
+
+
+
 
 \end{document}
