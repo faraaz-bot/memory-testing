@@ -354,12 +354,15 @@ rocfft_status rocfft_plan_description_set_device_layout(
   size_t device_num,
   size_t rocfft_iodim_size,
   rocfft_iodim* rocfft_iodim_s);
-rocfft_status rocfft_plan_description_get_device_layout(
-  rocfft_plan_description description,
+rocfft_status rocfft_plan_get_device_layout(
+  rocfft_plan plan,
   size_t device_num,
   size_t dimension,
   rocfft_iodim* rocfft_iodims);
 \end{lstlisting}
+We should probably think about how to get the ending index from the
+plan as well, as this will be very useful for users.  Does this need to
+be added to the API?
 
 \subsection{overall behaviour}
 
