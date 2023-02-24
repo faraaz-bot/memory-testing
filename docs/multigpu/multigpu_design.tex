@@ -248,8 +248,11 @@ device, for both the input and output dimensions.  We would similarly
 like input and output strides on each device.
 
 
-\subsubsection{no struct}
 
+\subsubsection{More specifications}
+
+
+No struct: 
 \begin{lstlisting}
 rocfft_status rocfft_plan_description_set_device_layout(
   rocfft_plan_description description,
@@ -281,7 +284,7 @@ rocfft_status rocfft_plan_description_get_device_startidx(
 for \lstinline{startidx}, \lstinline{endidx}, \lstinline{in_strides},
 and \lstinline{out_strides}.
 
-\subsubsection{struct}
+With a struct:
 
 In particular, adding a struct
 \begin{lstlisting}
@@ -314,7 +317,51 @@ rocfft_status rocfft_plan_description_set_device_layout(
   rocfft_iodim* rocfft_iodims);
 \end{lstlisting}
 
-\subsubsection{overall behaviour}
+\subsubsection{Computed specifications}
+
+Consider 1D array distributed between $P$ devices.  We are given the
+length $\ell$ of the transform.  If there is one device, then we start
+at index $0$ and go to $<\ell$.  If we have two devices, then we need
+two starting indices, $n_0$ and $n_1$.  Wlog, $n_0=0$.  Suppose that
+the stride is 1.  Then, device 0 handles indides $0,\dots,n_1-1$ and
+device 1 handles indices $n_1,\dots,\ell-1$.  If the stride is 2, then
+$n_0=0,$, $n_1=1$, and device 0 handles indices $0,2,\dots$ and device
+1 handles $1, 3, \dots$ (both are bounded by $\ell-1$ - there are
+even/odd cases to handle here which we omit for simplicity).
+
+This algorithm can be extended to general indices, per-device strides,
+transform strides, and lengths.  Dimensions will act independently, so
+this will generalize to arbitrary dimensions.  The data layout can be
+checked for aliasing errors by checking per-device data layouts
+pairwise using the array correctness algorithm.
+
+Using this method, we can specify the data layout using fewer
+parameters.  What's left to specify is
+\begin{lstlisting}
+typedef struct {
+  size_t n;
+  size_t istride;
+  size_t outstride;
+} rocfft_iodim;
+\end{lstlisting}
+for all $d$ dimensions and $P$ devices.  This struct is equivalent to
+what is used in FFTW's guru interface, so users may be more familiar
+with it (and we can also use this for single-GPU higher-dimension
+FFTs/batches).  The interface would be
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t rocfft_iodim_size,
+  rocfft_iodim* rocfft_iodim_s);
+rocfft_status rocfft_plan_description_get_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t dimension,
+  rocfft_iodim* rocfft_iodims);
+\end{lstlisting}
+
+\subsection{overall behaviour}
 
 We can check whether the parameters are valid at plan generation, and
 then return an error code if things aren't set up correctly
