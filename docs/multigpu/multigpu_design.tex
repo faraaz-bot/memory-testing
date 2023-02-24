@@ -350,11 +350,13 @@ typedef struct {
   size_t outstride;
 } rocfft_iodim;
 \end{lstlisting}
-for all $d$ dimensions and $P$ devices. (Question: should we just have
-index/stride for input and output?)  This struct is similar to what is
-used in FFTW's guru interface, so users may be more familiar with it
-(and we can also use this for single-GPU higher-dimension
-FFTs/batches).  The interface would be
+for all $d$ dimensions and $P$ devices.  Note that these are
+meta-strides; these strides work on the data, which may itself be
+strided.  (Question: should we just have index/stride for input and
+output?)  This struct is similar to what is used in FFTW's guru
+interface, so users may be more familiar with it (and we can also use
+this for single-GPU higher-dimension FFTs/batches).  The interface
+would be
 \begin{lstlisting}
 rocfft_status rocfft_plan_description_set_device_layout(
   rocfft_plan_description description,
