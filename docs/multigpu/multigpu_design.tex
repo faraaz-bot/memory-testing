@@ -344,14 +344,16 @@ Using this method, we can specify the data layout using fewer
 parameters.  What's left to specify is
 \begin{lstlisting}
 typedef struct {
-  size_t n;
+  size_t in_index;
+  size_t out_index;
   size_t istride;
   size_t outstride;
 } rocfft_iodim;
 \end{lstlisting}
-for all $d$ dimensions and $P$ devices.  This struct is equivalent to
-what is used in FFTW's guru interface, so users may be more familiar
-with it (and we can also use this for single-GPU higher-dimension
+for all $d$ dimensions and $P$ devices. (Question: should we just have
+index/stride for input and output?)  This struct is similar to what is
+used in FFTW's guru interface, so users may be more familiar with it
+(and we can also use this for single-GPU higher-dimension
 FFTs/batches).  The interface would be
 \begin{lstlisting}
 rocfft_status rocfft_plan_description_set_device_layout(
@@ -383,6 +385,9 @@ Optimizations:
 \begin{itemize}
 \item gather/scatter
 \item sub-passes in discontiguous direction
+\item Do not use \texttt{MPI_Alltoallw} until there is a reasonable
+  implementation.  It might be worth just using \texttt{MPI_Alltoallv}
+  and handling the data formatting on our own.
 \item \dots
 \end{itemize}
 
