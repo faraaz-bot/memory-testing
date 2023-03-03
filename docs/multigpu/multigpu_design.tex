@@ -1,0 +1,401 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{darkgreen}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Multi-GPU design doc for rocFFT}
+\author{Malcolm Roberts}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Notable use cases}
+
+\subsection{Molecular simulators}
+
+\subsubsection{lammps}
+In
+\url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/pppm.cpp}
+\begin{lstlisting}
+void PPPM::compute(...) {
+   // ...
+   brick2fft();
+   poisson();
+   // ...
+}
+\end{lstlisting}
+The function \lstinline{brick2fft} is defined in the same file; it
+takes bricks of arbitrary local dimension and then called
+\lstinline{Remap::perform} which calles \lstinline{remap_3d} in
+\url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/remap.cpp}
+which creates a pencil (ie 2D) decomposition of the data over over the
+given MPI procs.
+
+\subsubsection{gromacs}
+Gromacs has a slightly different behaviour, where is seems that when
+using, for example, 4 GPUs, then data starts distributed between the
+GPUs, but is gathered onto a single GPU for spectral operations, and
+then presumablky this is presumably scattered to the GPUs.  This is
+either done in an MPI setting, or a process-local setting, depending
+on the runtime mode for gromacs.
+
+\subsection{Large-scale fluid solvers}
+
+GESTS, CHOLLA
+
+These are partial differential equation solvers.  GESTS looks at high
+Reynolds-number turbulence, and cholla looks at interstellar fluid
+simulations.  These both make use of very large FFTs.  For GESTS, this
+is definitely the critical performance stage.
+
+\section{Existing implementations}
+
+\begin{itemize}
+  \item \texttt{vkFFT} doesn't yet support multi-gpu.
+  \item \texttt{MKL}: not sure about multi-device support.
+\end{itemize}
+    
+\subsection{Single-node multi-GPU}
+\subsubsection{cuFFTXt}
+From the v12
+\href{https://docs.nvidia.com/cuda/cufft/index.html#multiple-gpu-cufft-transforms}{documentation}
+and
+\href{https://docs.nvidia.com/cuda/cufft/index.html#cufft-code-examples}{examples}:
+\begin{itemize}
+\item Up to 16 GPUs
+\item 1D
+  \subitem only supports power-of-two sizes and power-of-two
+  number of GPUs
+  \subitem only complex-to-complex
+\item 2D and 3D
+  \subitem real/complex: requires even-length for r/c, only supports
+  in-place, shuffled output.
+  \subitem single-transform has permuted output
+  \subitem you can also just call multiple independent transforms
+  \subitem no Bluestein
+  \subitem single-transform multi-GPU output is permuted.
+\end{itemize}
+
+\subsection{Multi-node}
+
+A
+\href{https://icl.utk.edu/files/publications/2022/icl-utk-1548-2022.pdf}{technical
+  report} is available from ICL and the University of Tennessee.
+
+\subsubsection{heFFTe}
+
+\href{https://icl.utk.edu/fft/}{heFFTe}
+
+Pencil and slab decomposition, AMD and NVIDIA back-ends.
+
+
+\subsubsection{AccFFT}
+
+\href{http://accfft.org/}{AccFFT}
+
+Looks to only support cuFFT.
+
+Pencil and slab decomposition.
+
+Spectral operators are mentioned.
+
+
+\subsubsection{FFTE}
+
+\url{https://github.com/certik/ffte}.  Fortran code on CPU/Nvidia GPUs.
+
+\subsubsection{CPU codes}
+
+FFTW: only handles slab.  Interesting algorithm: round-robin based
+send/receive.  Online tuning framework determines the best transpose
+algorithm.
+
+p3dFFT \url{https://github.com/sdsc/p3dfft} handles pencil.
+\url{https://github.com/sdsc/p3dfft.3}{P3DFFT++}.  Mentions a 3D
+domain decomposition (coming soon)?
+
+FFTW++: \url{https://fftwpp.sourceforge.net/},
+\url{https://github.com/dealias/fftwpp}.  Pencil and slab
+decomposition.  Recursive transpose, which helps with latency-bound
+tranposes (\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference proceedings}).
+
+\subsubsection{cuFFTMp}
+
+A recent
+\href{https://developer.nvidia.com/blog/massively-improved-multi-node-nvidia-gpu-scalability-with-gromacs/}{blog
+  post from NVIDIA} shows a good speedup for gromacs, claiming a
+2$\times{}$ speedup over heffte.
+
+From
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/api_usage.html#usage-with-custom-slabs-and-pencils-data-decompositions}{the
+  documentation}, ``cuFFTMp also supports arbitrary data distributions
+in the form of 3D boxes.''
+
+Restrictions are similar to cuFFTXt; a little bit more severe.
+
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cuFFTMp documentation}
+
+\section{Design objectives}
+
+Gromacs and lammps offer interesting use cases where we could design
+and API which would enable us to increase application performance
+while making application developer's lives easier.
+
+\subsection{cuFFTXt features/anti-features}
+The cuFFTXt interface imposes data distributions on the user
+(including restricting problem decomposition) which would seem to
+reduce the usability of the library and the performance of the
+application code.
+
+Multi-GPU 1D transforms are particularly onerous - the FFT is
+bandwidth limited, and this is made worse by going off-device.
+
+Batched multi-GPU transforms are handled independently, with the
+distribution of transforms imposed by the cuFFTXt library.  This seems
+really onerous (what if the data isn't on the right GPU?) and it's
+hard to imagine a use case that is better than the alternative of just
+performing a bunch of independent FFTs on different devices.
+Moreover, the fact that the data layout changed if the batch size
+is/is not equal to one is a bit of a surprise for users.
+
+
+\subsection{Other ROCm libraries}
+
+\texttt{cuFFTXt} uses \lstinline{cudalibxt.h} which also covers some
+\texttt{cuBLAS} functionality.  There are no current plans to add
+multi-GPu support to \texttt{rocBLAS}, but it would be good to keep
+the possibility in mind so that we can avoid having to back-step on an
+API choice.
+
+\subsection{Opportunities}
+
+If we are extending the rocFFT API, we have an option to add some
+functionality.  In particular, multiple batch dimensions is a feature
+that could help.
+
+
+\section{API proposal}
+
+\texttt{rocFFT} has \lstinline{#if 0}'d-out
+\href{https://github.com/ROCmSoftwarePlatform/rocFFT/blob/develop/library/include/rocfft.h#L282}{code}
+for specifying the number of devices; this was present in the first
+commit, and has never been used.  The API for multi-GPU selection is
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_devices(
+  rocfft_plan_description description,
+  void *devices,
+  size_t number_of_devices );
+\end{lstlisting}
+which seems a perfectly reasonable API. Since the
+\lstinline{rocfft_plan_description} is created before passing it to
+the plan, we can use this as a vehicle to pass a bunch of information
+to the plan generator.
+
+Without specifying anything further, this should reproduce the
+\texttt{cuFFTMp} data decomposition.  FIXME: specify the default data
+distribution.
+
+This parameters of the data decomposition can be access via a getter
+function.  FIXME: define
+
+In particular, we need to
+specify, for each device,
+\begin{enumerate}
+\item a starting index
+\item a length
+\end{enumerate}
+
+After setting the number of devices, we can then set a per-device data
+distribution.  For a $d$-dimensional transform on $N$ devices, we
+would like to specify a starting and stopping multi-index for each
+device, for both the input and output dimensions.  We would similarly
+like input and output strides on each device.
+
+
+
+\subsubsection{More specifications}
+
+
+No struct: 
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t in_strides_size,
+  size_t* in_strides,
+  size_t out_strides_size,
+  size_t* out_strides,
+  size_t startidx_size,
+  size_t* startidx,
+  size_t stopidx_size,
+  size_t* stopidx);
+\end{lstlisting}
+which specifies the data layout for device \lstinline{device_num}.
+The user loops over the $d$ devices, setting each device's data layout
+via separate function call.  The fields are nullable, at which point
+the default values are loaded.
+
+We would also need \lstinline{get}er functions for each of these
+values.  This is pretty verbose; we would need 
+
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_get_device_startidx(
+  rocfft_plan plan,
+  size_t device_num,
+  size_t dimension,
+  size_t* startidx}
+\end{lstlisting}
+for \lstinline{startidx}, \lstinline{endidx}, \lstinline{in_strides},
+and \lstinline{out_strides}.
+
+With a struct:
+
+In particular, adding a struct
+\begin{lstlisting}
+typedef struct {
+  size_t istart;
+  size_t iend;
+  size_t instride;
+  size_t outstride;
+} rocfft_iodim;
+\end{lstlisting}
+Which can be passed to the function 
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t rocfft_iodim_size,
+  rocfft_iodim* rocfft_iodim_s);
+\end{lstlisting}
+
+We can access this data by first getting the dimension
+\begin{lstlisting}
+  size_t rocfft_plan_dimension(... plan);
+\end{lstlisting}
+and then using that to fill an array of iodims for a given device:
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t dimension,
+  rocfft_iodim* rocfft_iodims);
+\end{lstlisting}
+
+\subsubsection{Computed specifications}
+
+Consider 1D array distributed between $P$ devices.  We are given the
+length $\ell$ of the transform.  If there is one device, then we start
+at index $0$ and go to $<\ell$.  If we have two devices, then we need
+two starting indices, $n_0$ and $n_1$.  Wlog, $n_0=0$.  Suppose that
+the stride is 1.  Then, device 0 handles indides $0,\dots,n_1-1$ and
+device 1 handles indices $n_1,\dots,\ell-1$.  If the stride is 2, then
+$n_0=0,$, $n_1=1$, and device 0 handles indices $0,2,\dots$ and device
+1 handles $1, 3, \dots$ (both are bounded by $\ell-1$ - there are
+even/odd cases to handle here which we omit for simplicity).
+
+This algorithm can be extended to general indices, per-device strides,
+transform strides, and lengths.  Dimensions will act independently, so
+this will generalize to arbitrary dimensions.  The data layout can be
+checked for aliasing errors by checking per-device data layouts
+pairwise using the array correctness algorithm.
+
+Using this method, we can specify the data layout using fewer
+parameters.  What's left to specify is
+\begin{lstlisting}
+typedef struct {
+  size_t in_index;
+  size_t out_index;
+  size_t istride;
+  size_t outstride;
+} rocfft_iodim;
+\end{lstlisting}
+for all $d$ dimensions and $P$ devices.  Note that these are
+meta-strides; these strides work on the data, which may itself be
+strided.  (Question: should we just have index/stride for input and
+output?)  This struct is similar to what is used in FFTW's guru
+interface, so users may be more familiar with it (and we can also use
+this for single-GPU higher-dimension FFTs/batches).  The interface
+would be
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_device_layout(
+  rocfft_plan_description description,
+  size_t device_num,
+  size_t rocfft_iodim_size,
+  rocfft_iodim* rocfft_iodim_s);
+rocfft_status rocfft_plan_get_device_layout(
+  rocfft_plan plan,
+  size_t device_num,
+  size_t dimension,
+  rocfft_iodim* rocfft_iodims);
+\end{lstlisting}
+We should probably think about how to get the ending index from the
+plan as well, as this will be very useful for users.  Does this need to
+be added to the API?
+
+\subsection{overall behaviour}
+
+We can check whether the parameters are valid at plan generation, and
+then return an error code if things aren't set up correctly
+
+\section{Implimentation plan}
+
+First, get it working.  Just move everything to pencil/slab, send/receive
+to whatever crazy data distribution that they specify.
+
+Optimizations:
+\begin{itemize}
+\item gather/scatter
+\item sub-passes in discontiguous direction
+\item Do not use \texttt{MPI_Alltoallw} until there is a reasonable
+  implementation.  It might be worth just using \texttt{MPI_Alltoallv}
+  and handling the data formatting on our own.
+\item \dots
+\end{itemize}
+
+
+
+
+
+
+\end{document}
