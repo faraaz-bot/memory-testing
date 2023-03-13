@@ -1,0 +1,143 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{darkgreen}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Spectral Operation design doc for rocFFT}
+\author{Malcolm Roberts}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Use cases}
+
+\subsection{Shuffled output}
+
+If we do a pointwise operation that depends on the index, how do
+we provide this information to the user-specified operator?
+
+\subsection{Convolution/correlation}
+
+We can have an arbitrary number of inputs.  Each input can have its
+own format (length, stride, precision).  Would it make sense for all
+inputs to be real (or all complex)?
+
+
+Hermitian input needs a different algorithm depending on the order of
+the operator.
+
+So, for two given inputs $f$ and $g$ of length $N$ and $M$
+\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html#scipy.signal.fftconvolve}{python}
+uses
+\begin{itemize}
+\item \texttt{full}: $\max(M,N)$
+\item \texttt{valid}: $M+N-1$
+\item \texttt{same}:  $\max(M, N) - \min(M, N) + 1$.
+\end{itemize}
+
+(Hockney Free Space Convolution?)
+
+\subsection{Shift}
+
+Multiply by roots of unity.  Vanderlinde asked for a batched 1D FFT
+with per-batch offset, ie
+\begin{dmath}
+  u_{n,b} \leftarrow \omega^{\alpha_b + \beta n} u_{n,b}
+\end{dmath}
+where $b$ is the batch index and $n$ is the input index.  NB: this is
+annoying for real-to-complex transforms.
+
+
+\subsection{Poisson solver}
+
+Division by $k^2$.
+
+
+
+
+
+\subsection{applications}
+
+upsampling: looks like a F, zero-padding, Finv?
+(\href{https://stackoverflow.com/questions/5156690/help-with-resampling-upsampling}{stack
+  overflow link})
+
+SAR: synthetic aperture radar
+
+M\_TIP SPI reconstruction algorithm
+
+non-uniform FFT  (Flatiron institute)
+
+Window'd transforms
+
+image compression
+
+How about finding the frequency offset?
+
+Shuffled output
+
+Fractional-dimensional transforms?
+
+\section{Other libraries}
+
+vkFFT
+
+cuFFTDx
+
+Spiral
+
+FFTW++
+
+\section{Other infra}
+
+hipGraph?
+
+Multi-gpu?
+
+
+
+
+
+
+\end{document}
