@@ -41,7 +41,7 @@
 
 
 \title{Spectral Operation design doc for rocFFT}
-\author{Malcolm Roberts}
+\author{Malcolm Roberts and Steve Leung}
 
 
 
@@ -60,9 +60,35 @@ we provide this information to the user-specified operator?
 \subsection{Convolution/correlation}
 
 We can have an arbitrary number of inputs.  Each input can have its
-own format (length, stride, precision).  Would it make sense for all
-inputs to be real (or all complex)?
+own format (length, stride, precision).  Typically, inputs will have
+the same type (ie real vs complex), but it would be perfectly
+reasonable to convolve real data with complex data, or complex data
+with Hermitian-symmetric complex data.  Real and Hermitian-symmetric
+complex wouldn't really make sense, as they are on opposite sides of
+the Fourier transform.  In general, we expect that all inputs and
+outputs be in the same space, ie either all in the time/space domain
+or all in the frequency domain.
 
+The convolution of two inputs $\{f\}_{n=0}^{N-1}$ and  $\{g\}_{n=0}^{N-1}$
+is denoted $f\star{}g$ and is given by
+\begin{dmath}
+  f\star{}g_\ell
+  = \sum_{m=0}^{n}f_m g_{\ell-m}
+  = \sum_{m_0=0}^{N-1}\sum_{m_1=0}^{N-1}f_{m_0} g_{m_1} \delta_{\ell, m_0 + m_1}
+\end{dmath}
+where
+\begin{dmath}
+  \delta_{a,b} = \begin{cases}
+  1  & a=b  \\
+  0 & a \neq b
+\end{cases}
+\end{dmath}
+is the Kronecker delta.  This can be extended from a binary convolution
+to a general $n$-ary conovlution as
+\begin{dmath}
+  \star{}\(f_0, \dots, f_{n-1} \)_\ell
+  = \sum_{m_0, \dots, m_{n-1}} f_{m_0} \dots f_{m_{n-1}}  \delta_{\ell, \sum m_i} 
+\end{dmath}
 
 Hermitian input needs a different algorithm depending on the order of
 the operator.
@@ -93,8 +119,15 @@ annoying for real-to-complex transforms.
 
 Division by $k^2$.
 
+\subsection{filter}
 
+high/low-pass filter.  NB: this can be further optimised by not doing
+inverse transforms on known-zero data, but, well.
 
+\subsection{Vanderlinde}
+
+wants an affine shift, and a norm per batch.  The second is admitted
+as being kind of unrealistic.
 
 
 \subsection{applications}
@@ -119,6 +152,9 @@ Shuffled output
 
 Fractional-dimensional transforms?
 
+Resample: pad with zeros in the spectral domain, then transform back
+(longer output?)  This seems like a hard case to manage.
+
 \section{Other libraries}
 
 vkFFT
@@ -128,6 +164,142 @@ cuFFTDx
 Spiral
 
 FFTW++
+
+cutensor: good way to get the data in there?
+\url{https://docs.nvidia.com/cuda/cutensor/getting_started.html}
+
+\section{API proposals}
+
+There are two basic cases:
+\begin{enumerate}
+\item Part-of-transform
+\item Round-trip
+\end{enumerate}
+
+\subsection{Indexing function}
+
+The pointwise operation may depend on the logical index, which isn't
+necessarily going to be the same as the array index.  For example, 1D
+transforms which use multiple kernels will have effectively transposed
+the data; the map from array index to logical index depends on the FFT
+plan.  For index-dependant functions, we will need the index map in
+order to correctly apply the pointwise function.
+
+\subsection{Part-of-transform}
+
+For differentiation, shift, result scaling, and amplitude filters.
+
+The functionality here is similar to use cases for callback API.
+However, the callback functionality doesn't know about the
+array-index-to-logical-index map.  Also, the performance of callbacks
+have been very problematic on the GPU, so moving to another API where
+we can RTC user-specified functions into the FFT kernel will allow for
+significantly better performance.  As with the callback API, we can specify
+a load and a store function.  The functions have signature
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+\end{lstlisting}
+That is, they take exactly one value (real or complex) and a
+multi-index, and return exactly one value of the same type.
+
+For example, a Poisson solve is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const double k0 = 2.0; // User-specified
+  const double k2 = k0 * k0
+         * (idx_x * idx_x +  idx_y * idx_y +  idx_z * idx_z);
+  if(k2 == 0)
+     return u;
+  return u / k2;
+}
+\end{lstlisting}
+
+A low-pass filter is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const double k0 = 2.0; // User-specified
+  const double k2 = k0 * k0
+         * (idx_x * idx_x +  idx_y * idx_y +  idx_z * idx_z);
+  if(k2 > cutoff)
+     return 0;
+  return u;
+}
+\end{lstlisting}
+
+A shift operator is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const Tval omega = exp(2 * pi / N); // User-specified
+  return u * pow(omega, a + b * idx_x);
+}
+\end{lstlisting}
+
+We will have to provide a method of getting the complex type from the
+real type and vice-versa.
+
+\subsection{Round-trip}
+
+Convolution, Poisson solve, high/low-pass filters, 
+
+Can be combined with pre/post functions, eg: windowed transform.
+
+We add the information to the \texttt{rocfft_plan_description}.  We
+need to specify the lengths and strides separately for each input
+buffer.  We can have an arbitrary number of inputs and outputs.  Outputs
+can be mixed real/complex or complex/Hermitian-complex.
+
+We need to specify the order of the operation: Poisson solves are
+order-1, binary convolutions are order-2, ternary convolutions are
+order-3, etc.
+
+We need to specify the pointwise operator.  This has to match the
+order of the operation (eg: $-u/k^2$ is order-1, $u\odot v$ is
+order-2, etc).  If the operator has higher order than what is
+specified, then incorrect results will be returned.
+
+We need to specify the size of the output.  TODO: this isn't super
+clear what options there are; cf numpy outputs.  This also has to be
+generalized to higher-order transforms, and also made clear for
+first-order operations.
+
+TODO: add functions for Navier--Stokes, MHD, Maxwell's equations.
+(And divergence-free optimized versions.)  Nonlinear Schroedinger?
+
+Question: if we have complex data, does it matter if we do a forward
+or inverse transform?  (is there a complex-conjugation issue?)
+
+
+\begin{lstlisting}
+rocfft_status rocfft_roundtrip_plan_create(...)
+\end{lstlisting}
+
+\begin{lstlisting}
+rocfft_status rocfft_roundtrip_execute(
+  const rocfft_plan     plan,
+  void** in_buffers,
+  void** out_buffers)
+\end{lstlisting}
+
+
+\subsection{Interface for pointwise function}
+
+\begin{enumerate}
+\item Just use callbacks?  Super slow
+\item User-provided string?  (Check that it fits the API by doing a
+  compilation pre-test in a sandbox environment.)
+  \subitem Presets (with enum?)
+  \subitem Examples?  With common cases provided?
+\item Allow users to select from a list of rocFFT-provided options?
+  (enums?)
+\item rocRoller?
+\end{enumerate}
+
+If we have, for example, a shift operator followed by a filter
+operator, who is responsible for ensuring that the new index matches
+the filter operator's indexing scheme?
 
 \section{Other infra}
 
