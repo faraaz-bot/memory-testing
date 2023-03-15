@@ -52,10 +52,6 @@
 
 \section{Use cases}
 
-\subsection{Shuffled output}
-
-If we do a pointwise operation that depends on the index, how do
-we provide this information to the user-specified operator?
 
 \subsection{Convolution/correlation}
 
@@ -69,12 +65,12 @@ the Fourier transform.  In general, we expect that all inputs and
 outputs be in the same space, ie either all in the time/space domain
 or all in the frequency domain.
 
-The convolution of two inputs $\{f\}_{n=0}^{N-1}$ and  $\{g\}_{n=0}^{N-1}$
-is denoted $f\star{}g$ and is given by
+The convolution of two inputs $\{f_n\}$ and $\{g_n\}$ is denoted
+$f\ast{}g$ and is given by
 \begin{dmath}
-  f\star{}g_\ell
-  = \sum_{m=0}^{n}f_m g_{\ell-m}
-  = \sum_{m_0=0}^{N-1}\sum_{m_1=0}^{N-1}f_{m_0} g_{m_1} \delta_{\ell, m_0 + m_1}
+  f\ast{}g_\ell
+  = \sum_m f_m g_{\ell-m}
+  = \sum_{m_0}\sum_{m_1}f_{m_0} g_{m_1} \delta_{\ell, m_0 + m_1}
 \end{dmath}
 where
 \begin{dmath}
@@ -86,89 +82,198 @@ where
 is the Kronecker delta.  This can be extended from a binary convolution
 to a general $n$-ary conovlution as
 \begin{dmath}
-  \star{}\(f_0, \dots, f_{n-1} \)_\ell
+  \label{nary}
+  \ast{}\(f_0, \dots, f_{n-1} \)_\ell
   = \sum_{m_0, \dots, m_{n-1}} f_{m_0} \dots f_{m_{n-1}}  \delta_{\ell, \sum m_i} 
 \end{dmath}
 
-Hermitian input needs a different algorithm depending on the order of
-the operator.
-
-So, for two given inputs $f$ and $g$ of length $N$ and $M$
-\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html#scipy.signal.fftconvolve}{python}
-uses
+Note that the bounds on equation~\eqref{nary} are not given.  For
+$\{f_n\}_{n=0}^{N-1}$, $\{g_n\}_{n=0}^{M-1}$, \href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html#scipy.signal.fftconvolve}{python}
+allows for outputs of length
 \begin{itemize}
 \item \texttt{full}: $\max(M,N)$
 \item \texttt{valid}: $M+N-1$
 \item \texttt{same}:  $\max(M, N) - \min(M, N) + 1$.
 \end{itemize}
 
-(Hockney Free Space Convolution?)
+For $\{f_n\}_{n=-N+1}^{N-1}$, $\{g_n\}_{n=-M+1}^{M-1}$, we have a
+centered convolution (which is typical for Hermitian-symmetric data
+involved in pseudospectral simulations of, eg, Navier--Stokes flow and
+MHD), the output typically has \texttt{full} output.
+
+In terms of internal implementation, centered Hermitian convolutions
+needs a different algorithm depending on the order of the operator.
+In particular, while centered $n$-ary convolutions can be efficienctly
+computed via a series of binary convolutions without extra padding for
+dealiasing, this is not the case for centered convolutions, where
+\texttt{full} output will result in the convolution being
+non-associative.
 
 \subsection{Shift}
 
-Multiply by roots of unity.  Vanderlinde asked for a batched 1D FFT
-with per-batch offset, ie
+The shift function is a nice Fourier transform trick which allows one
+to move perform an affine transform in index space by multiplying by
+roots of unity.  Multiplying the input via
 \begin{dmath}
-  u_{n,b} \leftarrow \omega^{\alpha_b + \beta n} u_{n,b}
+  u_{n} \leftarrow \omega^{\alpha + \beta n} u_{n}
 \end{dmath}
-where $b$ is the batch index and $n$ is the input index.  NB: this is
-annoying for real-to-complex transforms.
+maps the output to
+\begin{dmath}
+  U_{k} \leftarrow U_{\alpha + \beta k}
+\end{dmath}
+
+\subsection{Differentiation}
+
+The Fourier transform maps differentiation to component-wise
+multiplication.  This is because
+\begin{dmath}
+  \mathcal{F}\left[\partial_x u\right]
+  = \int  \partial_x e^{ikx} u(x) dx 
+  = ik \int  e^{ikx} u(x)
+  = ik U(k).
+\end{dmath}
+The operator is
+\begin{dmath}
+  \hat{f} \leftarrow i k \hat{f}
+\end{dmath}
+where $k$ depends on the index and some constant factor.
 
 
 \subsection{Poisson solver}
 
-Division by $k^2$.
+Solving the Poisson equation is a round-trip operation.  The Poisson
+equation is
+\begin{dmath}
+  \label{poisson}
+  \nabla^2 \phi = f
+\end{dmath}
+By taking the transform of equation~\eqref{poisson}, we get
+\begin{dmath}
+  (ik)^2 \hat{\phi} = \hat{f}
+\end{dmath}
+so we can solve for $\hat{\phi} = -\hat{f}/k^2$ and then
+get $\phi$ by inverting the transform.  The operation is
+\begin{dmath}
+\hat\phi_{k} = \begin{cases}
+  -\hat{f}_k/{k^2}  & k\neq 0  \\
+  0 & k=0
+  \end{cases}
+\end{dmath}
+The $0$-mode is solved by setting appropriate boundary conditions.  
 
-\subsection{filter}
+\subsection{Filter}
 
-high/low-pass filter.  NB: this can be further optimised by not doing
-inverse transforms on known-zero data, but, well.
+Filters are round-trip operations which is linearized by the FFT.  The
+low-pass filter with cutoff $k_c$ 
+\begin{dmath}
+\hat{f}_{k} = \begin{cases}
+  \hat{f}  & k < k_c  \\
+  0  & k \geq k
+  \end{cases}
+\end{dmath}
+and similar for a low-pass filter.  Note that this can be optimized by
+skipping zero-data on the inverse transform.  Other filter choices may
+be smoother, or have some more complicated behaviour.
 
-\subsection{Vanderlinde}
+\subsection{Hamming window}
 
-wants an affine shift, and a norm per batch.  The second is admitted
-as being kind of unrealistic.
-
+Since the FFT works on periodic signals, non-periodic signals are
+often windowed in order to improve results, and the Hamming window is
+a popular choice.  This can be used in round-trip operations, or as
+part of a normal transform.  The operation is
+\begin{dmath}
+  f_n \leftarrow w(x_n) f_n
+\end{dmath}
+where $x_n$ depends on the index $n$ and some constant values.
 
 \subsection{applications}
 
-upsampling: looks like a F, zero-padding, Finv?
-(\href{https://stackoverflow.com/questions/5156690/help-with-resampling-upsampling}{stack
-  overflow link})
+Other applications inlclude
+\begin{itemize}
+\item upsampling, which seems to be a transform, extension with zero-padding, and an inverse transform of an extended length.
+\item non-uniform FFTs (see \url{https://finufft.readthedocs.io/})
+\item image compression, which seems to be a high-amplitude filter
+\item cross-correlation, which involved finding the index of the
+  maximum of the output of a correlation
+\end{itemize}
 
-SAR: synthetic aperture radar
-
-M\_TIP SPI reconstruction algorithm
-
-non-uniform FFT  (Flatiron institute)
-
-Window'd transforms
-
-image compression
-
-How about finding the frequency offset?
-
-Shuffled output
-
-Fractional-dimensional transforms?
-
-Resample: pad with zeros in the spectral domain, then transform back
-(longer output?)  This seems like a hard case to manage.
 
 \section{Other libraries}
 
-vkFFT
+Other libraries also offer varios spectral operations as part of a larger
+FFT package.
 
-cuFFTDx
+\subsection{Python}
 
-Spiral
+Python has a convolution operator which computes non-centered
+convolution on two inputs and one output.  Mismatched sizes are
+handled (though not in generality), and the output can have different
+sizes (\texttt{full}, \texttt{valid}, \texttt{same}) and
+\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.convolve2d.html}{scipy.signal.convolve2d}
+offers similarly-named options for the boundary.
 
-FFTW++
+Python implements a
+\href{https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html}{shift}
+operator which allows one to shift the Fourier origin to the middle of
+the array.
 
-cutensor: good way to get the data in there?
-\url{https://docs.nvidia.com/cuda/cutensor/getting_started.html}
+\subsection{vkFFT}
 
-\section{API proposals}
+vkFFT offers conovlution operators, though no examples are given and
+it's hard to tell what the interface is in the 40 000 lines which make
+up the single file of the header-only library.  From discussion with
+and talks by the author, vkFFT makes use of shuffled Cooley-Tukey
+transforms and probably keeps at least the last stage of the FFT
+in-flight (ie avoids a global memory round-trip) to achieve a
+$\approx30\%$ speedup as compared with \texttt{cuFFT}.
+
+\subsection{cuFFTDx}
+
+\href{https://docs.nvidia.com/cuda/cufftdx/index.html}{\texttt{cuFFTDx}}
+allows the user to embed FFT kernels into their own cuda code.  This
+allows for user-defined spectral operations which are quite general.
+However, size limitations are quite restrictive, with double-precision
+transforms being limited to length 16384 (see
+\href{https://docs.nvidia.com/cuda/cufftdx/requirements_func.html#supported-functionality}{supported-functionality}
+for details.)  It appears that multi-dimensional FFTs are not
+supported.  The interface seems quite complicated, but does offer a
+very flexible framework for the supported transforms.
+
+\subsection{Spiral/FFTX}
+
+\href{http://www.spiral.net/software/fftx.html}{Spiral/FFTX} is a
+different beast entirely; this is essentially a code generator which
+can generate very general spectral operations.  They have CPU, CUDA,
+and HIP back-ends.  The interface is quite complicated; one writes a
+specification in \texttt{C++} which is turned into a program and
+compiled.  The user interface is based on tensor notation (cf: Van
+Loan's FFT book).  While quite general, the user interface is very
+difficult to use.  The authors are unaware of implicitly dealiased
+convolution routines.
+
+\subsection{FFTW++}
+
+\href{https://github.com/dealias/fftwpp}{FFTW++} is a wrapper for FFTW
+which also includes convolution routines.  Implicitly dealised
+convolutions are implemented, which offer better performance than
+conventional routines.  Centered and non-centered conovlutions are
+handled, including ternary centered convolutions.  The number of
+inputs and outputs is arbitrary, but they must all have the same size.
+The pointwiser operator is given via a function pointer.  An MPI
+interface is provided.
+
+\subsection{FastFFT}
+\href{https://github.com/StochasticAnalytics/FastFFT/}{FastFFT} is
+another library which offers some interesting 2D spectral operations.
+They seem to offer a cross-correlation peak locator which skips a vram
+round-trip.  Works on cuda.  Worth looking into a bit more.
+
+\subsection{cutensor}
+\href{https://docs.nvidia.com/cuda/cutensor/getting_started.html}{cutensor}
+offers and API for specifying array dimensions which may be useful for
+the round-trip API in rocFFT.
+
+\section{Spectral operator API proposal}
 
 There are two basic cases:
 \begin{enumerate}
@@ -184,6 +289,8 @@ transforms which use multiple kernels will have effectively transposed
 the data; the map from array index to logical index depends on the FFT
 plan.  For index-dependant functions, we will need the index map in
 order to correctly apply the pointwise function.
+
+This can also just be an optimisation.
 
 \subsection{Part-of-transform}
 
