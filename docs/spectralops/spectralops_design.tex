@@ -41,7 +41,7 @@
 
 
 \title{Spectral Operation design doc for rocFFT}
-\author{Malcolm Roberts and Steve Leung}
+%\author{}
 
 
 
@@ -80,7 +80,7 @@ where
 \end{cases}
 \end{dmath}
 is the Kronecker delta.  This can be extended from a binary convolution
-to a general $n$-ary conovlution as
+to a general $n$-ary convolution as
 \begin{dmath}
   \label{nary}
   \ast{}\(f_0, \dots, f_{n-1} \)_\ell
@@ -97,15 +97,15 @@ allows for outputs of length
 \end{itemize}
 
 For $\{f_n\}_{n=-N+1}^{N-1}$, $\{g_n\}_{n=-M+1}^{M-1}$, we have a
-centered convolution (which is typical for Hermitian-symmetric data
+centred convolution (which is typical for Hermitian-symmetric data
 involved in pseudospectral simulations of, eg, Navier--Stokes flow and
 MHD), the output typically has \texttt{full} output.
 
-In terms of internal implementation, centered Hermitian convolutions
+In terms of internal implementation, centred Hermitian convolutions
 needs a different algorithm depending on the order of the operator.
-In particular, while centered $n$-ary convolutions can be efficienctly
+In particular, while centred $n$-ary convolutions can be efficiently
 computed via a series of binary convolutions without extra padding for
-dealiasing, this is not the case for centered convolutions, where
+dealiasing, this is not the case for centred convolutions, where
 \texttt{full} output will result in the convolution being
 non-associative.
 
@@ -188,7 +188,7 @@ where $x_n$ depends on the index $n$ and some constant values.
 
 \subsection{applications}
 
-Other applications inlclude
+Other applications include
 \begin{itemize}
 \item upsampling, which seems to be a transform, extension with zero-padding, and an inverse transform of an extended length.
 \item non-uniform FFTs (see \url{https://finufft.readthedocs.io/})
@@ -200,12 +200,34 @@ Other applications inlclude
 
 \section{Other libraries}
 
-Other libraries also offer varios spectral operations as part of a larger
+Other libraries also offer various spectral operations as part of a larger
 FFT package.
+
+\subsection{rocFFT/cuFFT callbacks}
+
+rocFFT and cuFFT both have callback functions.  These have
+\begin{lstlisting}
+void cb(T* data,
+        size_t offset,
+        T element,
+        void* cbdata,
+        void* sharedMem);
+\end{lstlisting}
+note that \lstinline{sharedMem} isn't used (the corresponding
+parameter \lstinline{shared_mem_bytes} must be zero).
+\lstinline{offset} is the index of the \lstinline{element}, and
+\lstinline{void* cbdata} is a general pointer to something in global
+memory.  The \lstinline{offset} isn't sufficient to get the Fourier
+index on, for example, multi-kernel 1D FFTs.
+
+While callbacks have serious performance issues, the interface does
+allow one to, for example, apply a window to input data and to
+convolve with data that has been transformed and stored in vram.  The
+new spectral operation interface should cover these use cases.
 
 \subsection{Python}
 
-Python has a convolution operator which computes non-centered
+Python has a convolution operator which computes non-centred
 convolution on two inputs and one output.  Mismatched sizes are
 handled (though not in generality), and the output can have different
 sizes (\texttt{full}, \texttt{valid}, \texttt{same}) and
@@ -219,7 +241,7 @@ the array.
 
 \subsection{vkFFT}
 
-vkFFT offers conovlution operators, though no examples are given and
+vkFFT offers convolution operators, though no examples are given and
 it's hard to tell what the interface is in the 40 000 lines which make
 up the single file of the header-only library.  From discussion with
 and talks by the author, vkFFT makes use of shuffled Cooley-Tukey
@@ -254,12 +276,12 @@ convolution routines.
 \subsection{FFTW++}
 
 \href{https://github.com/dealias/fftwpp}{FFTW++} is a wrapper for FFTW
-which also includes convolution routines.  Implicitly dealised
+which also includes convolution routines.  Implicitly dealiased
 convolutions are implemented, which offer better performance than
-conventional routines.  Centered and non-centered conovlutions are
-handled, including ternary centered convolutions.  The number of
+conventional routines.  Centred and non-centred convolutions are
+handled, including ternary centred convolutions.  The number of
 inputs and outputs is arbitrary, but they must all have the same size.
-The pointwiser operator is given via a function pointer.  An MPI
+The pointwise operator is given via a function pointer.  An MPI
 interface is provided.
 
 \subsection{FastFFT}
@@ -290,7 +312,7 @@ the data; the map from array index to logical index depends on the FFT
 plan.  For index-dependant functions, we will need the index map in
 order to correctly apply the pointwise function.
 
-This can also just be an optimisation.
+This can also just be an optimization.
 
 \subsection{Part-of-transform}
 
@@ -349,9 +371,9 @@ real type and vice-versa.
 
 \subsection{Round-trip}
 
-Convolution, Poisson solve, high/low-pass filters, 
-
-Can be combined with pre/post functions, eg: windowed transform.
+Round trip computations are used for convolutions, Poisson solves,
+high/low-pass filters, and other operations.  They can be combined
+with pre/post functions, eg: windowed transform.
 
 We add the information to the \texttt{rocfft_plan_description}.  We
 need to specify the lengths and strides separately for each input
@@ -373,7 +395,7 @@ generalized to higher-order transforms, and also made clear for
 first-order operations.
 
 TODO: add functions for Navier--Stokes, MHD, Maxwell's equations.
-(And divergence-free optimized versions.)  Nonlinear Schroedinger?
+(And divergence-free optimized versions.)  Nonlinear Schrodinger?
 
 Question: if we have complex data, does it matter if we do a forward
 or inverse transform?  (is there a complex-conjugation issue?)
@@ -410,13 +432,15 @@ the filter operator's indexing scheme?
 
 \section{Other infra}
 
-hipGraph?
-
-Multi-gpu?
-
-
-
-
+These spectral operations can have important interactions with other
+libraries, for example hipGraph and rocFFT multi-gpu implementations.
 
 
 \end{document}
+
+% LocalWords:  ie convolve ary pseudospectral eg Navier MHD affine dx
+% LocalWords:  dealiasing ikx ik poisson linearized FFT upsampling cb
+% LocalWords:  FFTs rocFFT cuFFT cbdata sharedMem mem vram vkFFT cuda
+% LocalWords:  Tukey cuFFTDx FFTX dealiased FFTW pointwise MPI RTC
+% LocalWords:  FastFFT cutensor Tval idx const pre rocfft TODO numpy
+% LocalWords:  roundtrip enum enums rocRoller hipGraph gpu
