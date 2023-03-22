@@ -28,6 +28,39 @@ void cosine_kernel(float* x, size_t n)
 }
 )"};
 
+std::string hiprtcResult_str(const hiprtcResult ret)
+{
+  switch(ret)
+    {
+    case HIPRTC_SUCCESS:
+      return "HIPRTC_SUCCESS";
+    case HIPRTC_ERROR_OUT_OF_MEMORY:
+      return "HIPRTC_ERROR_OUT_OF_MEMORY";
+    case HIPRTC_ERROR_PROGRAM_CREATION_FAILURE:
+      return "HIPRTC_ERROR_PROGRAM_CREATION_FAILURE";
+    case HIPRTC_ERROR_INVALID_INPUT:
+      return "HIPRTC_ERROR_INVALID_INPUT";
+    case HIPRTC_ERROR_INVALID_PROGRAM:
+      return "HIPRTC_ERROR_INVALID_PROGRAM";
+    case HIPRTC_ERROR_INVALID_OPTION:
+      return "HIPRTC_ERROR_INVALID_OPTION";
+    case HIPRTC_ERROR_COMPILATION:
+      return "HIPRTC_ERROR_COMPILATION";
+    case HIPRTC_ERROR_BUILTIN_OPERATION_FAILURE:
+      return "HIPRTC_ERROR_BUILTIN_OPERATION_FAILURE";
+    case HIPRTC_ERROR_NO_NAME_EXPRESSIONS_AFTER_COMPILATION:
+      return "HIPRTC_ERROR_NO_NAME_EXPRESSIONS_AFTER_COMPILATION";
+    case HIPRTC_ERROR_NO_LOWERED_NAMES_BEFORE_COMPILATION:
+      return "HIPRTC_ERROR_NO_LOWERED_NAMES_BEFORE_COMPILATION";
+    case HIPRTC_ERROR_NAME_EXPRESSION_NOT_VALID:
+      return "HIPRTC_ERROR_NAME_EXPRESSION_NOT_VALID";
+    case HIPRTC_ERROR_INTERNAL_ERROR:
+      return "HIPRTC_ERROR_INTERNAL_ERROR";
+    case HIPRTC_ERROR_LINKING:
+      return "HIPRTC_ERROR_LINKING";
+    }
+}
+
 struct cosine_kernel_args
 {
     hipDeviceptr_t a_;
@@ -94,8 +127,10 @@ int main(int argc, char* argv[])
                                    options);
   
     if(rtc_ret != HIPRTC_SUCCESS) {
-        std::cout << "compile failed" << std::endl;
-        throw std::runtime_error("hiprtcCompileProgram");
+      std::stringstream ss;
+      ss << "hiprtcCompileProgram failed with code ";
+      ss << hiprtcResult_str(rtc_ret);
+      throw std::runtime_error(ss.str());
     }
     {
       std::cout << "Host clang version: " <<  __clang_version__ << "\n";
