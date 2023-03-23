@@ -189,29 +189,134 @@ basicstyle=\ttfamily\small,
 }
 
 
+
+
 \begin{frame}
-    \frametitle{Introduction}
+  \frametitle{Motivation}
 
-    Motivation: noise in statistical tests.
+  
+  \begin{columns}[T] % align columns
+    \begin{column}{.48\textwidth}
 
-    \bigskip
+      \begin{center}
+        \includegraphics[width=0.9\textwidth]{pdf/atlas_cconv}
+      \end{center}
+
+      
+    \end{column}%
+    \hfill%
+    \begin{column}{.48\textwidth}
+
+      \vspace{1cm}
+      
+      Benchmarking algorithms allows us to
+      \begin{itemize}
+      \item Optimize libraries
+      \item Detect regressions
+      \item Tune implementations
+      \end{itemize}
+
+      \medskip
+      The graph shows a comparison:
+      \begin{itemize}
+      \item from a single CPU core
+      \item at low load, headless
+      \item Lots of samples (mean shown)
+      \item Blue implementation is clearly superior
+      \end{itemize}
+
+      \bigskip
+      
+      Problem: it's just the same thing run twice.
+      
+    \end{column}%
+  \end{columns}
+
+  
+\end{frame}
+
+\begin{frame}
+    \frametitle{Problem}
     
-    Description of the problem
-
-    \bigskip
+    Common strategies:
+    \begin{itemize}
+    \item Run 10 times, take the minimum
+      \begin{itemize}
+      \item Idea: show the ``power'' of the device.
+      \item \dots{} but we have no confidence that we got the minimum.
+      \end{itemize}
+    \item Plot the data
+      \begin{itemize}
+      \item Idea: if the lines are on top of each other, call it a wash.
+      \item \dots{} that's a lot of graphs to look at.
+      \item \dots{} this doesn't automate well.
+      \end{itemize}
+    \item Cut-off based on effect size
+      \begin{itemize}
+      \item Idea: if the difference is $<5\%$, call it a wash.
+      \item \dots{} what if we have two regressions of $3\%$?
+      \end{itemize}
+    \end{itemize}
     
-    What we're going to do about it.
+    \medskip
+    \begin{center}
+      How can we build confidence in our performance tests?
+    \end{center}
+    
+\end{frame}
 
+\begin{frame}
+  \frametitle{Problem}
+
+
+  \bigskip
+  
+  Two relevant CppCon talks (2015):
+  \begin{itemize}
+  \item \href{https://www.youtube.com/watch?v=zWxSZcpeS8Q}{Bryce Adelstein-Lelbach “Benchmarking C++ Code"}
+    \begin{itemize}
+    \item FIXME: main points
+    \item Macro benchmarks
+    \end{itemize}
+  \item \href{https://www.youtube.com/watch?v=nXaxk27zwlk}{Chandler Carruth ``Tuning C++: Benchmarks, and CPUs, and Compilers! Oh My!''}
+    \begin{itemize}
+    \item FIXME: main points
+    \item Micro benchmarks
+    \item google/benchmark
+    \item Underlying code gives the mean and standard deviation
+    \end{itemize}
+  \end{itemize}
+  
 \end{frame}
 
 
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    Things seem to be a bit better on the GPU:
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.7\textwidth]{pdf/footprint2exp25_1D_double_forward_complex_out-of-place}
+  \end{center}
 
+  % asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.mdat";dobars=false;dolegend=false' -o /home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/doc/footprint2exp25_1D_double_forward_complex_out-of-place.pdf
+
+
+\end{frame}
+  
 \begin{frame}
     \frametitle{Motivation}
 
-    Motivation: noise in statistical tests.
+    Motivation: performance tests have noise.
+  
+    \bigskip
+
+    Show: speedup plot.
 
     \bigskip
+    
+    Show: whiskerplot of times.
+
     
     Show: histogram of times.
 
