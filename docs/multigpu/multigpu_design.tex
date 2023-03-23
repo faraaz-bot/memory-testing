@@ -377,6 +377,13 @@ We should probably think about how to get the ending index from the
 plan as well, as this will be very useful for users.  Does this need to
 be added to the API?
 
+Note, however, that the order is important here.  Consider the cuFFTMp
+example
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/api_usage.html#usage-with-custom-slabs-and-pencils-data-decompositions}{distribution}.
+While the Green block would be unambiguous, either the blue or the
+purple block would end up with the lower-right quadrant, depending on
+which one was processed first.
+
 \subsection{overall behaviour}
 
 We can check whether the parameters are valid at plan generation, and
