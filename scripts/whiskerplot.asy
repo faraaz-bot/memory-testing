@@ -28,18 +28,22 @@ void whiskerplot(real[][] data,
   draw(graph(xgraph, miny), invisible);
 
   int nsample = data.length;
-  
-  ticks xticks = LeftTicks(rotate(45)*"$%f$",
-			   new string(real x) {return legend[round(x % nsample)];}, 
-			   sequence(nsample));
-  xaxis(xaxislabel, BottomTop, xticks);
+
+  if(legend.length > 0) {
+      ticks xticks = LeftTicks(rotate(45)*"$%f$",
+                               new string(real x) {return legend[round(x % nsample)];}, 
+                               sequence(nsample));
+      xaxis(xaxislabel, BottomTop, xticks);
+  } else {
+      xaxis(xaxislabel, BottomTop);
+  }
   yaxis(yaxislabel, LeftRight, RightTicks);
 
   for(int i = 0; i < data.length; ++i) {
     // scatter plot:
     if(true) {
       srand(1);
-      pen scatterpen = blue + opacity(0.5);
+      pen scatterpen = Pen(i) + opacity(0.5);
       real scatterwidth = 0.25;
       int ilen = data[i].length;
       for(int j = 0; j < ilen; ++j) {

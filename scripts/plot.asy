@@ -4,7 +4,7 @@ import utils;
 
 import graph;
 
-scale(Linear,Log);
+scale(Linear,Linear);
 
 import quartiles;
 
@@ -13,6 +13,9 @@ import whiskerplot;
 string filelist = "";
 
 string token = "";
+
+string legends = "";
+string xaxislabel = "";
 
 //string token = "complex_inverse_len_256_double_ip_batch_1_istride_1_CI_ostride_1_CI_idist_256_odist_256_ioffset_0_0_ooffset_0_0";
 
@@ -52,13 +55,17 @@ for(int ifile = 0; ifile < filenames.length; ++ifile) {
     plotdata[ifile] = inputs[ifile][idx].vals;
 }
 
-
 string[] legendlist = new string[];
-legendlist.push("a");
-legendlist.push("b");
+if(legends != "" ) {
+    legendlist = listfromcsv(legends);
+}
+// legendlist.push("a");
+// legendlist.push("b");
 
 //write(abdata);
 
 string ylegend = "time (ms)";
 
-whiskerplot(plotdata, legendlist, texify(token), ylegend);
+//xaxislabel = texify(token);
+
+whiskerplot(plotdata, legendlist, xaxislabel, ylegend);

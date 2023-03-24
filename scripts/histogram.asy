@@ -3,8 +3,8 @@ import stats;
 
 size(400,200,IgnoreAspect);
 
-scale(Log, Linear);
-//scale(Linear, Linear);
+//scale(Log, Linear);
+scale(Linear, Linear);
 
 
 import utils;
@@ -64,7 +64,7 @@ for(int ifile = 0; ifile < filenames.length; ++ifile) {
     minval = min(min(inputs[ifile][idx].vals), minval);
     maxval = max(max(inputs[ifile][idx].vals), maxval);
 }
-Nbins *= 4;
+//Nbins *= 4;
 
 write("Nbins: ", Nbins);
 write("minval: ", minval);
@@ -77,7 +77,7 @@ for(int ifile = 0; ifile < filenames.length; ++ifile) {
     histogram(inputs[ifile][idx].vals,
               minval,
               maxval,
-              Nbins, normalize=true, low=0, Pen(ifile)+opacity(0.5), black, bars=true);
+              Nbins, normalize=false, low=0, Pen(ifile)+opacity(0.5), black, bars=true);
 }
 
 xaxis("time (ms)",BottomTop,LeftTicks);

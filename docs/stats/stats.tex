@@ -298,14 +298,107 @@ basicstyle=\ttfamily\small,
   \begin{center}
     \includegraphics[width=0.7\textwidth]{pdf/footprint2exp25_1D_double_forward_complex_out-of-place}
   \end{center}
-
-  % FIXME: visualize the mean as well
+  % measure=mean
   
-  % asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.mdat";dobars=false;dolegend=false' -o /home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/doc/footprint2exp25_1D_double_forward_complex_out-of-place.pdf
+  
+%    asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.mdat";dobars=false;dolegend=false;Ncut=1000' -o footprint2exp25_1D_double_forward_complex_out-of-place_cut_1000.pdf
+
+  
+\end{frame}
+  
+
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    Though it's a little less clear if we zoom in:
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.7\textwidth]{pdf/footprint2exp25_1D_double_forward_complex_out-of-place_cut_1000}
+  \end{center}
+  % measure=mean
+  
 
 
-%    asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.mdat";dobars=false;dolegend=false;Ncut=1000' -o /home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/doc/footprint2exp25_1D_double_forward_complex_out-of-place.pdf
+%    asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.mdat";dobars=false;dolegend=false;Ncut=1000' -o footprint2exp25_1D_double_forward_complex_out-of-place_cut_1000.pdf
 
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    Let's look at the data more closely!
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.7\textwidth]{pdf/histogram_ixt-hq-107_sep_8_64k_b512.pdf}
+  \end{center}
+% asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' histogram.asy -o histogram_ixt-hq-107_sep_8_64k_b512.pdf
+
+
+  \begin{center}
+    Ok, maybe not.  Do we need more data?
+  \end{center}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    Let's look at the data more closely!
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.5\textwidth]{pdf/whisker_ixt-hq-107_sep_8_64k_b512.pdf}
+  \end{center}
+%asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' plot.asy -o whisker_ixt-hq-107_sep_8_64k_b512.pdf
+
+  \begin{center}
+    Still need more data.
+  \end{center}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    More data!  ($N=8192$ - you're patient, right?)
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.7\textwidth]{pdf/histogram_ixt-hq-107_sep_8192_64k_b512.pdf}
+  \end{center}
+  % measure=mean
+% asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' histogram.asy -o histogram_ixt-hq-107_sep_8192_64k_b512.pdf
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Problem}
+  \begin{center}
+    Let's look at the data more closely!
+  \end{center}
+  \begin{center}
+    \includegraphics[width=0.5\textwidth]{pdf/whisker_ixt-hq-107_sep_8192_64k_b512.pdf}
+  \end{center}
+%asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' plot.asy -o whisker_ixt-hq-107_sep_8192_64k_b512.pdf
+
+  \begin{center}
+    More data did not help!  \texttt{\textbackslash{}tex\_command\_for\_sad\_face}
+  \end{center}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Proposed solution}
+  \begin{center}
+    Always use a \textcolor{red}{red} pen to colour your data.
+  \end{center}
+
+  \begin{itemize}
+  \item \textcolor{red}{Red}-labelled data has lower execution time.
+  \item Robust over three orders of magnitude of sample sizes.
+  \item Appropriate AMD branding.
+  \end{itemize}
+
+  % NB: CPU data was on an intel machine, so the red-labelling solution doesn't apply.
   
 \end{frame}
   
@@ -329,7 +422,10 @@ basicstyle=\ttfamily\small,
     
     Show: histogram of speedups.
 
+    \bigskip
     
+    Show: As we increase the number of histogram bins, things get
+    quantized.
     
 \end{frame}
 
