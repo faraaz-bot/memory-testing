@@ -17,7 +17,13 @@
 \DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
 
 
+
+\definecolor{radeonruby}{rgb}{0.87, 0, 0.19}
+
+
 \usepackage{listings}
+
+
 
 %\usepackage[utf8]{inputenc}
 \definecolor{bluekeywords}{rgb}{0.63, 0.79, 0.95}
@@ -389,16 +395,22 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Proposed solution}
   \begin{center}
-    Always use a \textcolor{red}{red} pen to colour your data.
+    Always use a \textcolor{radeonruby}{red} pen to colour your data.
   \end{center}
 
+  \medskip
+  
   \begin{itemize}
-  \item \textcolor{red}{Red}-labelled data has lower execution time.
-  \item Robust over three orders of magnitude of sample sizes.
-  \item Appropriate AMD branding.
+  \item \textcolor{radeonruby}{Red}-labelled data has lower execution time.
+    \medskip
+  \item \textcolor{radeonruby}{Robust} over three orders of magnitude
+    of sample sizes.
+    \medskip
+  \item Appropriate \textcolor{radeonruby}{AMD} branding.
   \end{itemize}
 
-  % NB: CPU data was on an intel machine, so the red-labelling solution doesn't apply.
+  % NB: CPU data was on an intel machine, so the red-labelling
+  % solution doesn't apply.
   
 \end{frame}
 
@@ -406,34 +418,34 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{More problems: speedup is even noisier!}
 
-  FIXME: show: speedup plot.
+  FIXME: show: speedup plot.  Just the normal one from the PDF output.
 
 \end{frame}
 
 \begin{frame}
-    \frametitle{Motivation}
+    \frametitle{Actual proposed solution}
 
-    Motivation: performance tests have noise.
-  
+    Problem:
+    \begin{itemize}
+    \item Performance tests are suprisingly noisy.
+    \item The noise isn't the same over tests
+    \end{itemize}
+        
     \bigskip
 
-    Show: speedup plot.
+    Solution:
+    \begin{itemize}
+    \item Choose an experimental design that eliminates bias.
+    \item Use statistical tests to try and handle noise.
+    \end{itemize}
 
-    \bigskip
-    
-    Show: whiskerplot of times.
+\end{frame}
 
-    
-    Show: histogram of times.
+\begin{frame}
+    \frametitle{Characterizing data}
 
-    \bigskip
-    
-    Show: histogram of speedups.
-
-    \bigskip
-    
-    Show: As we increase the number of histogram bins, things get
-    quantized.
+    TODO: talk about noise an experiment correlation.  Go through the
+    various stages and show how the data behaves better and better.
     
 \end{frame}
 
@@ -465,14 +477,15 @@ basicstyle=\ttfamily\small,
 
 \begin{frame}
     \frametitle{Dealing with uncertainty}
-
+   
     Motivation: noise in statistical tests.
 
+    TODO: talk about how now we have iid data, we can apply tests.
+    Let's also look at the data.
+    
     Show: histogram of times.
 
     Show: histogram of speedups.
-
-    
     
 \end{frame}
 
@@ -484,6 +497,8 @@ basicstyle=\ttfamily\small,
     Ref: Lelbach (no null-hypothesis testing), gperf (std dev)
 
     Show: single test.
+    
+    Show: as we increase bins in histogram, things get discrete.
     
     
 \end{frame}
@@ -502,14 +517,12 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 
-
 \begin{frame}
     \frametitle{Multiple hypothesis testing}
 
     Moods vs MWU vs ttest
     
 \end{frame}
-
 
 
 \begin{frame}
@@ -526,14 +539,12 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 
-
 \begin{frame}
     \frametitle{Roberts and Son Colocation Services}
 
     A far better solution than what we have now.
     
 \end{frame}
-
 
 
 \begin{frame}
