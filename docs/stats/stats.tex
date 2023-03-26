@@ -472,24 +472,40 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
+  \frametitle{Experimental design}
+
+  
+    \begin{itemize}    
+    \item Noise (aka jitter) is a fact of life.
+      \medskip
+    \item We can't do statistical tests if the noise isn't identically
+      distributed.
+      \medskip
+    \item Some runs get more noise - why?  What can we do?
+    \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
     \frametitle{What is our experimental design?}
 
-    What went wrong?
+    Our experimental setup:
+    \begin{itemize}
+    \item Intitialize with rocRand/hipRand
+    \item Run on the same node
+    \item Separate processes, one right after the other.
+    \end{itemize}
 
     \bigskip
-    
-    \begin{itemize}
-    \item FIXME
-    \item we use rocrand
-    \item separate processes
-    \end{itemize}
-    
+
     \begin{center}
+      ``Separated'' experimental design:\\
+      \medskip
       \includegraphics[]{asy/sep.pdf}
     \end{center}
-  
-    TODO: talk about noise an experiment correlation.  Go through the
-    various stages and show how the data behaves better and better.
+    \bigskip
+    
+    Maybe some random environmental thing caused an issue - try in the same process!
     
 \end{frame}
 
@@ -497,61 +513,88 @@ basicstyle=\ttfamily\small,
 \begin{frame}
     \frametitle{What is our experimental design?}
 
-    What went wrong?
+
+    \begin{itemize}    
+    \item Load two versions of the implementation into the same executable
+      \begin{itemize}
+      \item How?  Abuse \texttt{dload}!
+      \item Libraries must not depend on other shared libraries: \texttt{-DSINGLELIB}
+      \end{itemize}
+    \item We can now guarantee that the environments are identical.
+    \end{itemize}
 
     \bigskip
     
-    \begin{itemize}
-    \item FIXME
-    \end{itemize}
-    
+    New experimental setup:
     \begin{center}
-      \includegraphics[]{asy/sep.pdf}
-    \end{center}
-  
-    TODO: talk about noise an experiment correlation.  Go through the
-    various stages and show how the data behaves better and better.
-    
-\end{frame}
-
-
-\begin{frame}
-    \frametitle{What is our experimental design?}
-
-    What went wrong?
-
-    \bigskip
-    
-    \begin{itemize}
-    \item FIXME
-    \end{itemize}
-    
-    \begin{center}
+      ``Sequential'' experimental design:\\
+      \medskip
       \includegraphics[]{asy/seq.pdf}
     \end{center}
-  
-    TODO: talk about noise an experiment correlation.  Go through the
-    various stages and show how the data behaves better and better.
+
     
+    
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Sequential experimental design}
+
+    %asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp28_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp28_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_16384_double_op_batch_16384_istride_1_CI_ostride_1_CI_idist_16384_odist_16384_ioffset_0_0_ooffset_0_0"' histogram.asy  -o  histogram_ixt-hq-107_seq_8192_16k_b16k.pdf
+
+    % FIXME: add run details
+    
+    \begin{center}
+      \includegraphics[width=0.8\textwidth]{pdf/histogram_ixt-hq-107_seq_8192_16k_b16k.pdf}
+    \end{center}
+
+    \begin{center}
+      Better!
+      \medskip
+      \begin{itemize}
+      \item Distributions are closer.
+      \item But not that close!
+      \end{itemize}
+    \end{center}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Sequential experimental design}
+
+  \begin{center}
+    Hypothesis:
+  \end{center}
+
+  \bigskip
+
+  The device is intermittently interrupted.
+
+  \bigskip
+
+  Therefore, the noise is time-correlcated.
+
+  \bigskip
+
+  To make the noise identical, we must de-correlate test case with time.
+    
+  
 \end{frame}
 
 \begin{frame}
     \frametitle{What is our experimental design?}
 
-    What went wrong?
-
-    \bigskip
-    
+    Since we have both cases \texttt{dload}ed into one executable, we can alternate cases.
     \begin{itemize}
-    \item FIXME
+    \item Reduces time/test-case correlation.
     \end{itemize}
     
     \begin{center}
+      ``Alternating'' experimental design:\\
+      \medskip
       \includegraphics[]{asy/alt.pdf}
     \end{center}
   
-    TODO: talk about noise an experiment correlation.  Go through the
-    various stages and show how the data behaves better and better.
     
 \end{frame}
 
@@ -619,6 +662,11 @@ basicstyle=\ttfamily\small,
     \frametitle{Statistical tests}
 
 
+    Ref: FFTW talking about jitter.
+
+    Ref: collective operations which handle jitter (eg alltoall - what
+    if one process is slow?)
+    
     Ref: Lelbach (no null-hypothesis testing), gperf (std dev)
 
     Show: single test.
