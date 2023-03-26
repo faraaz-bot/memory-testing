@@ -407,6 +407,8 @@ basicstyle=\ttfamily\small,
     of sample sizes.
     \medskip
   \item Appropriate \textcolor{radeonruby}{AMD} branding.
+    \medskip
+  \item \texttt{\textbackslash{}definecolor\{\textcolor{radeonruby}{radeonruby}\}\{rgb\}\{0.87, 0, 0.19\}}
   \end{itemize}
 
   % NB: CPU data was on an intel machine, so the red-labelling
@@ -418,7 +420,35 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{More problems: speedup is even noisier!}
 
-  FIXME: show: speedup plot.  Just the normal one from the PDF output.
+  \begin{center}
+    \includegraphics[width=0.5\textwidth]{pdf/histogram_ixt-hq-107_sep_8_speedup.pdf}
+  \end{center}
+
+  Histogram of speedups over a suite of tests
+  \begin{itemize}
+  \item 534 different tests
+  \item 8 samples per tests
+  \item This is what a null result looks like.
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{More problems: speedup is even noisier!}
+
+  \begin{center}
+    \includegraphics[width=0.5\textwidth]{pdf/histogram_ixt-hq-107_sep_8192_speedup.pdf}
+  \end{center}
+
+% nice -n 19 ./rocfft-perf pdf ~/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/doc ~/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/aa --measure mean --significance 2
+  
+  Histogram of speedups over a suite of tests
+  \begin{itemize}
+  \item 534 different tests
+  \item 8192 samples per tests
+  \item This null result looks even worse!
+  \end{itemize}
 
 \end{frame}
 
