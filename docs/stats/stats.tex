@@ -810,7 +810,7 @@ basicstyle=\ttfamily\small,
     
 \begin{frame}
     \frametitle{Uncertainty quantification}
-    % ./rocfft-perf --verbose  pdf ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc_mean_boot ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure median --confidence bootstrap --significance 2
+    % ./rocfft-perf --verbose  pdf ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure median --confidence bootstrap --significance 2
 
     %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp25_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp25_1D_double_backward_complex_out-of-place.mdat";dobars=true;dolegend=false'  -o medianboot.pdf
     
@@ -820,6 +820,27 @@ basicstyle=\ttfamily\small,
     \begin{center}
       Median with 95\% interval from bootstrap resampling.
     \end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Uncertainty quantification: speedup}
+
+  We're also interested in quantifying uncertainty for the speedup.
+
+  FIXME: Describe how do we do this.
+  
+  %./rocfft-perf post ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure median --confidence bootstrap
+
+  %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp25_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp25_1D_double_backward_complex_out-of-place.mdat";legendlist="a,aa";secondary_filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc/aa-over-a-footprint2exp25_1D_double_backward_complex_out-of-place.sdat";dolegend=false' -o speedup.pdf
+
+    \begin{center}
+      \includegraphics[width=0.5\textwidth]{pdf/speedup.pdf}
+    \end{center}
+    \begin{center}
+      Speedup with 95\% interval from bootstrap resampling.
+    \end{center}
+  
 \end{frame}
 
 \begin{frame}
