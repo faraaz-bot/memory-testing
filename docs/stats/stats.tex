@@ -392,30 +392,6 @@ basicstyle=\ttfamily\small,
   
 \end{frame}
 
-\begin{frame}
-  \frametitle{Proposed solution}
-  \begin{center}
-    Always use a \textcolor{radeonruby}{red} pen to colour your data.
-  \end{center}
-
-  \medskip
-  
-  \begin{itemize}
-  \item \textcolor{radeonruby}{Red}-labelled data has lower execution time.
-    \medskip
-  \item \textcolor{radeonruby}{Robust} over three orders of magnitude
-    of sample sizes.
-    \medskip
-  \item Appropriate \textcolor{radeonruby}{AMD} branding.
-    \medskip
-  \item \texttt{\textbackslash{}definecolor\{\textcolor{radeonruby}{radeonruby}\}\{rgb\}\{0.87, 0, 0.19\}}
-  \end{itemize}
-
-  % NB: CPU data was on an intel machine, so the red-labelling
-  % solution doesn't apply.
-  
-\end{frame}
-
 
 \begin{frame}
   \frametitle{More problems: speedup is even noisier!}
@@ -451,6 +427,31 @@ basicstyle=\ttfamily\small,
   \end{itemize}
 
 \end{frame}
+
+\begin{frame}
+  \frametitle{Proposed solution}
+  \begin{center}
+    Always use a \textcolor{radeonruby}{red} pen to colour your data.
+  \end{center}
+
+  \medskip
+  
+  \begin{itemize}
+  \item \textcolor{radeonruby}{Red}-labelled data has lower execution time.
+    \medskip
+  \item \textcolor{radeonruby}{Robust} over three orders of magnitude
+    of sample sizes.
+    \medskip
+  \item Appropriate \textcolor{radeonruby}{AMD} branding.
+    \medskip
+  \item \texttt{\textbackslash{}definecolor\{\textcolor{radeonruby}{radeonruby}\}\{rgb\}\{0.87, 0, 0.19\}}
+  \end{itemize}
+
+  % NB: CPU data was on an intel machine, so the red-labelling
+  % solution doesn't apply.
+  
+\end{frame}
+
 
 \begin{frame}
     \frametitle{Actual proposed solution}
@@ -505,8 +506,29 @@ basicstyle=\ttfamily\small,
     \end{center}
     \bigskip
     
-    Maybe some random environmental thing caused an issue - try in the same process!
+    Maybe some random environmental thing caused an issue - try in the
+    same process!
     
+\end{frame}
+
+\begin{frame}
+    \frametitle{Separated experimental design}
+
+    % asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a/footprint2exp28_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/aa/footprint2exp28_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_16384_double_op_batch_16384_istride_1_CI_ostride_1_CI_idist_16384_odist_16384_ioffset_0_0_ooffset_0_0"' histogram.asy  -o  histogram_ixt-hq-107_sep_8192_16k_b16k.pdf
+    
+    \begin{center}
+      \includegraphics[width=0.8\textwidth]{pdf/histogram_ixt-hq-107_sep_8192_16k_b16k.pdf}
+    \end{center}
+
+    \begin{center}
+      Our data looks terrible!
+      \medskip
+      \begin{itemize}
+      \item Hard-pressed to believe that this is the same code.
+      \item Statistics will not save us from bad data.
+      \end{itemize}
+    \end{center}
+
 \end{frame}
 
 
@@ -572,6 +594,10 @@ basicstyle=\ttfamily\small,
 
   \bigskip
 
+  This interruption is time-correlated.
+
+  \bigskip
+  
   Therefore, the noise is time-correlcated.
 
   \bigskip
@@ -598,8 +624,29 @@ basicstyle=\ttfamily\small,
     
 \end{frame}
 
+
 \begin{frame}
-    \frametitle{What is our experimental design?}
+    \frametitle{Alternating design}
+
+    %asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/alt/foot/8192/a/footprint2exp28_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/alt/foot/8192/aa/footprint2exp28_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_16384_double_op_batch_16384_istride_1_CI_ostride_1_CI_idist_16384_odist_16384_ioffset_0_0_ooffset_0_0"' histogram.asy  -o  histogram_ixt-hq-107_alt_8192_16k_b16k.pdf
+
+    % FIXME: add run details
+    
+    \begin{center}
+      \includegraphics[width=0.8\textwidth]{pdf/histogram_ixt-hq-107_alt_8192_16k_b16k.pdf}
+    \end{center}
+
+    \begin{center}
+      \medskip
+      \begin{itemize}
+      \item FIXME
+      \end{itemize}
+    \end{center}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Randomized Design}
 
     What went wrong?
 
@@ -615,6 +662,36 @@ basicstyle=\ttfamily\small,
   
     TODO: talk about noise an experiment correlation.  Go through the
     various stages and show how the data behaves better and better.
+    
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Randomized experimental design}
+
+    %asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/alt/foot/8192/a/footprint2exp28_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/alt/foot/8192/aa/footprint2exp28_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_16384_double_op_batch_16384_istride_1_CI_ostride_1_CI_idist_16384_odist_16384_ioffset_0_0_ooffset_0_0"' histogram.asy  -o  histogram_ixt-hq-107_alt_8192_16k_b16k.pdf
+
+    % FIXME: add run details
+    
+    \begin{center}
+      \includegraphics[width=0.8\textwidth]{pdf/histogram_ixt-hq-107_ran_8192_16k_b16k.pdf}
+    \end{center}
+
+    \begin{center}
+      \medskip
+      \begin{itemize}
+      \item FIXME
+      \end{itemize}
+    \end{center}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Experimental Design}
+
+    FIXME: we need to randomize and stuff, yo.  C'mon.
+
+    Visualizing the data is helpful in trying to understand it.
     
 \end{frame}
 
