@@ -467,7 +467,7 @@ basicstyle=\ttfamily\small,
     Solution:
     \begin{itemize}
     \item Choose an experimental design that eliminates bias.
-    \item Use statistical tests to try and handle noise.
+    \item Use statistical tests to handle noise.
     \end{itemize}
 
 \end{frame}
@@ -488,7 +488,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-    \frametitle{What is our experimental design?}
+    \frametitle{Separated Design}
 
     Our experimental setup:
     \begin{itemize}
@@ -512,7 +512,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-    \frametitle{Separated experimental design}
+    \frametitle{Separated design}
 
     % asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a/footprint2exp28_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/aa/footprint2exp28_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_16384_double_op_batch_16384_istride_1_CI_ostride_1_CI_idist_16384_odist_16384_ioffset_0_0_ooffset_0_0"' histogram.asy  -o  histogram_ixt-hq-107_sep_8192_16k_b16k.pdf
     
@@ -533,14 +533,13 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-    \frametitle{What is our experimental design?}
-
+    \frametitle{Sequential Design}
 
     \begin{itemize}    
     \item Load two versions of the implementation into the same executable
       \begin{itemize}
       \item How?  Abuse \texttt{dload}!
-      \item Libraries must not depend on other shared libraries: \texttt{-DSINGLELIB}
+      \item Libraries must not depend on other shared libraries: \texttt{-DSINGLELIB} in rocFFT.
       \end{itemize}
     \item We can now guarantee that the environments are identical.
     \end{itemize}
@@ -602,13 +601,14 @@ basicstyle=\ttfamily\small,
 
   \bigskip
 
-  To make the noise identical, we must de-correlate test case with time.
+  To decorrelate noise and test case, we must de-correlate test case
+  with time.
     
   
 \end{frame}
 
 \begin{frame}
-    \frametitle{What is our experimental design?}
+    \frametitle{Alternating Design}
 
     Since we have both cases \texttt{dload}ed into one executable, we can alternate cases.
     \begin{itemize}
@@ -637,9 +637,10 @@ basicstyle=\ttfamily\small,
     \end{center}
 
     \begin{center}
+      Better!
       \medskip
       \begin{itemize}
-      \item FIXME
+      \item The noise isn't obviously correlated with the test case.
       \end{itemize}
     \end{center}
 
@@ -648,21 +649,24 @@ basicstyle=\ttfamily\small,
 \begin{frame}
     \frametitle{Randomized Design}
 
-    What went wrong?
+    Alternating test cases won't eliminate alternating noise.
 
     \bigskip
     
     \begin{itemize}
-    \item FIXME
+    \item If we're alternating we may as well randomize.
+    \item Random case choice maximally reduces correlation.
+    \item For $N$ samples, either:
+      \begin{itemize}
+      \item randomly pick a case until we have at lesat $N$ samples per case,
+      \item or take the sequential case and shuffle the order.
+      \end{itemize}
     \end{itemize}
     
     \begin{center}
       \includegraphics[]{asy/ran.pdf}
     \end{center}
   
-    TODO: talk about noise an experiment correlation.  Go through the
-    various stages and show how the data behaves better and better.
-    
 \end{frame}
 
 
@@ -678,47 +682,145 @@ basicstyle=\ttfamily\small,
     \end{center}
 
     \begin{center}
+      Much better!
       \medskip
       \begin{itemize}
-      \item FIXME
+      \item Noise isn't correlated with case.
       \end{itemize}
     \end{center}
 
 \end{frame}
 
 \begin{frame}
-    \frametitle{Experimental Design}
+    \frametitle{Characterizing data}
 
-    FIXME: we need to randomize and stuff, yo.  C'mon.
+    We can get better data using a randomized experimental design.
 
-    Visualizing the data is helpful in trying to understand it.
+    \begin{itemize}
+    \item That's some weird-looking data.
+    \item How should we evaluate our results?
+    \end{itemize}
+
+    \bigskip
+    
+    What we want:
+    \begin{itemize}
+    \item A measure of central tendency
+    \item Some quantification of uncertainty
+    \item A test to tell us when things are different.
+    \end{itemize}
+    
+    
+\end{frame}
+
+
+
+\begin{frame}
+    \frametitle{Measurement of Central Tendency}
+
+
+    There are two basic measures of central tendency:
+
+    \begin{itemize}
+    \item Mean
+    \item Median
+    \end{itemize}
+
+    Our data can be quite skewed and has outliers \pause{} - the mean
+    can be quite unstable in this context.
+   
+    \begin{center}
+      \includegraphics[width=0.5\textwidth]{img/mean_median_skew_meme.jpg}
+    \end{center}
+    \pause{}
+    
+    The median is also stable under monotonic transforms, eg:
+    \begin{itemize}
+    \item time $\rightarrow$ gflops
+    \item time $\rightarrow$ bandwidth
+    \end{itemize}
     
 \end{frame}
 
 \begin{frame}
-    \frametitle{Characterizing data}
+    \frametitle{Uncertainty quantification}
 
-    Discuss: mean vs medium.
-
-    \bigskip
-    
-    Show: meme.
+    Whichever measure we choose, we need to quantify the uncertainty.
 
     \bigskip
-    
-    Discuss and show: confidence intervals
 
+    The mean is associated with standard deviation
+    \begin{itemize}
+    \item Assumes a normal distribution
+    \item The mean minus the standard deviation is often negative
+      \begin{itemize}
+      \item Negative values are difficult to plot on log-log plots.
+      \end{itemize}
+    \end{itemize}
+
+    %\pause
+    
     \bigskip
     
-    standard variance: doesn't work well in log-log plots.
+    Alternative: bootstrap resampling.
+    \begin{itemize}
+    \item Given $N$ data points, sample, with replacement $N$ value.
+    \item Compute a new statistic (ie mean or median).
+    \item Do this a lot (like 2000 times).
+    \item The range of the middle $90\%$ values gives the $90\%$
+      confidence interval.
+    \item Slightly expensive but incredibly robust.
+    \end{itemize}
+    
 
-    \bigskip
-    
-    Discuss: bootstrap resampling.
-    
-    
 \end{frame}
 
+
+\begin{frame}
+    \frametitle{Uncertainty quantification}
+    % ./rocfft-perf post ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc_boot_mean ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure mean --confidence bootstrap
+
+
+
+    %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp25_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp25_1D_double_backward_complex_out-of-place.mdat";dobars=true;dolegend=false'  -o stdev.pdf
+
+    \begin{center}
+      \includegraphics[width=0.5\textwidth]{pdf/stdev.pdf}
+    \end{center}
+
+    \begin{center}
+      Mean with 95\% interval from standard deviation.
+    \end{center}
+        
+\end{frame}
+    
+\begin{frame}
+    \frametitle{Uncertainty quantification}
+    % ./rocfft-perf --verbose  pdf ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc_mean_boot ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure mean --confidence bootstrap --significance 2
+
+    %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp25_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp25_1D_double_backward_complex_out-of-place.mdat";dobars=true;dolegend=false'  -o meanboot.pdf
+    
+    \begin{center}
+      \includegraphics[width=0.5\textwidth]{pdf/meanboot.pdf}
+    \end{center}
+    \begin{center}
+      Mean with 95\% interval from bootstrap resampling.
+    \end{center}
+\end{frame}
+    
+\begin{frame}
+    \frametitle{Uncertainty quantification}
+    % ./rocfft-perf --verbose  pdf ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc_mean_boot ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure median --confidence bootstrap --significance 2
+
+    %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a/footprint2exp25_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa/footprint2exp25_1D_double_backward_complex_out-of-place.mdat";dobars=true;dolegend=false'  -o medianboot.pdf
+    
+    \begin{center}
+      \includegraphics[width=0.5\textwidth]{pdf/medianboot.pdf}
+    \end{center}
+    \begin{center}
+      Median with 95\% interval from bootstrap resampling.
+    \end{center}
+\end{frame}
 
 \begin{frame}
     \frametitle{Dealing with uncertainty}
