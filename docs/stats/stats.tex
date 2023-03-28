@@ -886,17 +886,20 @@ basicstyle=\ttfamily\small,
 
     \bigskip
 
-    Since we are graphing median execution times, Mood's median test is a natural choice.
+    Since we are graphing median execution times, Mood's median test
+    is a natural choice.
 
     \bigskip
 
     \begin{itemize}
     \item Non-parametric
       \begin{itemize}
-      \item ie, it doesn't rely on a particular distribution (eg Bell curve).
+      \item ie, it doesn't rely on a particular distribution (eg Bell
+        curve).
       \item Our data is clearly doesn't follow a nice distribution.
       \end{itemize}
-    \item Tests whether the difference in the medians between two samples is due to noise.
+    \item Tests whether the difference in the medians between two
+      samples is due to noise.
     \end{itemize}
 
 \end{frame}
@@ -910,15 +913,17 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item Mann-Whitney U test
     \begin{itemize}
-    \item Tests whether a random time from one case tends to be larger than a random time from the
-      other case.
+    \item Tests whether a random time from one case tends to be larger
+      than a random time from the other case.
     \item Also non-parametric
     \end{itemize}
   \item Student's t-test
     \begin{itemize}
-    \item Tests whether the difference means of the two cases are due to noise or not.
+    \item Tests whether the difference means of the two cases are due
+      to noise or not.
     \item Assumptions are made about the underlying distribution.
-    \item By the central limit theorem, we do get closer to normality with more samples!
+    \item By the central limit theorem, we do get closer to normality
+      with more samples!
     \item Rule of thumb seems to be that we need $\geq{}100$ samples.
     \end{itemize}
   \end{itemize}
