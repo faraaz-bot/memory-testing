@@ -539,7 +539,9 @@ basicstyle=\ttfamily\small,
     \item Load two versions of the implementation into the same executable
       \begin{itemize}
       \item How?  Abuse \texttt{dload}!
-      \item Libraries must not depend on other shared libraries: \texttt{-DSINGLELIB} in rocFFT.
+      \item Libraries must not depend on other shared libraries:
+        \texttt{-DSINGLELIB} in rocFFT, or \texttt{dload} with
+        namespace.
       \end{itemize}
     \item We can now guarantee that the environments are identical.
     \end{itemize}
@@ -826,9 +828,13 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Uncertainty quantification: speedup}
 
-  We're also interested in quantifying uncertainty for the speedup.
 
-  FIXME: Describe how do we do this.
+  \begin{itemize}
+  \item Randomly select a time foreach case.
+  \item Compute the ratio.
+  \item Do this $\approx{}2000$ times.
+  \item The confidence interval is the middle percentile.
+  \end{itemize}
   
   %./rocfft-perf post ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/doc ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/a ~/sync/amd/ntrial/ixt-hq-107/seq/foot/8192/aa --measure median --confidence bootstrap
 
@@ -836,9 +842,6 @@ basicstyle=\ttfamily\small,
 
     \begin{center}
       \includegraphics[width=0.5\textwidth]{pdf/speedup.pdf}
-    \end{center}
-    \begin{center}
-      Speedup with 95\% interval from bootstrap resampling.
     \end{center}
   
 \end{frame}
