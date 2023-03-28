@@ -933,53 +933,121 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Statistical tests}
+  \frametitle{Multiple-Hypothesis tests}
 
-  Multiple hypothesis testing
+  In particular, we do multiple-hypothesis testing.
 
-  FIXME: write
-  
+  \bigskip
 
-    discuss p-hacking
+  For each test, we get a $p$ value.
+  \begin{itemize}
+  \item Sometimes, the noise correlates with the case.
+  \item So, sometimes, our test gives us a significant $p$ value.
+  \item If we do enough tests, something will end up significant.
+  \end{itemize}
 
-    Bonferroni correction
+  \bigskip
 
-    Empirical distribution testing
+  These false-positives are known as type-1 errors.
 
-  
+  \bigskip
+
+  We do not want to $p$-hack ourselves.
+
 \end{frame}
   
+\begin{frame}
+  \frametitle{Multiple-Hypothesis tests}
+
+  \begin{center}
+    How to avoid getting $p$-hacked:
+  \end{center}
+
+  \bigskip
+
+  Bonferroni correction:
+  \begin{itemize}
+  \item For $N$ tests, use $p/N$ instead of $p$.
+  \item We then expect a stable false-positive rate close to $p$.
+  \item Smaller $N$ is better - try and find an independent yet
+    representative test suite.
+  \end{itemize}
+
+  \bigskip
+  Empirical distribution testing
+  \begin{itemize}
+  \item We can use the observed distributions as a baseline.
+  \item More complicated; future work if we need it.
+  \end{itemize}
+  
+\end{frame}
 
 \begin{frame}
-  \frametitle{Statistical tests}
+   \frametitle{Statistical tests: results}
 
+   Test suite:
+   \begin{itemize}
+   \item Batched 1D transforms with a constant memory footprint.
+   \item Ranging from $2^{25}$ to $2^{29}$ elements.
+   \item Complex, real/complex, single and double precision.
+   \end{itemize}
 
-    Ref: FFTW talking about jitter.
+   \bigskip
 
-    Ref: collective operations which handle jitter (eg alltoall - what
-    if one process is slow?)
-    
-    Ref: Lelbach (no null-hypothesis testing), gperf (std dev)
+   This gives us reasonably sized problems - too small, and jitter is
+   even worse.
 
-    Show: single test.
-    
-    Show: as we increase bins in histogram, things get discrete.
-    
-    
+   \bigskip
+
+   We look at the false-postivie rate on a variety of platforms.
+   
 \end{frame}
-
 
 
 \begin{frame}
-    \frametitle{Multiple hypothesis testing}
+   \frametitle{Statistical tests: MI100}
 
-    Moods vs MWU vs ttest
-
-    FIXME: Refer: that paper that talks about additive-only noise.
-
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_sep.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_seq.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_alt.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_ran.dat
+   % asy fpr.asy -u 'filelist="../data/ixt_hq_107_sep.dat,../data/ixt_hq_107_seq.dat,../data/ixt_hq_107_alt.dat,../data/ixt_hq_107_ran.dat";legendlist="separate,sequential,alternating,random"' -o ixt_hq_107_fpr.pdf -f pdf
+   
+      \begin{center}
+        \includegraphics[width=0.9\textwidth]{asy/ixt_hq_107_fpr.pdf}
+      \end{center}
+   
 \end{frame}
 
+\begin{frame}
+   \frametitle{Statistical tests: Lockhart MI250X A0}
 
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_sep.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_seq.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_alt.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_ran.dat
+   % asy fpr.asy -u 'filelist="../data/x1000c0s6b0n0_sep.dat,../data/x1000c0s6b0n0_seq.dat,../data/x1000c0s6b0n0_alt.dat,../data/x1000c0s6b0n0_ran.dat";legendlist="separate,sequential,alternating,random"' -o x1000c0s6b0n0_fpr.pdf -f pdf
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/x1000c0s6b0n0_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+\begin{frame}
+  \frametitle{Statistical tests: Lockhart MI250X A1}
+
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_sep.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_seq.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_alt.dat
+   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_ran.dat
+   % asy fpr.asy -u 'filelist="../data/x1000c0s5b0n0_sep.dat,../data/x1000c0s5b0n0_seq.dat,../data/x1000c0s5b0n0_alt.dat,../data/x1000c0s5b0n0_ran.dat";legendlist="separate,sequential,alternating,random"' -o x1000c0s5b0n0_fpr.pdf -f pdf
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/x1000c0s5b0n0_fpr.pdf}
+   \end{center}
+   
+\end{frame}
 \begin{frame}
     \frametitle{Noise vs hardware}
 
@@ -995,9 +1063,18 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
+  \frametitle{Use all the data}
+
+  FIXME: show that we can also detect changes.
+  
+\end{frame}
+
+\begin{frame}
     \frametitle{Roberts and Son Colocation Services}
 
     A far better solution than what we have now.
+
+    FIXME: pics, etc.
     
 \end{frame}
 
@@ -1015,6 +1092,33 @@ basicstyle=\ttfamily\small,
     
 \end{frame}
 
+
+\begin{frame}
+  \frametitle{Other work}
+
+  FIXME: Refer: that paper that talks about additive-only noise.
+
+    Ref: FFTW talking about jitter.
+  
+    Ref: Lelbach (no null-hypothesis testing), gperf (std dev)
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Future work}
+
+  FFTs are bandwidth-limited.  What about compute-bound?
+
+  \bigskip
+
+  Re-visit CPUs: if we dive in, what results to we get?
+
+  \bigskip
+
+  Multi-device: when we go off-device, what kind of noise profile do we get?
+  
+\end{frame}
+
 \begin{frame}
     \frametitle{Use all the data}
 
@@ -1029,5 +1133,24 @@ basicstyle=\ttfamily\small,
     Make use of prior knowledge and uncertainty.
 
 \end{frame}
+
+\begin{frame}
+  \frametitle{Jitter and performance}
+
+
+    Ref: collective operations which handle jitter (eg alltoall - what
+    if one process is slow?)
+
+    Ref: papers dealing with jitter in collective communication.
+    
+    
+\end{frame}
+
+\begin{frame}
+  \frametitle{FIXME}
+
+  Acknowledgements
+  
+  \end{frame}
 
 \end{document}
