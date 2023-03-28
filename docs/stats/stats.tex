@@ -844,22 +844,106 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-    \frametitle{Dealing with uncertainty}
-   
-    Motivation: noise in statistical tests.
+    \frametitle{Uncertainty quantification}
 
-    TODO: talk about how now we have iid data, we can apply tests.
-    Let's also look at the data.
+    Summary:
+
+    \bigskip
+    \begin{itemize}
+    \item Median is more robust than the mean
+    \item Bootstrap resampling gives a robust confidence interval
+    \item Speedup still has a lot of noise, but it's at least consistent.
+    \end{itemize}
     
-    Show: histogram of times.
+\end{frame}
 
-    Show: histogram of speedups.
+\begin{frame}
+    \frametitle{Statistical tests}
+
+    We now have:
+    \begin{itemize}
+    \item A good experimental design.
+    \item A way to quantify uncertainty.
+    \end{itemize}
+
+    \bigskip
+
+    We still want:
+    \begin{itemize}
+    \item A test to detect performance changes.
+    \end{itemize}
     
 \end{frame}
 
 
 \begin{frame}
     \frametitle{Statistical tests}
+
+    We have a variety of tests to look choose from.
+
+    \bigskip
+
+    Since we are graphing median execution times, Mood's median test is a natural choice.
+
+    \bigskip
+
+    \begin{itemize}
+    \item Non-parametric
+      \begin{itemize}
+      \item ie, it doesn't rely on a particular distribution (eg Bell curve).
+      \item Our data is clearly doesn't follow a nice distribution.
+      \end{itemize}
+    \item Tests whether the difference in the medians between two samples is due to noise.
+    \end{itemize}
+
+\end{frame}
+    
+
+\begin{frame}
+  \frametitle{Statistical tests}
+
+  Other intersting statistical tests:
+  \bigskip
+  \begin{itemize}
+  \item Mann-Whitney U test
+    \begin{itemize}
+    \item Tests whether a random time from one case tends to be larger than a random time from the
+      other case.
+    \item Also non-parametric
+    \end{itemize}
+  \item Student's t-test
+    \begin{itemize}
+    \item Tests whether the difference means of the two cases are due to noise or not.
+    \item Assumptions are made about the underlying distribution.
+    \item By the central limit theorem, we do get closer to normality with more samples!
+    \item Rule of thumb seems to be that we need $\geq{}100$ samples.
+    \end{itemize}
+  \end{itemize}
+
+ 
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Statistical tests}
+
+  Multiple hypothesis testing
+
+  FIXME: write
+  
+
+    discuss p-hacking
+
+    Bonferroni correction
+
+    Empirical distribution testing
+
+  
+\end{frame}
+  
+
+\begin{frame}
+  \frametitle{Statistical tests}
 
 
     Ref: FFTW talking about jitter.
@@ -876,18 +960,6 @@ basicstyle=\ttfamily\small,
     
 \end{frame}
 
-
-\begin{frame}
-    \frametitle{Multiple hypothesis testing}
-
-    discuss p-hacking
-
-    Bonferroni correction
-
-    Empirical distribution testing
-    
-    
-\end{frame}
 
 
 \begin{frame}
