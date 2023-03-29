@@ -1,6 +1,6 @@
 import graph;
 
-size(200, 150, IgnoreAspect);
+size(600, 300, IgnoreAspect);
 
 scale(Log,Linear);
 
@@ -51,11 +51,19 @@ for(int i = 0; i < filenames.length; ++i) {
 
     real[] x=a[0];
     real[] y=a[1];
+
+    pen p = Pen(i);
+    if(i == 2)
+        p = darkgreen;
     
-    draw(graph(x,y), Pen(i), texify(legends[i]));
+    draw(graph(x,y), p, texify(legends[i]), MarkFill[0]);
 }
 
-xaxis("$N$",BottomTop,LeftTicks);
+
+string[] numbers={"8","16","32","64","128","256","512","1024","2048","4096","8192","16384","32768"};
+
+xaxis("$N$",BottomTop,LeftTicks(new string(real x) { return numbers[round(log(x) / log(2)  - 3)];},
+                                new real[] {8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768}));
 yaxis("false positive rate",LeftRight,RightTicks);
 
 
