@@ -3,6 +3,10 @@
 
 %\mode<presentation>
 
+\usepackage{natbib}
+\usepackage{bibentry}
+\bibliographystyle{plain}
+
 \usepackage{graphicx}
 \usepackage{breqn}
 \usepackage{bm}
@@ -158,6 +162,8 @@ basicstyle=\ttfamily\small,
 \setbeamertemplate{navigation symbols}{} 
 
 \begin{document}
+
+\nobibliography{../refs.bib}
 
 \setbeamertemplate{headline}{}
 %\setbeamertemplate{footline}{}
@@ -1199,9 +1205,20 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Longdtidunal data}
 
-  FIXME  
+  We run lots of tests - we have lots of data.
+
+  \bigskip
+
+  We can view the test data as a time series.
+
+  \bigskip
+
+  The data should look piecewise constant - discontinuties imply performance changes.
+
+  \bigskip
+
+  Perhaps we can detect this?
   
-    Longtidudinal data: how can we use this?
 
 \end{frame}
 
@@ -1210,11 +1227,19 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Other Libraries}
 
-  FIXME
-  
-  FFTs are bandwidth-limited.  What about compute-bound?
+  We have tested on rocFFT
+  \begin{itemize}
+  \item Bandwidth limited
+  \item Reasonable memory access patterns.
+  \end{itemize}
 
   \bigskip
+
+  How does noise look on with other algorithms?
+  \begin{itemize}
+  \item rocBLAS - compute bound
+  \item rocSPARSE - more complex memory access patterns
+  \end{itemize}
 
   
 \end{frame}
@@ -1222,36 +1247,69 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Other Hardware}
 
-  FIXME
+  The results here are (basically) all GPU.
   
-  Re-visit CPUs: if we dive in, what results to we get?
+  \bigskip
+
+  What about on:
+  \begin{itemize}
+  \item CPU?
+  \item Multi-GPU?
+  \item Over MPI?
+  \end{itemize}
 
   \bigskip
 
-  Multi-device: when we go off-device, what kind of noise profile do we get?
+  Also, what's up with the NVIDIA devices?
   
 \end{frame}
 
 \begin{frame}
-    \frametitle{Performance Tuning}
+  \frametitle{Performance Tuning}
 
-    FIXME
-    
-    Baesean Model 
-    
-    Make use of prior knowledge and uncertainty.
+  Statistical tests give us a $p$-value:
+  \begin{itemize}
+  \item The probability that the results are due to random noise.
+  \end{itemize}
 
+  \bigskip
+
+  We talk about algorithm performance in a similar fashion:
+  \begin{itemize}
+  \item ``Method A usually gives better performance.'
+  \end{itemize}
+
+  \bigskip
+
+  We can use this prior knowledge in conjunction with statistical tests:
+  \begin{itemize}
+  \item Our prior knowledge is that A is better than B with probability $p_0$.
+  \item A stastical test gives us a new $p$
+  \item Combine $p_0$ and $p$ to give us a new probability $p'$.
+  \end{itemize}
+
+  \bigskip
+  Some sofrt of Bayesian algorithm prediction.
+  
 \end{frame}
 
 \begin{frame}
   \frametitle{Jitter and performance}
 
-  FIXME
-  
-    Ref: collective operations which handle jitter (eg alltoall - what
-    if one process is slow?)
+  Jitter also has serious performance implications on it own.
 
-    Ref: papers dealing with jitter in collective communication.
+  \medskip
+  
+  Collective operations: you need to wait for the slowest kernel.
+  \begin{itemize}
+  \item kernel synchronization
+  \item MPI/rccl collective operations 
+  \end{itemize}
+
+  \bigskip
+
+  Sample reference:\\
+  \bibentry{ferreira2008characterizing}
     
     
 \end{frame}
@@ -1261,11 +1319,6 @@ basicstyle=\ttfamily\small,
 
   FIXME: Acknowledgements
   
-  \end{frame}
-
-\begin{frame}
-  \frametitle{Other work}
-
 \end{frame}
 
 
