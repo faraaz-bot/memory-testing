@@ -1006,27 +1006,34 @@ basicstyle=\ttfamily\small,
 
 \begin{frame}
    \frametitle{Statistical tests: MI100}
-
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_sep.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_seq.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_alt.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/ixt-hq-107 -o ~/repo/rocfft-misc/docs/stats/data/ixt_hq_107_ran.dat
-   % asy fpr.asy -u 'filelist="../data/ixt_hq_107_sep.dat,../data/ixt_hq_107_seq.dat,../data/ixt_hq_107_alt.dat,../data/ixt_hq_107_ran.dat";legendlist="separate,sequential,alternating,random"' -o ixt_hq_107_fpr.pdf -f pdf
    
-      \begin{center}
-        \includegraphics[width=0.9\textwidth]{asy/ixt_hq_107_fpr.pdf}
-      \end{center}
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/ixt_hq_107_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+\begin{frame}
+  \frametitle{Statistical tests: MI100 with fixed clocks}
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/ixt-hq-107_clk_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+\begin{frame}
+   \frametitle{Statistical tests: MI100}
+   
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/ixt-hq-107_fpr_method.pdf}
+   \end{center}
    
 \end{frame}
 
 \begin{frame}
    \frametitle{Statistical tests: Lockhart MI250X A0}
 
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_sep.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_seq.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_alt.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/x1000c0s6b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s6b0n0_ran.dat
-   % asy fpr.asy -u 'filelist="../data/x1000c0s6b0n0_sep.dat,../data/x1000c0s6b0n0_seq.dat,../data/x1000c0s6b0n0_alt.dat,../data/x1000c0s6b0n0_ran.dat";legendlist="separate,sequential,alternating,random"' -o x1000c0s6b0n0_fpr.pdf -f pdf
 
    \begin{center}
      \includegraphics[width=0.9\textwidth]{asy/x1000c0s6b0n0_fpr.pdf}
@@ -1037,12 +1044,6 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Statistical tests: Lockhart MI250X A1}
 
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s sep -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_sep.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s seq -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_seq.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s alt -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_alt.dat
-   % ~/sync/amd/ntrial/ntrials_test.py -B -s ran -b ~/sync/amd/ntrial/x1000c0s5b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s5b0n0_ran.dat
-   % asy fpr.asy -u 'filelist="../data/x1000c0s5b0n0_sep.dat,../data/x1000c0s5b0n0_seq.dat,../data/x1000c0s5b0n0_alt.dat,../data/x1000c0s5b0n0_ran.dat";legendlist="separate,sequential,alternating,random"' -o x1000c0s5b0n0_fpr.pdf -f pdf
-
    \begin{center}
      \includegraphics[width=0.9\textwidth]{asy/x1000c0s5b0n0_fpr.pdf}
    \end{center}
@@ -1050,29 +1051,92 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Statistical tests: More more more}
+  \frametitle{Statistical tests: Crusher MI250X A1}
 
-    FIXME: more devices, more and also look at different statistical tests.
-    
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/crusher_fpr.pdf}
+   \end{center}
+   
 \end{frame}
 
 \begin{frame}
-    \frametitle{Noise vs hardware}
+  \frametitle{Statistical tests: Radeon 7}
 
-    Different AMD GPUs
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/char_fpr.pdf}
+   \end{center}
+   
+\end{frame}
 
-    lockhart vs Crusher
+\begin{frame}
+  \frametitle{Statistical tests: RTX 2060}
 
-    setting the clocks vs no
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/rtx2060_fpr.pdf}
+   \end{center}
+   
+\end{frame}
 
-    AMD vs NVIDIA
-    
+\begin{frame}
+  \frametitle{Statistical tests: V100}
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/ixt-rack-60_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+\begin{frame}
+  \frametitle{Statistical tests: My Laptop}
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/rocher_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Statistical tests: real change}
+
+  
+  \begin{center}
+    \includegraphics[width=0.9\textwidth]{asy/rixt-hq-107_crusher_fnr.pdf}
+  \end{center}
+  
+  Comparison of MI100 and MI250X
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Statistical tests: Summary}
+
+  \begin{center}
+    Lots of different behaviour!
+  \end{center}
+  
+  \bigskip
+  
+  \begin{itemize}
+  \item Randomization reduces the false-positive rate (FPR).
+  \item Moods median test seems most reliable.
+  \item FPR increases with more samples.
+  \item Different devices have diffferent FPRs:
+    \begin{itemize}
+    \item MI100, Radeon 7: moderate
+    \item MI250X: low.  The DOE is a better host than HPE.
+    \item NVIDIA: quite high!  (Randomization doesn't help?)
+    \item My laptop is is the best development platform.
+    \item Fixing clocks doesn't help.
+    \end{itemize}
+  \end{itemize}
+      
 \end{frame}
 
 
 \begin{frame}
   \frametitle{Use all the data}
-
+  
   FIXME: show that we can also detect changes.
   
 \end{frame}
