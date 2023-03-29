@@ -272,9 +272,12 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Problem}
+  \frametitle{Relevant Work}
 
+  FIXME: Refer: that paper that talks about additive-only noise.
 
+  Ref: FFTW talking about jitter.
+  
   \bigskip
   
   Two relevant CppCon talks (2015):
@@ -1099,13 +1102,27 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Statistical tests: real change}
 
+  Comparison of MI100 and MI250X: they are all actually different.
   
   \begin{center}
-    \includegraphics[width=0.9\textwidth]{asy/rixt-hq-107_crusher_fnr.pdf}
+    \includegraphics[width=0.9\textwidth]{asy/ixt-hq-107_crusher_fnr.pdf}
   \end{center}
   
-  Comparison of MI100 and MI250X
+  Hard to plot: the false-negative rate is just zero.
   
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Statistical tests: real change}
+  
+  Comparison of MI100 and MI250X: they are all actually different.
+  
+  %asy -f pdf /home/mal/repo/rocfft/scripts/perf/datagraphs.asy -u 'filenames="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/16384/a/footprint2exp27_1D_double_backward_complex_out-of-place.mdat,/home/mal/sync/amd/ntrial/crusher/sep/foot/16384/a/footprint2exp27_1D_double_backward_complex_out-of-place.mdat";secondary_filenames="/home/mal/sync/amd/ntrial/comp/ixt-hq-107_crusher/a-over-a-footprint2exp27_1D_double_backward_complex_out-of-place.sdat";dolegend=false' -o ixt-hq-107_crusher_example.pdf
+  \begin{center}
+    \includegraphics[width=0.6\textwidth]{pdf/ixt-hq-107_crusher_example.pdf}
+  \end{center}
+
 \end{frame}
 
 \begin{frame}
@@ -1123,22 +1140,36 @@ basicstyle=\ttfamily\small,
   \item FPR increases with more samples.
   \item Different devices have diffferent FPRs:
     \begin{itemize}
-    \item MI100, Radeon 7: moderate
+    \item MI100, Radeon7: moderate
     \item MI250X: low.  The DOE is a better host than HPE.
     \item NVIDIA: quite high!  (Randomization doesn't help?)
     \item My laptop is is the best development platform.
     \item Fixing clocks doesn't help.
     \end{itemize}
   \end{itemize}
-      
+
+  We can drive the false-positive rate down by using a different significance context.
+  
 \end{frame}
 
 
 \begin{frame}
-  \frametitle{Use all the data}
-  
-  FIXME: show that we can also detect changes.
-  
+    \frametitle{Recommendations for Performance testing}
+
+    \begin{itemize}
+    \item Randomization helps
+      \medskip
+    \item Use minimal orthogonal set of tests
+      \medskip
+    \item Get enough samples ($\geq{}32$?)
+      \medskip
+    \item Use Mood's median test and the Bonferroni correction.
+      \medskip
+    \item Pick your hardware.
+      \medskip
+    \item Tune the significance threshold.
+    \end{itemize}
+    
 \end{frame}
 
 \begin{frame}
@@ -1152,37 +1183,47 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-    \frametitle{Recommendations for Performance testing}
+  \frametitle{Future Work}
 
-    Randomization
-
-    Minimal orthogonal set of tests (best of luck eh)
-
-    Randomize, get enough samples, use Bonferroni.
-
-    Pick your hardware.
-    
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Other work}
-
-  FIXME: Refer: that paper that talks about additive-only noise.
-
-    Ref: FFTW talking about jitter.
+  \begin{itemize}
+  \item Using longdtidunal data
+  \item Testing on other libraries
+  \item Look at more hardware
+  \item Performance tuning
+  \item Jitter and performance
+  \end{itemize}
   
-    Ref: Lelbach (no null-hypothesis testing), gperf (std dev)
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Longdtidunal data}
+
+  FIXME  
+  
+    Longtidudinal data: how can we use this?
+
 \end{frame}
 
 
-\begin{frame}
-  \frametitle{Future work}
 
+\begin{frame}
+  \frametitle{Other Libraries}
+
+  FIXME
+  
   FFTs are bandwidth-limited.  What about compute-bound?
 
   \bigskip
 
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Other Hardware}
+
+  FIXME
+  
   Re-visit CPUs: if we dive in, what results to we get?
 
   \bigskip
@@ -1192,16 +1233,12 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-    \frametitle{Use all the data}
+    \frametitle{Performance Tuning}
 
-    Longtidudinal data: how can we use this?
-
-\end{frame}
-
-
-\begin{frame}
-    \frametitle{Baesean Model for Performance Tuning}
-
+    FIXME
+    
+    Baesean Model 
+    
     Make use of prior knowledge and uncertainty.
 
 \end{frame}
@@ -1209,7 +1246,8 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Jitter and performance}
 
-
+  FIXME
+  
     Ref: collective operations which handle jitter (eg alltoall - what
     if one process is slow?)
 
@@ -1219,10 +1257,16 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{FIXME}
+  \frametitle{Acknowledgements}
 
-  Acknowledgements
+  FIXME: Acknowledgements
   
   \end{frame}
+
+\begin{frame}
+  \frametitle{Other work}
+
+\end{frame}
+
 
 \end{document}
