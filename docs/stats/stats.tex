@@ -287,8 +287,10 @@ basicstyle=\ttfamily\small,
     \end{itemize}
   \item \href{https://www.youtube.com/watch?v=zWxSZcpeS8Q}{Bryce Adelstein-Lelbach “Benchmarking C++ Code"}
     \begin{itemize}
-    \item FIXME: main points
-    \item Macro benchmarks
+    \item jitter: maybe from pipeline fill, difference in mem/sys clock, scaling, shared caches, etc
+    \item Assumes a normal distribution (\textinterrobang{})
+    \item Few nodes with big delay
+    \item Macro benchmarks; uses stats, but no hypothesis testing
     \end{itemize}
   \item \href{https://www.youtube.com/watch?v=nXaxk27zwlk}{Chandler Carruth ``Tuning C++: Benchmarks, and CPUs, and Compilers! Oh My!''}
     \begin{itemize}
@@ -1087,6 +1089,10 @@ basicstyle=\ttfamily\small,
    \begin{center}
      \includegraphics[width=0.9\textwidth]{asy/ixt-rack-60_fpr.pdf}
    \end{center}
+
+   % sample histogram for v100:
+   % asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' histogram.asy -V
+
    
 \end{frame}
 
