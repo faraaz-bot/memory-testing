@@ -139,7 +139,7 @@ basicstyle=\ttfamily\small,
 
 
 
-\def\thetitle{rocFFT}
+\def\thetitle{So you think you're fast}
 \def\thesubtitle{Statistical Methods for Performance Analysis}
 \def\theauthor{rocFFT group}
 \def\theauthorinstitute{AMD}
@@ -202,6 +202,30 @@ basicstyle=\ttfamily\small,
 
 
 
+
+\begin{frame}
+  \frametitle{\thetitle{}}
+
+  \begin{center}
+    \thesubtitle{}
+  \end{center}
+
+  \bigskip
+
+  
+  \begin{center}
+    \begin{minipage}[b][45mm][t]{80mm}
+      Jitter, the random variation of exeuction time on compute
+      devices, is a fact of life in high-performance computing.  This
+      is particularly onerous for for performance tuning and detecting
+      performance changes.  In this presentation, I present an
+      experimental design and matching statistical techniques which
+      help alleviate this burden, allowing us to use hypothesis
+      testing to automate performance decisions.
+    \end{minipage}
+  \end{center}
+  
+\end{frame}
 
 \begin{frame}
   \frametitle{Motivation}
@@ -1105,12 +1129,27 @@ basicstyle=\ttfamily\small,
      \includegraphics[width=0.9\textwidth]{asy/ixt-rack-60_fpr.pdf}
    \end{center}
 
-   % sample histogram for v100:
-   % asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' histogram.asy -V
 
    
 \end{frame}
 
+\begin{frame}
+  \frametitle{Statistical tests: V100}
+
+   % sample histogram for v100:
+   % asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat,/home/mal/sync/amd/ntrial/ixt-rack-60/ran/foot/8192/aa/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' histogram.asy -o histogram_v100.pdf
+
+  
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{pdf/histogram_v100.pdf}
+   \end{center}
+
+   \begin{center}
+     V100 seems to have very discrete timing data.
+   \end{center}
+   
+\end{frame}
+   
 \begin{frame}
   \frametitle{Statistical tests: My Laptop}
 
