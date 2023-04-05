@@ -29,5 +29,5 @@ xlimits(0,itmax);
 ylimits(0,1);
 
 
-xaxis("iteration",BottomTop, Arrow);
+xaxis("iteration",Bottom, Arrow, xmax=itmax+0.2);
 yaxis("random weight", RightTicks(1), ymin=0, ymax=1);
