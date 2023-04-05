@@ -215,7 +215,7 @@ basicstyle=\ttfamily\small,
   
   \begin{center}
     \begin{minipage}[b][45mm][t]{80mm}
-      Jitter, the random variation of exeuction time on compute
+      Jitter, the random variation of execution time on compute
       devices, is a fact of life in high-performance computing.  This
       is particularly onerous for for performance tuning and detecting
       performance changes.  In this presentation, I present an
@@ -426,7 +426,7 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Problem}
   \begin{center}
-    \includegraphics[width=0.5\textwidth]{pdf/timeseries.pdf}
+    \includegraphics[width=0.7\textwidth]{pdf/timeseries.pdf}
   \end{center}
   %asy -f pdf -u'filelist="/home/mal/sync/amd/ntrial/ixt-hq-107/sep/foot/8192/a/footprint2exp25_1D_double_forward_complex_out-of-place.dat";token="complex_forward_len_65536_double_op_batch_512_istride_1_CI_ostride_1_CI_idist_65536_odist_65536_ioffset_0_0_ooffset_0_0"' timeseries.asy  -o ~/repo/rocfft-misc/docs/stats/pdf/timeseries.pdf
 
@@ -503,7 +503,7 @@ basicstyle=\ttfamily\small,
 
     Problem:
     \begin{itemize}
-    \item Performance tests are suprisingly noisy.
+    \item Performance tests are surprisingly noisy.
     \item The noise isn't the same over tests
     \end{itemize}
         
@@ -537,7 +537,7 @@ basicstyle=\ttfamily\small,
 
     Our experimental setup:
     \begin{itemize}
-    \item Intitialize with rocRand/hipRand
+    \item Initialize with rocRand/hipRand
     \item Run on the same node
     \item Separate processes, one right after the other.
     \end{itemize}
@@ -644,7 +644,7 @@ basicstyle=\ttfamily\small,
 
   \bigskip
   
-  Therefore, the noise is time-correlcated.
+  Therefore, the noise is time-correlated.
 
   \bigskip
 
@@ -705,7 +705,7 @@ basicstyle=\ttfamily\small,
     \item Random case choice maximally reduces correlation.
     \item For $N$ samples, either:
       \begin{itemize}
-      \item randomly pick a case until we have at lesat $N$ samples per case,
+      \item randomly pick a case until we have at least $N$ samples per case,
       \item or take the sequential case and shuffle the order.
       \end{itemize}
     \end{itemize}
@@ -875,7 +875,7 @@ basicstyle=\ttfamily\small,
 
 
   \begin{itemize}
-  \item Randomly select a time foreach case.
+  \item Randomly select a time for each case.
   \item Compute the ratio.
   \item Do this $\approx{}2000$ times.
   \item The confidence interval is the middle percentile.
@@ -953,7 +953,7 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Statistical tests}
 
-  Other intersting statistical tests:
+  Other interesting statistical tests:
   \bigskip
   \begin{itemize}
   \item Mann-Whitney U test
@@ -1044,7 +1044,7 @@ basicstyle=\ttfamily\small,
 
    \bigskip
 
-   We look at the false-postivie rate on a variety of platforms.
+   We look at the false-positive rate on a variety of platforms.
    
 \end{frame}
 
@@ -1114,6 +1114,15 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
+  \frametitle{Statistical tests: Navi 31}
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/cgy-alakazam_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+\begin{frame}
   \frametitle{Statistical tests: RTX 2060}
 
    \begin{center}
@@ -1128,8 +1137,6 @@ basicstyle=\ttfamily\small,
    \begin{center}
      \includegraphics[width=0.9\textwidth]{asy/ixt-rack-60_fpr.pdf}
    \end{center}
-
-
    
 \end{frame}
 
@@ -1199,9 +1206,10 @@ basicstyle=\ttfamily\small,
   \item Randomization reduces the false-positive rate (FPR).
   \item Moods median test seems most reliable.
   \item FPR increases with more samples.
-  \item Different devices have diffferent FPRs:
+  \item Different devices have different FPRs:
     \begin{itemize}
     \item MI100, Radeon7: moderate
+    \item Navi 21: low
     \item MI250X: low.  The DOE is a better host than HPE.
     \item NVIDIA: quite high!  (Randomization doesn't help?)
     \item My laptop is is the best development platform.
@@ -1247,7 +1255,7 @@ basicstyle=\ttfamily\small,
   \frametitle{Future Work}
 
   \begin{itemize}
-  \item Using longdtidunal data
+  \item Using longitudinal data
   \item Testing on other libraries
   \item Look at more hardware
   \item Performance tuning
@@ -1258,7 +1266,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Longdtidunal data}
+  \frametitle{Longitudinal data}
 
   We run lots of tests - we have lots of data.
 
@@ -1268,7 +1276,7 @@ basicstyle=\ttfamily\small,
 
   \bigskip
 
-  The data should look piecewise constant - discontinuties imply performance changes.
+  The data should look piece-wise constant - discontinuities imply performance changes.
 
   \bigskip
 
@@ -1339,12 +1347,25 @@ basicstyle=\ttfamily\small,
   We can use this prior knowledge in conjunction with statistical tests:
   \begin{itemize}
   \item Our prior knowledge is that A is better than B with probability $p_0$.
-  \item A stastical test gives us a new $p$
+  \item A statistical test gives us a new $p$
   \item Combine $p_0$ and $p$ to give us a new probability $p'$.
   \end{itemize}
 
   \bigskip
-  Some sofrt of Bayesian algorithm prediction.
+  Some sort of Bayesian algorithm prediction.
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Performance Tuning}
+
+  This model is known as a multi-armed bandit.
+
+  The solution algorithm is called Thompson Sampling.
+
+  \begin{center}
+    \includegraphics[width=0.9\textwidth]{asy/thompsonsampling.pdf}
+  \end{center}
   
 \end{frame}
 
@@ -1381,3 +1402,11 @@ basicstyle=\ttfamily\small,
 
 
 \end{document}
+
+% LocalWords:  bg fg frametitle footline lR Jitter Benchmarking FFTW
+% LocalWords:  InsideHPC Matteo Frigo jitter CPUs Adelstein Lelbach
+% LocalWords:  mem sys Carruth Ok tex radeonruby definecolor rgb de
+% LocalWords:  rocRand hipRand dload DSINGLELIB rocFFT namespace eg
+% LocalWords:  decorrelate gflops resampling ie Bonferroni Lockhart
+% LocalWords:  Radeon Navi RTX FPR FPRs HPE Colocation FIXME rocBLAS
+% LocalWords:  rocSPARSE MPI rccl ferreira Kai Lukowiak Yeaman

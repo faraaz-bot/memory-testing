@@ -1,6 +1,6 @@
 import graph;
 
-size(600, 300, IgnoreAspect);
+size(450, 250, IgnoreAspect);
 
 scale(Log,Linear);
 
