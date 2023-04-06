@@ -251,7 +251,9 @@ basicstyle=\ttfamily\small,
       \item Detect regressions
       \item Tune implementations
       \end{itemize}
-
+      
+      \pause
+      
       \medskip
       The graph shows a comparison:
       \begin{itemize}
@@ -479,16 +481,18 @@ basicstyle=\ttfamily\small,
     Always use a \textcolor{radeonruby}{red} pen to colour your data.
   \end{center}
 
+  \pause
+  
   \medskip
   
   \begin{itemize}
   \item \textcolor{radeonruby}{Red}-labelled data has lower execution time.
-    \medskip
+    \medskip       \pause
   \item \textcolor{radeonruby}{Robust} over three orders of magnitude
     of sample sizes.
-    \medskip
+    \medskip       \pause
   \item Appropriate \textcolor{radeonruby}{AMD} branding.
-    \medskip
+    \medskip       \pause
   \item \texttt{\textbackslash{}definecolor\{\textcolor{radeonruby}{radeonruby}\}\{rgb\}\{0.87, 0, 0.19\}}
   \end{itemize}
 
@@ -507,7 +511,7 @@ basicstyle=\ttfamily\small,
     \item The noise isn't the same over tests
     \end{itemize}
         
-    \bigskip
+    \bigskip       \pause
 
     Solution:
     \begin{itemize}
@@ -523,10 +527,10 @@ basicstyle=\ttfamily\small,
   
     \begin{itemize}    
     \item Noise (aka jitter) is a fact of life.
-      \medskip
+      \bigskip
     \item We can't do statistical tests if the noise isn't identically
       distributed.
-      \medskip
+      \bigskip
     \item Some runs get more noise - why?  What can we do?
     \end{itemize}
   
@@ -542,7 +546,7 @@ basicstyle=\ttfamily\small,
     \item Separate processes, one right after the other.
     \end{itemize}
 
-    \bigskip
+    \bigskip       \pause
 
     \begin{center}
       ``Separated'' experimental design:\\
@@ -591,7 +595,7 @@ basicstyle=\ttfamily\small,
     \item We can now guarantee that the environments are identical.
     \end{itemize}
 
-    \bigskip
+    \bigskip       \pause
     
     New experimental setup:
     \begin{center}
@@ -646,7 +650,7 @@ basicstyle=\ttfamily\small,
   
   Therefore, the noise is time-correlated.
 
-  \bigskip
+  \bigskip       \pause
 
   To decorrelate noise and test case, we must de-correlate test case
   with time.
@@ -748,7 +752,7 @@ basicstyle=\ttfamily\small,
     \item How should we evaluate our results?
     \end{itemize}
 
-    \bigskip
+    \bigskip       \pause
     
     What we want:
     \begin{itemize}
@@ -805,7 +809,7 @@ basicstyle=\ttfamily\small,
       \end{itemize}
     \end{itemize}
 
-    %\pause
+    \pause
     
     \bigskip
     
@@ -899,7 +903,9 @@ basicstyle=\ttfamily\small,
     \bigskip
     \begin{itemize}
     \item Median is more robust than the mean
+      \medskip
     \item Bootstrap resampling gives a robust confidence interval
+      \medskip
     \item Speedup still has a lot of noise, but it's at least consistent.
     \end{itemize}
     
@@ -962,6 +968,7 @@ basicstyle=\ttfamily\small,
       than a random time from the other case.
     \item Also non-parametric
     \end{itemize}
+          \pause
   \item Student's t-test
     \begin{itemize}
     \item Tests whether the difference means of the two cases are due
@@ -1200,12 +1207,12 @@ basicstyle=\ttfamily\small,
     Lots of different behaviour!
   \end{center}
   
-  \bigskip
+  \bigskip  \pause
   
   \begin{itemize}
   \item Randomization reduces the false-positive rate (FPR).
   \item Moods median test seems most reliable.
-  \item FPR increases with more samples.
+  \item FPR increases with more samples. \pause
   \item Different devices have different FPRs:
     \begin{itemize}
     \item MI100, Radeon7: moderate
@@ -1230,7 +1237,7 @@ basicstyle=\ttfamily\small,
       \medskip
     \item Use minimal orthogonal set of tests
       \medskip
-    \item Get enough samples ($\geq{}32$?)
+    \item Get enough samples ($\geq{}16$? $\geq{}32$?)
       \medskip
     \item Use Mood's median test and the Bonferroni correction.
       \medskip
@@ -1260,9 +1267,13 @@ basicstyle=\ttfamily\small,
 
   \begin{itemize}
   \item Using longitudinal data
+    \medskip
   \item Testing on other libraries
+    \medskip
   \item Look at more hardware
+    \medskip
   \item Performance tuning
+    \medskip
   \item Jitter and performance
   \end{itemize}
   
@@ -1280,7 +1291,8 @@ basicstyle=\ttfamily\small,
 
   \bigskip
 
-  The data should look piece-wise constant - discontinuities imply performance changes.
+  The data should look piece-wise constant - discontinuities imply
+  performance changes.
 
   \bigskip
 
@@ -1343,7 +1355,7 @@ basicstyle=\ttfamily\small,
 
   We talk about algorithm performance in a similar fashion:
   \begin{itemize}
-  \item ``Method A usually gives better performance.'
+  \item ``Method A usually gives better performance.''
   \end{itemize}
 
   \bigskip
