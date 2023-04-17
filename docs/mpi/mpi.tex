@@ -37,6 +37,11 @@
 %% \renewcommand{\}}{\right}}
 
 
+\usepackage{natbib}
+\usepackage{bibentry}
+\bibliographystyle{plain}
+
+
 \title{MPI with rocFFT}
 \author{rocFFT}
 
@@ -248,7 +253,7 @@ for a message size of $N^3/P^2$. The total communication size is
       \hline
       Brick-pencil  & $N^3/P^{5/3}$ & $P^{1/3}$          \\
       Brick-slab    & $N^3/P^{5/3}$ & $P^{1/3}$          \\
-      Pencil-pencil & $N^3/P^{3/2}$ & $\sqrt{P}$        \\
+      Pencil-pencil & $N^3/P^{3/2}$ & $P^{1/2}$        \\
       Pencil-slab   & $N^3/P^2$    & $P$               \\
       Slab-slab     & $N^3/P^2$    & $P$               \\
       \hline
@@ -256,15 +261,147 @@ for a message size of $N^3/P^2$. The total communication size is
   \end{table}
 \end{centering}
 
-\section{Sub-passes on fat slabs and pencils}
+\section{Performance Strategy}
+
+\subsection{Communication library}
+
+The choice of communication library is quite important here.  Major
+MPI libraries have been GPU-aware for some time now; these need to be
+benchmarked.  In particular, \texttt{MPI_Alltoall},
+\texttt{MPI_Alltoallv}, and \texttt{MPI_Alltoallw} (and there
+non-blocking versions).  In particular, it seems that
+\texttt{MPI_Alltoallw} lacks high-performance implementations.  In
+addition, the scheduling algorithm
+in~\cite{schreuder1980constructing}
+
+Different types of GPU-aware MPI:
+\begin{itemize}
+\item stream triggered
+\item kernel triggered
+\item kernel initiate
+\end{itemize}
+FIXME: explain and links to documentation.
+
+rocSHMEM is currently experimental; it needs users in order to be in
+an official release - being in an official release would really help
+increase the user base!  We also need to verify rocSHMEM support and
+how MPI interoperatbility works.
+
+RCCL is fully supported and offers some useful features such as
+\texttt{ncclAllToAll}, which can be used in at least single-node
+communications.
+
+Unknowns:
+\begin{itemize}
+\item nvSHMEM performance relative to MPI
+\item rocSHMEM release plan
+\item rocSHMEM/MPI interoperability
+\end{itemize}
+
+\subsection{Compression / intermediary precision}
+
+We know, at the FFT-library level, a lot about our data.  It's an
+array of complex (or sometimes real) values, and we are willing to
+sacrifice some small amount of numerical error to gain performance -
+the FFT, while highly accurate, still has roundoff error.  We have
+opportunities to reduce transform time by compressing data before
+communication.  It may be possible to do this when the data is already
+in LDS, which would reduce the cost of compression.  Application-level
+kernels may also be able to consume compressed data, which would be an
+interesting addition to the API.
+
+In addition, we may be willing to use a lower precision when
+transferring over the network - FFTs could be done in double
+precision, but transferred in single, for example.
+
+All of this is fairly application-dependant.  Precision requirements,
+numerical ranges, and numerical accuracy requirements will be
+determined by the application developer and not the library developer.
+As such, any lossy method needs to be user-controlled, and therefore
+included in the API.
+
+\subsection{De-distributing the transform}
+
+FFTs are bandwidth-limited; distributed transforms even more so.  Some
+applications may distribute the data to optimize for other parts of
+the program; we are not necessarily given an FFT-optimized data
+layout.  This is particular when the size of the data is small
+relative to the size and number of devices.
+
+If the transform is really small, it may make more sense to gather the
+data onto one device and distribute the data via a scatter operation.
+In order to further remove a communication stage, we ould also
+all-gather, compute redundantly, and then just pass the relevant data
+to the local device.  This can also be done in an intermediate
+fashion, for example computing slabs from a pencil decomposition.
+
+\subsection{Sub-passes}
 \label{subpasses}
 
-FIXME: explain this.
+In the case where one of the distributed dimensions has the same
+number of values (in the dimension), we can perform partial passes in
+that direction.  This allows us to perform some more computation while
+we have the data locally, which may allow us to eliminate some MPI
+transposes entirely.  Also of interest is that this will allow us to
+de-couple the data dependance; for example, if we do a radix-2 pass,
+then we now have two different data sets on which we can compute the
+transform independently.  Then, we can send some data, start
+computing, and send the second data set while we work on the first.
+This will also allow for a non-blocking interface.  This is scoped in
+single-device ticket
+\href{https://ontrack-internal.amd.com/browse/SWDEV-392917}{SWDEV-392917}.
 
 
-\section{Convolution and other pointwise applications}
-\label{conv}
 
-FIXME: explain this.
+\subsection{Latency/bandwidth tradeoff}
+
+Under a strong-scaling regime, transforms are eventually
+latency-bound.  At this point, bandwidth and flops are kind of free,
+and we can spend some of these to try and reduce the cost of latency.
+This is the idea behind the recursive MPI transpose
+in~\cite{bowmanroberts2015adaptive}.  This needs validation (and
+publication).
+
+
+\section{Spectral Operations}
+\label{spectralops}
+
+FFTs are generally used in a few operations such as convolution,
+Poisson solve, filtering, etc.  The combination of spectral ops with
+multi-device transforms allows for optimisation which would be quite
+cumbersome for the user.  For example, a Poisson solve can be done as
+a round-trip in the last FFT kernel, thus avoiding two global-memory
+round-trips.  Convolution/correlation are even more interesting
+possibilities, as the zero-padding increases the effective problem
+size and therefore communication costs.  Using implicit dealiasing
+(\cite{dealias2} allows for the overlapping of communication and
+computation.
+
+The spectral operations API should be developed in conjunction
+with the multi-device API.
+
+\section{Other libraries}
+
+\subsection{cuFFT and other back-ends}
+
+\texttt{cuFFTMp} is already available, and hipFFT should somehow wrap
+this, while also allowing users to call rocFFTMp.  We plan on adding
+new functionality to rocFFT/Mp; features not implemented in cuFFT will
+return a not-implemented error code.
+
+
+\subsection{Other ROCm libs}
+
+Also of note is that cuSolverMP is a thing; rocSolver developers may
+wish to participate in choices in rocFFTMp design so that the ROCm libraries
+have some sort of coherence.
+
+\section{API proposal}
+
+FIXME
+
+Just 2D/3D?
+
+\bibliography{../refs}
 
 \end{document}
