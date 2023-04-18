@@ -66,19 +66,6 @@ See also the `tflops` directory in `rocFFT-misc`_.
 
   
 
-GENE
-^^^^
-
-JIRA tickets
-
-* `https://ontrack-internal.amd.com/browse/SWDEV-366568`_
-
-Representative transforms:
-
-* 1D R2C: ``rocfft-rider --length 48 -t 2 -b 4423680``
-* 1D D2Z: ``rocfft-rider --length 48 -t 2 -b 4423680 --double``
-
-
 MI200
 ^^^^^
 
@@ -181,33 +168,6 @@ decrease in efficiency after size :math:`2^{22}`
   +------------------------+-------------------+-------------------------------------+
 
 
-Real/complex transforms
-^^^^^^^^^^^^^^^^^^^^^^^
-
-The real/complex transforms have different algorithms depending on the
-problem size:
-
-* Even-length problems.
-* When the batch size is even, or any higher dimension is even.
-* A fallback compute-as-complex algorithm via embedding
-
-For the even and batched methods, this requires an extra kernel call,
-and therefore a r/w to global memory.  By fusing these with the
-associated complex transforms used in the rest of the algorithm, we
-can reduce the amount of global i/o.
-
-For method 2, it may be possible to efficiently compute batched
-transforms even when no dimension or batch is even; just leave one
-transform using the embedding method, and do the rest as paired
-transforms.
-
-For the embedding method, it may be possible to combine the embedding
-kernel with the complex FFT; this would also avoid a global
-read/write.
-
-As far as I can tell, there doesn't seem to be any method to perform
-efficient real/complex transforms for a single odd-length problem.
-
 
 Twiddle factors
 ^^^^^^^^^^^^^^^
@@ -229,10 +189,6 @@ for inclusion as well.
 For smaller sizes, cuFFT generates code to handle these cases up to a
 certain size; this may be possible for rocFFT as well.
 
-There is a ticket for the radix-7 feature:
-`SWDEV-231448 <http://ontrack-internal.amd.com/browse/SWDEV-231448>`_.
-This is a medium-sized feature.  Implemeting generated transforms for
-small sizes would be a large feature.
 
 
 Bluestein
