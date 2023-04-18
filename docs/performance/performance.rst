@@ -61,177 +61,9 @@ bottleneck is the Poisson solver, using 2D FFTs.  They are moving to
 See also the `tflops` directory in `rocFFT-misc`_.
 
 
-Generic tickets
-^^^^^^^^^^^^^^^
-
-JIRA tickets:
-
-* `SWDEV-190718 <http://ontrack-internal.amd.com/browse/SWDEV-190718>`_: Real FFT performance
-* `SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_: Optimize large 1D complex FFT power-of-2 transform sizes
-* `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_: C2C 2D Optimisations with Fused Kernels
-* `SWDEV-240859 <http://ontrack-internal.amd.com/browse/SWDEV-240859>`_: Improve 3D complex FFT performance
-
-
-CHOLLA
-^^^^^^
-
-JIRA tickets:
-
-* `SWDEV-240404 <http://ontrack-internal.amd.com/browse/SWDEV-240404>`_: 1D Multiples of 21 and radix-7
-* `SWDEV-268238 <http://ontrack-internal.amd.com/browse/SWDEV-268238>`_: 1D Multiples of 21
-* `SWDEV-257111 <http://ontrack-internal.amd.com/browse/SWDEV-257111>`_: 2D batched 256x256 (lower priority)
-* `SWDEV-292122 <http://ontrack-internal.amd.com/browse/SWDEV-292122>`_: 10k
-
-Representative transforms:
-
-* 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 10752``
-* 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 18816``
-* 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 21504``
-* 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 32256``
-* 1D Z2Z multiple of 21: ``rocfft-rider -t 0 -b 10000 --double --length 43008``
-* 1D Z2Z radix-7: ``rocfft-rider -t 0 -b 10000 --double --length 16807``
-* 1D Z2Z inverse 10k: ``rocfft-rider --length 10000 -b 10000 -N 20 -t 1 --double -o``
-
-These cases are represented in the ``cholla1d`` performance suite.
-
-Results:
-
-* `2021-02-24 (rocFFT 173a6b1) cholla <_static/cholla21-vs-release.html>`_
-
-Representative transforms for ticket 257111 (low priority):
-
-* 2D Z2D: ``rocfft-rider -t 3 -b 256 --length 256 256 --double``
-* 2D D2Z: ``rocfft-rider -t 2 -b 256 --length 256 256 --double``
-
-This case is represented in the ``cholla2d`` performance suite.
-
-GROMACS
-^^^^^^^
-
-JIRA tickets
-
-* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
-* `SWDEV-245239 <http://ontrack-internal.amd.com/browse/SWDEV-245239>`_
-* `SWDEV-245239 <http://ontrack-internal.amd.com/browse/SWDEV-245239>`_
-* `SWDEV-283579 <http://ontrack-internal.amd.com/browse/SWDEV-283579>`_
-
-Representative transforms:
-
-* 3D R2C: ``rocfft-rider -t 2 --length 100 100 100``
-* 3D C2R: ``rocfft-rider -t 3 --length 100 100 100``
-* 3D R2C: ``rocfft-rider -t 2 --length 64 64 52``
-* 3D C2R: ``rocfft-rider -t 3 --length 64 64 52``
-* 3D R2C: ``rocfft-rider -t 2 --length 72 72 52``
-* 3D C2R: ``rocfft-rider -t 3 --length 72 72 52``
-* 3D R2C: ``rocfft-rider -t 2 --length 208 100 100``
-* 3D C2R: ``rocfft-rider -t 3 --length 208 100 100``
-* 3D R2C: ``rocfft-rider -t 2 --length 216 104 100``
-* 3D C2R: ``rocfft-rider -t 3 --length 216 104 100``
-* 3D R2C: ``rocfft-rider -t 2 --length 216 104 104``
-* 3D C2R: ``rocfft-rider -t 3 --length 216 104 104``
-* 3D R2C: ``rocfft-rider -t 2 --length 224 104 104``
-* 3D C2R: ``rocfft-rider -t 3 --length 224 104 104``
-* 3D R2C: ``rocfft-rider -t 2 --length 224 108 104``
-* 3D C2R: ``rocfft-rider -t 3 --length 224 108 104``
-* 3D R2C: ``rocfft-rider -t 2 --length 84 84 72``
-* 3D C2R: ``rocfft-rider -t 3 --length 84 84 72``
-
-These cases are represented in the ``gromacs3d`` performance suite.
-
-
-NAMD
-^^^^
-
-JIRA tickets
-
-* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
-
-Representative transforms:
-
-* 3D R2C: ``rocfft-rider -t 2 -o --length 216 216 216``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 216 216 216``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 108 108 80``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 108 108 80``
 
   
-AMBER
-^^^^^
 
-JIRA tickets
-
-* `SWDEV-286632 <http://ontrack-internal.amd.com/browse/SWDEV-286632>`_
-* `SWDEV-204997 <http://ontrack-internal.amd.com/browse/SWDEV-204997>`_
-  
-Representative transforms:
-
-* 3D R2C: ``rocfft-rider -t 2 -o --length 64 64 64``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 64 64 64``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 240 224 224``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 240 224 224``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 128 128 256``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 128 128 256``
-* 3D R2C: ``rocfft-rider -t 2 -o --length 80 84 144``
-* 3D C2R: ``rocfft-rider -t 3 -o --length 80 84 14``
-
-
-VASP
-^^^^
-
-JIRA tickets
-
-* `SWDEV-269707 <http://ontrack-internal.amd.com/browse/SWDEV-269707>`_: Optimize Z2Z 3D Performance for MI200
-
-Representative transforms:
-
-* 3D Z2Z: ``rocfft-rider --double --length 336 336 56``
-
-This case is represented in the ``vasp1d`` and ``vasp3d`` performance suites.
-
-Results:
-
-* `2021-03-10 (rocFFT 173a6b1) vasp <_static/vasp-17ea6b1-vs-release.html>`_
-
-  
-CP2K
-^^^^
-
-JIRA ticket for test failure:
-
-* `SWDEV-204930 <http://ontrack-internal.amd.com/browse/SWDEV-204930>`_
-
-Representative transforms for accuracy test:
-
-* 3D Z2Z: ``rocfft-rider --length 42 32 32 --double``
-* 3D Z2Z: ``rocfft-rider --length 25 20 20 --double``
-* 3D Z2Z: ``rocfft-rider --length 75 55 55 --double``
-
-We aren't really sure which problem sizes are actually important for
-performance, and a discussion with Leopold Grinberg indicates that
-there is a large number of small 3D ffts.
-
-  
-GESTS
-^^^^
-
-JIRA tickets
-
-* `https://ontrack-internal.amd.com/browse/SWDEV-348588`_
-
-Representative transforms:
-
-* 1D C2C: ``rocfft-rider --length 8192 -b 2048 -t 0 --itype 0 --otype 0 --istride 2048 --ostride 2048 --idist 1 --odist 1``
-* 1D C2C: ``rocfft-rider --length 16384 -b 4096 -t 0 --itype 0 --otype 0 --istride 4096 --ostride 4096 --idist 1 --odist 1``
-
-HACC
-^^^^
-
-JIRA tickets
-
-* `SWDEV-254556 <http://ontrack-internal.amd.com/browse/SWDEV-254556>`_
-
-Representative transforms (stride is 1):
-
-* 1D C2C radix-3: ``rocfft-rider -t 0 -b 8192 -o --length 24576``
   
 
 GENE
@@ -263,69 +95,13 @@ Representative transforms:
 These are the in the ``mi2002d`` and ``mi2003d`` suites.
 
   
-Shoreline MI200
-^^^^^^^^^^^^^^^
-
-JIRA tickets
-
-* `SWDEV-249890 <http://ontrack-internal.amd.com/browse/SWDEV-249890>`_
-
-Small 1D with large batch.
-
-This work is being done in the `tflops` directory of rocFFT-misc.
 
 
-ECP APPS
-^^^^^^^^
-
-* heFFTe
-* FFTX
-
-
-Misc but interesting
-^^^^^^^^^^^^^^^^^^^^
-
-JIRA tickets
-
-* `SWDEV-194172 <http://ontrack-internal.amd.com/browse/SWDEV-194172>`_
-* `SWDEV-254297 <http://ontrack-internal.amd.com/browse/SWDEV-254297>`_
-* `SWDEV-253931 <http://ontrack-internal.amd.com/browse/SWDEV-253931>`_
-
-Representative transforms:
-
-* 3D pow2 out-of-place cube: ``rocfft-rider --length 256 256 256 --double -N 100 -o``
-* 3D pow2 in-place cube: ``rocfft-rider --length 256 256 256 --double -N 100``
-* 1D 4096: ``rocfft-rider --length 4096 -b 8192 -N 20``
-
-From our work with other group
-
-* length 4096 (exercises radix-16)
-* length 512 (exercises radix-8)
-* length 2187 (exercises radix-3)
-* length 3125 (exercises radix-5)
-* length 112 (exercises radix-7)
 
 
 Proposals
 ---------
 
-
-Reduce number of transposes for 3D complex
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The 3D plans are ``RTRT``, with the first ``R`` being a 2D
-``RTRT``; this means that we actually have ``RTRTTRT``, which has 4
-transposes.  This is 7 kernels in total::
-
-    rocfft-rider-d --length 4 4 4 | grep KERNEL | wc -l 7
-
-Three transposes is already enough. The task has been implemented with
-`SWDEV-244390 <http://ontrack-internal.amd.com/browse/SWDEV-244390>`_.
-
-With fused kernels, this should be just 3 kernels in total.
-
-There is no ticket for this improvement.  This would be a smallish
-change.
 
 
 Fused kernels for 2D/3D complex transforms
@@ -338,17 +114,6 @@ transpose when writing to global memory.  For 2D ``RTRT`` transforms,
 this would halve the number of read/writes, which should about double
 the speed.
 
-There are several tickets for this work:
-
-* 2D
-
-  * `SWDEV-237066 <http://ontrack-internal.amd.com/browse/SWDEV-237066>`_
-
-* 3D
-
-  * `SWDEV-240860 <http://ontrack-internal.amd.com/browse/SWDEV-240860>`_
-  * `SWDEV-240863 <http://ontrack-internal.amd.com/browse/SWDEV-240863>`_
-  * `SWDEV-240864 <http://ontrack-internal.amd.com/browse/SWDEV-240864>`_
 
 Implementation would require modified kernels and would be a large
 feature.
@@ -415,10 +180,6 @@ decrease in efficiency after size :math:`2^{22}`
   | :math:`2^{29}`         | 7                 | ``CS_L1D_TRTRT`` and ``CS_L1D_CRT`` |
   +------------------------+-------------------+-------------------------------------+
 
-There is a ticket for this, which is:
-`SWDEV-230567 <http://ontrack-internal.amd.com/browse/SWDEV-230567>`_.
-This is probably a medium sized work-item.
-
 
 Real/complex transforms
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -427,8 +188,7 @@ The real/complex transforms have different algorithms depending on the
 problem size:
 
 * Even-length problems.
-* When the batch size is even, or any higher dimension is
-  even. Ticket for this feature is `SWDEV-208963 <http://ontrack-internal.amd.com/browse/SWDEV-208963>`_.
+* When the batch size is even, or any higher dimension is even.
 * A fallback compute-as-complex algorithm via embedding
 
 For the even and batched methods, this requires an extra kernel call,
@@ -515,10 +275,8 @@ Global memory channel conflict
 
 We observed global memory channel conflict has big impact on pow-of-2
 cases. For transpose, we could apply extra padding or diangnoal
-transpose `SWDEV-247591
-<http://ontrack-internal.amd.com/browse/SWDEV-247591>`_. More
-attendtion may be for regular batched FFT kernel or non-unit stride
-transpose.
+transpose. More attendtion may be for regular batched FFT kernel or
+non-unit stride transpose.
 
 
 Data-Parallel Primitives
