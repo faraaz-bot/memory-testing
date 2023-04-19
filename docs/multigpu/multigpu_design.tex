@@ -42,7 +42,7 @@
 \usepackage{bibentry}
 \bibliographystyle{plain}
 
-\title{Multi-GPU peformance plan for rocFFT}
+\title{Multi-GPU design plan for rocFFT}
 \author{}
 
 
@@ -131,7 +131,8 @@ A
 
 \subsubsection{heFFTe}
 
-\href{https://icl.utk.edu/fft/}{heFFTe}
+\href{heffte}{https://github.com/icl-utk-edu/heffte}
+
 
 Pencil and slab decomposition, AMD and NVIDIA back-ends.
 
@@ -155,20 +156,31 @@ Spectral operators are mentioned.
 
 FFTW: only handles slab.  Interesting algorithm: round-robin based
 send/receive.  Online tuning framework determines the best transpose
-algorithm.
+algorithm.  The local data distribution is determined by
+FFTW\footnote{\url{http://fftw.org/fftw3_doc/MPI-Data-Distribution.html}}:
+\begin{lstlisting}
+alloc_local
+= fftw_mpi_local_size_2d(N0, N1,
+                        MPI_COMM_WORLD,
+                        &local_n0, &local_0_start);
+\end{lstlisting}
 
 p3dFFT \url{https://github.com/sdsc/p3dfft} handles pencil.
 \url{https://github.com/sdsc/p3dfft.3}{P3DFFT++}.  Mentions a 3D
 domain decomposition (coming soon)?
+\href{https://github.com/sdsc/p3dfft/blob/master/include/p3dfft.h}{p3dfft.h}
 
 FFTW++: \url{https://fftwpp.sourceforge.net/},
 \url{https://github.com/dealias/fftwpp}.  Pencil and slab
 decomposition.  Recursive transpose, which helps with latency-bound
-tranposes (\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference proceedings}).
+tranposes (\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference proceedings}).  
+
+\href{https://github.com/dealias/fftwpp/tree/master/mpi/mpifftw++.h}{\texttt{mpifftw++.h}}
+
 
 \subsubsection{FFTX}
 
-They also have a distributed version.
+They also have a distributed version?
 
 \subsubsection{cuFFTMp}
 
@@ -185,6 +197,29 @@ in the form of 3D boxes.''
 Restrictions are similar to cuFFTXt; a little bit more severe.
 
 \href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cuFFTMp documentation}
+
+
+Initialization is either with nvshmem or an MPI comm via the
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftMpAttachComm}{function}
+\begin{lstlisting}
+cufftResult cufftMpAttachComm(cufftHandle plan,
+                              cufftMpCommType comm_type,
+                              void *comm_handle);
+\end{lstlisting}
+
+There are a number of enums for using library-provided data
+distributions.
+CUFFT_XT_FORMAT_DISTRIBUTED_INPUT
+CUFFT_XT_FORMAT_DISTRIBUTED_OUTPUT
+
+
+cufftXtSetDistribution
+
+The reshape API seems to be usable separately from the cuFFTMp library
+itself.
+
+
+
 
 \section{Design objectives}
 
@@ -395,24 +430,9 @@ which one was processed first.
 We can check whether the parameters are valid at plan generation, and
 then return an error code if things aren't set up correctly
 
-\section{Implimentation plan}
-
-First, get it working.  Just move everything to pencil/slab, send/receive
-to whatever crazy data distribution that they specify.
-
-Optimizations:
-\begin{itemize}
-\item gather/scatter
-\item sub-passes in discontiguous direction
-\item Do not use \texttt{MPI_Alltoallw} until there is a reasonable
-  implementation.  It might be worth just using \texttt{MPI_Alltoallv}
-  and handling the data formatting on our own.
-\item \dots
-\end{itemize}
 
 
-
-
+\bibliography{../refs}
 
 
 \end{document}

@@ -300,6 +300,20 @@ Unknowns:
 \item rocSHMEM/MPI interoperability
 \end{itemize}
 
+\subsection{1D/2D decomposition}
+
+Also known as slab and pencil.
+
+We need to
+\begin{itemize}
+\item support both
+\item Compute the communication cost for each of these (depending on
+  latency and bandwidth).
+\item be able to switch from one to another internally when
+  tuning/estimation indicates a performance gain.
+\end{itemize}
+
+
 \subsection{Compression / intermediary precision}
 
 We know, at the FFT-library level, a lot about our data.  It's an
@@ -336,6 +350,9 @@ In order to further remove a communication stage, we ould also
 all-gather, compute redundantly, and then just pass the relevant data
 to the local device.  This can also be done in an intermediate
 fashion, for example computing slabs from a pencil decomposition.
+
+We can compute the cost of these based on latency and bandwidth and
+compare with the slab/pencil decomposition costs.
 
 \subsection{Sub-passes}
 \label{subpasses}
@@ -398,56 +415,25 @@ Also of note is that cuSolverMP is a thing; rocSolver developers may
 wish to participate in choices in rocFFTMp design so that the ROCm libraries
 have some sort of coherence.
 
-\section{Other APIs}
 
-\subsection{cuFFT}
+\section{Implimentation plan}
 
-The multi-device cuFFT libraries 
+First, get it working.  Just move everything to pencil/slab, send/receive
+to whatever crazy data distribution that they specify.
 
-\subsection{cuFFTXt}
-
-FIXME
-
-\subsection{cuFFTMp}
-
-FIXME
-
-Initialization is either with nvshmem or an MPI comm.
-
-cufftXtSetDistribution
-
-The reshape API seems to be 
-
-\subsection{heFFTe}
-
-heFFTe has a C and a C++ interface.  Slab and pencil decomposition are
-supported.
-
-\href{heffte}{https://github.com/icl-utk-edu/heffte}
+Optimizations:
+\begin{itemize}
+\item gather/scatter
+\item sub-passes in discontiguous direction
+\item Do not use \texttt{MPI_Alltoallw} until there is a reasonable
+  implementation.  It might be worth just using \texttt{MPI_Alltoallv}
+  and handling the data formatting on our own.
+\item Can we do \texttt{MPI_Alltoallw} via \texttt{MPI_Alltoallv} +
+  extra isend/irecv?
+\item \dots
+\end{itemize}
 
 
-
-\subsection{p3dfft}
-
-\href{https://github.com/sdsc/p3dfft/blob/master/include/p3dfft.h}{p3dfft.h}
-
-
-\subsection{fftw++}
-
-\href{https://github.com/dealias/fftwpp/tree/master/mpi/mpifftw++.h}{\texttt{mpifftw++.h}}
-
-FIXME
-
-
-
-
-\section{API proposal}
-
-
-
-FIXME
-
-Just 2D/3D?
 
 \bibliography{../refs}
 
