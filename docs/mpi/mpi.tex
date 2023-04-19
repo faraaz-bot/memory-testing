@@ -396,7 +396,52 @@ Also of note is that cuSolverMP is a thing; rocSolver developers may
 wish to participate in choices in rocFFTMp design so that the ROCm libraries
 have some sort of coherence.
 
+\section{Other APIs}
+
+\subsection{cuFFT}
+
+The multi-device cuFFT libraries 
+
+\subsection{cuFFTXt}
+
+FIXME
+
+\subsection{cuFFTMp}
+
+FIXME
+
+Initialization is either with nvshmem or an MPI comm.
+
+cufftXtSetDistribution
+
+The reshape API seems to be 
+
+\subsection{heFFTe}
+
+heFFTe has a C and a C++ interface.  Slab and pencil decomposition are
+supported.
+
+\href{heffte}{https://github.com/icl-utk-edu/heffte}
+
+
+
+\subsection{p3dfft}
+
+\href{https://github.com/sdsc/p3dfft/blob/master/include/p3dfft.h}{p3dfft.h}
+
+
+\subsection{fftw++}
+
+\href{https://github.com/dealias/fftwpp/tree/master/mpi/mpifftw++.h}{\texttt{mpifftw++.h}}
+
+FIXME
+
+
+
+
 \section{API proposal}
+
+
 
 FIXME
 
