@@ -13,7 +13,6 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 
-\usepackage{mathtools}
 \usepackage{xcolor}
 \usepackage{listings}
 \definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
@@ -39,9 +38,12 @@
 %% \renewcommand{\{}{\left{}
 %% \renewcommand{\}}{\right}}
 
+\usepackage{natbib}
+\usepackage{bibentry}
+\bibliographystyle{plain}
 
-\title{Multi-GPU design doc for rocFFT}
-\author{Malcolm Roberts}
+\title{Multi-GPU peformance plan for rocFFT}
+\author{}
 
 
 
@@ -49,6 +51,10 @@
 
 \begin{document}
 \maketitle
+
+\section{Introduction}
+
+These are design notes for multi-device FFTs with rocFFT.
 
 \section{Notable use cases}
 

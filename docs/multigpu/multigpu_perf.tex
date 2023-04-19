@@ -13,7 +13,9 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 
+\usepackage{xcolor}
 \usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
 \lstset{language=C++,
                 basicstyle=\ttfamily,
                 keywordstyle=\color{blue}\ttfamily,
@@ -36,14 +38,13 @@
 %% \renewcommand{\{}{\left{}
 %% \renewcommand{\}}{\right}}
 
-
 \usepackage{natbib}
 \usepackage{bibentry}
 \bibliographystyle{plain}
 
 
-\title{MPI with rocFFT}
-\author{rocFFT}
+\title{Multi-GPU peformance plan for rocFFT}
+\author{}
 
 
 
@@ -54,7 +55,8 @@
 
 \section{Introduction}
 
-These are notes on distritubed implementations for rocFFT.
+These are notes on how to achieve performance for multi-device FFTs with
+rocFFT.
 
 \section{Strategy}
 
