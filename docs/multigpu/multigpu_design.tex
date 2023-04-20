@@ -74,7 +74,7 @@ void PPPM::compute(...) {
 The function \lstinline{brick2fft} is defined in the same file; it
 takes bricks of arbitrary local dimension and then called
 \lstinline{Remap::perform} which calles \lstinline{remap_3d} in
-\url{https://github.com/lammps/lammps/blob/develop/src/KSPACE/remap.cpp}
+\href{https://github.com/lammps/lammps/blob/develop/src/KSPACE/remap.cpp}{remap.cpp}
 which creates a pencil (ie 2D) decomposition of the data over over the
 given MPI procs.
 
@@ -110,51 +110,78 @@ and
 \href{https://docs.nvidia.com/cuda/cufft/index.html#cufft-code-examples}{examples}:
 \begin{itemize}
 \item Up to 16 GPUs
-\item 1D
-  \subitem only supports power-of-two sizes and power-of-two
-  number of GPUs
-  \subitem only complex-to-complex
+\item 1D:
+  \begin{itemize}
+  \item only supports power-of-two sizes and power-of-two number of
+    GPUs
+  \item only complex-to-complex
+  \end{itemize}
 \item 2D and 3D
-  \subitem real/complex: requires even-length for r/c, only supports
-  in-place, shuffled output.
-  \subitem single-transform has permuted output
-  \subitem you can also just call multiple independent transforms
-  \subitem no Bluestein
-  \subitem single-transform multi-GPU output is permuted.
+  \begin{itemize}
+  \item real/complex: requires even-length for r/c, only supports
+    in-place, shuffled output.
+  \item single-transform has permuted output
+  \item you can also just call multiple independent transforms
+  \item no Bluestein
+  \item single-transform multi-GPU output is permuted.
+  \end{itemize}
 \end{itemize}
+The devices are associted with a plan via
+\begin{lstlisting}
+cufftXtSetGPUs(cufftHandle plan,
+               int nGPUs,
+               int *whichGPUs);
+\end{lstlisting}
+Execution is done by \lstinline{cufftXtExecDescriptorC2C()} (or the
+real/complex, single/double version) as described
+\href{https://docs.nvidia.com/cuda/cufft/#multiple-gpu-2d-and-3d-transforms-on-permuted-input}{here}.
+These take \lstinline{cudaLibXtDesc *input} and output arguments.
+These structs are allocated with
+\begin{lstlisting}
+cufftXtMalloc(cufftHandle plan, 
+              cudaLibXtDesc ** descriptor,
+              cufftXtSubFormat format);
+\end{lstlisting}
+Of note is that the application doesn't seem to have direct access to
+the gpu buffer; the \lstinline{cudaLibXtDesc} is created with
+\lstinline{cufftXtMalloc}, and then we use these descriptor structs in
+the call to execute the transform.  This seems like a huge
+disadvantage - do applications need to copy the data to the new
+buffer?
+
+
 
 \subsection{Multi-node}
 
 A
 \href{https://icl.utk.edu/files/publications/2022/icl-utk-1548-2022.pdf}{technical
-  report} is available from ICL and the University of Tennessee.
+  report} is available from ICL and the University of Tennessee.  This
+compares a AccFFT, 2Decomp\&FFT, FFTE, FFTW, FFTMPI, heFFTe, SWFFT,
+P3DFFT, and FFTADVMPI.  It provides the results of benchmark tests
+on summit and spock.
 
 \subsubsection{heFFTe}
 
-\href{heffte}{https://github.com/icl-utk-edu/heffte}
-
-
-Pencil and slab decomposition, AMD and NVIDIA back-ends.
+\href{heffte}{https://github.com/icl-utk-edu/heffte} is an open-source
+DOE-sponsored project.  It provides pencil and slab decomposition, AMD
+and NVIDIA back-ends.
 
 
 \subsubsection{AccFFT}
 
-\href{http://accfft.org/}{AccFFT}
-
-Looks to only support cuFFT.
-
-Pencil and slab decomposition.
-
-Spectral operators are mentioned.
-
+\href{http://accfft.org/}{AccFFT} supports cuFFT as a back-end.
+Pencil and slab decomposition are supported, and spectral operators
+are mentioned.
 
 \subsubsection{FFTE}
 
-\url{https://github.com/certik/ffte}.  Fortran code on CPU/Nvidia GPUs.
+\url{https://github.com/certik/ffte} is a Fortran code on CPU/Nvidia
+GPUs.
 
 \subsubsection{CPU codes}
 
-FFTW: only handles slab.  Interesting algorithm: round-robin based
+FFTW has an MPI implimentation, which provides a 1D data
+decomposition, ie slab.  Interesting algorithm: round-robin based
 send/receive.  Online tuning framework determines the best transpose
 algorithm.  The local data distribution is determined by
 FFTW\footnote{\url{http://fftw.org/fftw3_doc/MPI-Data-Distribution.html}}:
@@ -167,59 +194,96 @@ alloc_local
 
 p3dFFT \url{https://github.com/sdsc/p3dfft} handles pencil.
 \url{https://github.com/sdsc/p3dfft.3}{P3DFFT++}.  Mentions a 3D
-domain decomposition (coming soon)?
-\href{https://github.com/sdsc/p3dfft/blob/master/include/p3dfft.h}{p3dfft.h}
+domain decomposition (coming soon)?  The interface is provided in
+\href{https://github.com/sdsc/p3dfft/blob/master/include/p3dfft.h}{p3dfft.h}.
+There is a GPU-FFT branch at
+\href{https://github.com/sdsc/p3dfft.3/tree/cuda-dev}{cuda-dev}.
 
 FFTW++: \url{https://fftwpp.sourceforge.net/},
 \url{https://github.com/dealias/fftwpp}.  Pencil and slab
 decomposition.  Recursive transpose, which helps with latency-bound
-tranposes (\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference proceedings}).  
-
+tranposes
+(\url{https://malcolmroberts.github.io/publications/transpose0.pdf}{conference
+  proceedings}).  Interface is at
 \href{https://github.com/dealias/fftwpp/tree/master/mpi/mpifftw++.h}{\texttt{mpifftw++.h}}
 
 
 \subsubsection{FFTX}
 
-They also have a distributed version?
+\href{http://www.spiral.net/software/fftx.html}{Spiral/FFTX} generate
+kernels for FFTs including spectral operations.  There is some support
+for MPI, but details are unclear at this point.
 
 \subsubsection{cuFFTMp}
 
-A recent
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cuFFTMp} has
+recently been made generally accessible by NVIDIA.  A recent
 \href{https://developer.nvidia.com/blog/massively-improved-multi-node-nvidia-gpu-scalability-with-gromacs/}{blog
   post from NVIDIA} shows a good speedup for gromacs, claiming a
-2$\times{}$ speedup over heffte.
-
-From
-\href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/api_usage.html#usage-with-custom-slabs-and-pencils-data-decompositions}{the
-  documentation}, ``cuFFTMp also supports arbitrary data distributions
-in the form of 3D boxes.''
-
-Restrictions are similar to cuFFTXt; a little bit more severe.
-
-\href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cuFFTMp documentation}
-
+2$\times{}$ speedup over heFFTe.  Restrictions are similar to cuFFTXt;
+sometimes more severe, sometimes less so.  Multiprocess GPUs with more
+than one GPU per process doesn't seem possible.  cuFFTMp is based on
+nvshmem, but can interoperate with MPI.
 
 Initialization is either with nvshmem or an MPI comm via the
 \href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftMpAttachComm}{function}
 \begin{lstlisting}
-cufftResult cufftMpAttachComm(cufftHandle plan,
-                              cufftMpCommType comm_type,
-                              void *comm_handle);
+cufftMpAttachComm(cufftHandle plan,
+                  cufftMpCommType comm_type,
+                  void *comm_handle);
 \end{lstlisting}
 
-There are a number of enums for using library-provided data
-distributions.
+One can choose a preset data format via
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#cufftxtsetsubformatdefault}{cufftxtsetsubformatdefault} which has format
+\begin{lstlisting}
+cufftXtSetSubformatDefault(cufftHandle plan,
+                           cufftXtSubFormat subformat_forward,
+                           cufftXtSubFormat subformat_inverse)
+\end{lstlisting}
+where the \lstinline{cufftXtSubFormat}s are taken from the enum values
+\begin{lstlisting}
+CUFFT_XT_FORMAT_INPLACE
+CUFFT_XT_FORMAT_INPLACE_SHUFFLED
 CUFFT_XT_FORMAT_DISTRIBUTED_INPUT
 CUFFT_XT_FORMAT_DISTRIBUTED_OUTPUT
+\end{lstlisting}
+These are slab input/output for the first two and box inputs in the
+latter two as described in
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftXtSubFormat}{cufftXtSubFormat}.
 
+From
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/api_usage.html#usage-with-custom-slabs-and-pencils-data-decompositions}{the
+  documentation}, ``cuFFTMp also supports arbitrary data distributions
+in the form of 3D boxes.''  General arbitrary box distributions are
+set via
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#cufftxtsetdistribution}{cufftxtsetdistribution}:
+\begin{lstlisting}
+cufftXtSetDistribution(cufftHandle plan,
+                       int rank,
+                       const long long int *lower_input,
+                       const long long int *upper_input,
+                       const long long int *lower_output,
+                       const long long int *upper_output,
+                       const long long int *strides_input,
+                       const long long int *strides_output)
+\end{lstlisting}
+where \lstinline{int rank} is the rank of the transform (ie not the
+MPI rank or the equivalent with nvshmem).  Execution is done via
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftXtExec}{cufftXtExec}
+which has signature
+\begin{lstlisting}
+cufftXtExec(cufftHandle plan,
+            void *idata,
+            void *odata,
+            int direction);
+\end{lstlisting}
+where \lstinline{void *idata} and \lstinline{void *odata} are GPU
+global memory pointers.
 
-cufftXtSetDistribution
-
-The reshape API seems to be usable separately from the cuFFTMp library
-itself.
-
-
-
+There is a reshape function with similar functionality, which used
+separately from the cuFFTMp library itself.  Differences between the
+single-node/multi-gpu and multi-process interface is given
+\href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/differences.html}{here}.
 
 \section{Design objectives}
 
@@ -251,7 +315,9 @@ is/is not equal to one is a bit of a surprise for users.
 \texttt{cuBLAS} functionality.  There are no current plans to add
 multi-GPu support to \texttt{rocBLAS}, but it would be good to keep
 the possibility in mind so that we can avoid having to back-step on an
-API choice.
+API choice.  NVIDIA also made cuSolverMp; if we decide to make
+rocSolverMp, it would be good to keep the interfaces as compatible as
+possible to avoid pain-points for application developers.
 
 \subsection{Opportunities}
 
@@ -260,44 +326,12 @@ functionality.  In particular, multiple batch dimensions is a feature
 that could help.
 
 
-\section{API proposal}
+\section{Proposal ideas}
 
-\texttt{rocFFT} has \lstinline{#if 0}'d-out
-\href{https://github.com/ROCmSoftwarePlatform/rocFFT/blob/develop/library/include/rocfft.h#L282}{code}
-for specifying the number of devices; this was present in the first
-commit, and has never been used.  The API for multi-GPU selection is
-\begin{lstlisting}
-rocfft_status rocfft_plan_description_set_devices(
-  rocfft_plan_description description,
-  void *devices,
-  size_t number_of_devices );
-\end{lstlisting}
-which seems a perfectly reasonable API. Since the
-\lstinline{rocfft_plan_description} is created before passing it to
-the plan, we can use this as a vehicle to pass a bunch of information
-to the plan generator.
+Question: one buffer per device?
 
-Without specifying anything further, this should reproduce the
-\texttt{cuFFTMp} data decomposition.  FIXME: specify the default data
-distribution.
-
-This parameters of the data decomposition can be access via a getter
-function.  FIXME: define
-
-In particular, we need to
-specify, for each device,
-\begin{enumerate}
-\item a starting index
-\item a length
-\end{enumerate}
-
-After setting the number of devices, we can then set a per-device data
-distribution.  For a $d$-dimensional transform on $N$ devices, we
-would like to specify a starting and stopping multi-index for each
-device, for both the input and output dimensions.  We would similarly
-like input and output strides on each device.
-
-
+We need to specify, for each device, a starting index. Optional: end
+index, stride.  Also for output.
 
 \subsubsection{More specifications}
 
@@ -430,7 +464,53 @@ which one was processed first.
 We can check whether the parameters are valid at plan generation, and
 then return an error code if things aren't set up correctly
 
+\section{API proposal}
 
+\subsection{Single-node multi-gpu}
+
+\texttt{rocFFT} has \lstinline{#if 0}'d-out
+\href{https://github.com/ROCmSoftwarePlatform/rocFFT/blob/develop/library/include/rocfft.h#L282}{code}
+for specifying the number of devices; this was present in the first
+commit, and has never been used.  The API for single-process,
+multi-GPU selection is
+\begin{lstlisting}
+rocfft_plan_description_set_devices(
+  rocfft_plan_description description,
+  void *devices,
+  size_t number_of_devices);
+\end{lstlisting}
+which seems a perfectly reasonable API. Since the
+\lstinline{rocfft_plan_description} is created before passing it to
+the plan, we can use this as a vehicle to pass a bunch of information
+to the plan generator.
+
+This parameters of the data decomposition can be access via a getter
+function.  FIXME: write this
+
+FIXME: how do we set the per-buffer data distribution?
+
+FIXME: how do we exec?  Just pass more in the \texttt{void**}?
+
+FIXME: how do we manage error cases?  TODO: flow chart.
+
+\subsection{Multi-node single-gpu}
+
+FIXME: idea: use the descriptor to attach a communicator if we're
+using MPI.
+
+FIXME: idea: use the multi-device layout descriptor to specify that
+we're using a 
+
+\subsection{Multi-node multi-gpu}
+
+FIXME: idea: we can attach a communicator as well as a list of local
+devices.  Question: how can we figure out if a buffer is associated
+with a process?  Looks like nvshmem has its own hyrda launcher; are we
+guaranteed something like the MPi rank?
+
+\subsection{hipFFT}
+
+FIXME: how can we get multiple devices per proc via the desciptors?
 
 \bibliography{../refs}
 
