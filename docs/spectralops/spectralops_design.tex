@@ -50,7 +50,7 @@
 \begin{document}
 \maketitle
 
-\section{Use cases}
+\section{Operations}
 
 
 \subsection{Convolution/correlation}
@@ -186,9 +186,9 @@ part of a normal transform.  The operation is
 \end{dmath}
 where $x_n$ depends on the index $n$ and some constant values.
 
-\subsection{applications}
+\subsection{Other operators}
 
-Other applications include
+Other spectral operators include
 \begin{itemize}
 \item upsampling, which seems to be a transform, extension with zero-padding, and an inverse transform of an extended length.
 \item non-uniform FFTs (see \url{https://finufft.readthedocs.io/})
@@ -196,6 +196,115 @@ Other applications include
 \item cross-correlation, which involved finding the index of the
   maximum of the output of a correlation
 \end{itemize}
+
+\section{Applications}
+
+\subsection{AI/ML}
+
+See hyena operator. FIXME: write this.
+
+\subsection{Radio astronomy}
+
+FIXME: write this.
+
+\subsection{Spectral/pseudospectral simulations}
+
+\subsubsection{2D incompressible voriticty-based}
+
+FIXME: ref dealias2
+
+Given a velocity field $u=\(u_x,u_y,u_z\)$, define the vorticity
+$\omega = \nabla \times u$, which has evolution equation
+\begin{dmath}
+  \label{vort}
+  \frac{\partial \omega}{\partial t}
+  + \(u \cdot{} \nabla \) \omega
+  =
+  \(\omega \cdot{} \nabla \) u
+  + \nu \nabla^2 \omega
+  + \nabla \times F.
+\end{dmath}
+For 2D flow, $\omega{}=\omega_z\hat{z}$ so $\(\omega \cdot \nabla\)u=0$.  Thus,
+equation~\eqref{vort} can be written as
+\begin{dmath}
+  \label{2dvort}
+  \frac{\partial \omega_z}{\partial t}
+  + \(u \cdot{} \nabla \) \omega
+  =
+  \nu \nabla^2 \omega
+  + \nabla \times F
+\end{dmath}
+We use the vector identity
+\begin{dmath}
+  \nabla \times \(\nabla \times u\)
+  =
+  \nabla\(\nabla \cdot{} u \)
+  - \nabla^2 u
+\end{dmath}
+and the fact that, for incompressible turbulence, $\nabla \times u=0$,
+so,
+\begin{dmath}
+  \nabla \times \(\nabla \times u\) = - \nabla^2 u
+\end{dmath}
+which implies that
+\begin{dmath}
+  u = -\nabla^{ -2} \(\nabla \times \omega \).
+\end{dmath}
+This is easy to solve in Fourier space.  Thus, we can recover
+$u=\(u_x,u_y,0\)$ from $\omega_z$.  Now, we would like to get the
+source equation for $\partial_t \omega$ in equation~\eqref{2dvort}
+given $\omega$.
+\begin{dmath}
+  \omega_z
+  \rightarrow
+  u \nobreak{=}
+  - \nabla^{-2}
+  \(\partial_y \omega_z , -\partial_x \omega_z \)
+  \rightarrow
+  \(u \cdot{} \nabla \) \omega
+  \nobreak{=}
+  \(- \nabla^{-2}\partial_y \omega_z \partial_x+
+  \nabla^{-2}\partial_x \omega_z \partial_y\)
+  \omega_z
+\end{dmath}
+which can be written as
+\begin{dmath}
+  -\nabla^{-2}\partial_y \omega_z \partial_x \omega_z
+  +\nabla^{-2}\partial_x \omega_z \partial_y \omega_z.
+\end{dmath}
+In Fourier space, the multiplications are mapped to convolutions.
+This takes a single input $\omega_z$, which is read-callback-RTC'd to
+four inputs to the Fourier transform, and is then convolved with pointwiser operator
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3\) \rightarrow f_0 f_1 + f_2 f_3.
+\end{dmath}
+
+However, in dealias2 (FIXME:ref), we have a formulation which involves
+fewer inputs.  This is
+\begin{dmath}
+  \(\partial_x^2 - \partial_y^2 \) \(u_x u_y\)
+  + \partial_x\partial_y \(u_y^2 - u_x^2\)
+\end{dmath}
+which can be written as
+\begin{dmath}
+  \(\partial_x^2 - \partial_y^2 \)
+  \(
+  \(-\nabla^{-2}\partial_y \omega_z\)
+  \(\nabla^{-2}\partial_x \omega_z\)
+  \)
+  + \partial_x\partial_y
+  \(\(\nabla^{-2}\partial_x \omega_z\)^2
+  - \(\nabla^{-2}\partial_y \omega_z\)^2
+  \) 
+\end{dmath}
+which is mapped to a convolution and has pointwise operator
+\begin{dmath}
+  \(f_0, f_1\) \rightarrow \(f_0 f_1, f_0 f_0 + f_1 f_1\)
+\end{dmath}
+with a post-processing phase.
+
+We can also include the linear terms (ie dissipation and forcing) in a
+post-processing phase.
 
 
 \section{Other libraries}
