@@ -274,10 +274,13 @@ which can be written as
 \end{dmath}
 In Fourier space, the multiplications are mapped to convolutions.
 This takes a single input $\omega_z$, which is read-callback-RTC'd to
-four inputs to the Fourier transform, and is then convolved with pointwiser operator
+four inputs to the Fourier transform, and is then convolved with
+pointwiser operator
 \begin{dmath}
   \(f_0, f_1, f_2, f_3\) \rightarrow f_0 f_1 + f_2 f_3.
 \end{dmath}
+This requires four inverse and one forward FFTs for a total of five
+transforms.
 
 However, in dealias2 (FIXME:ref), we have a formulation which involves
 fewer inputs.  This is
@@ -301,11 +304,112 @@ which is mapped to a convolution and has pointwise operator
 \begin{dmath}
   \(f_0, f_1\) \rightarrow \(f_0 f_1, f_0 f_0 + f_1 f_1\)
 \end{dmath}
-with a post-processing phase.
+with a post-processing phase.  This method requires two inverse and
+two forward FFTs for a total of four transforms.
+
+\subsubsection{3D Navier--Stokes}
+
+For the 3D Navier--Stokes, we use the velocity
+formulation with
+\begin{dmath}
+  \frac{\partial u}{\partial t}
+  + \(u \cdot \nabla  \) u
+  - \nu \nabla^2 u
+  =
+  - \nabla p
+  + F.
+\end{dmath}
+The nonlinear term expands to 12 terms.  Using the identity
+\begin{dmath}
+  \(u\cdot \nabla\) u
+  = \omega \times u + \frac{1}{2} \nabla \(u \cdot u\)
+\end{dmath}
+(ref: \url{https://www.math.uh.edu/~molshan/ftp/pub/37488.pdf}) we can
+use the rotational formulation,
+\begin{dmath}
+  \frac{\partial u}{\partial t}
+  + \omega \times u
+  - \nu \nabla^2 u
+  =
+  - \nabla P
+  + F
+\end{dmath}
+where $P = p + \frac{1}{2}u\cdot{}u$. We are given $u$ as input, so
+it's easy to compute $\omega = \nabla \times u$.  This gives us a
+nonlinear term with six forward and three inverse FFTs, for a total of
+9 transforms.  In particular, we have
+\begin{dmath}
+  \label{omegadef}
+  \omega
+  = \(
+  \partial_y u_z - \partial_z u_y,
+  \partial_z u_x -\partial_x u_z,
+  \partial_x u_y - \partial_y u_x,
+  \)
+\end{dmath}
+so
+\begin{dmath}
+  \omega \times u
+  =
+  \(
+  \begin{matrix}
+  \omega_y u_z - \omega_z u_y\\
+  \omega_z u_x -\omega_x u_z\\
+  \omega_x u_y - \omega_y u_x
+  \end{matrix}
+  \)
+  =
+  \(
+  \begin{matrix}
+    \(\partial_z u_x -\partial_x u_z\) u_z
+    - \(\partial_x u_y - \partial_y u_x\) u_y\\
+    \partial_x u_y - \partial_y u_x u_x
+    -\(\partial_y u_z - \partial_z u_y\) u_z\\
+    \( \partial_y u_z - \partial_z u_y\) u_y
+    - \(\partial_z u_x -\partial_x u_z\) u_x
+  \end{matrix}
+  \)
+\end{dmath}
+which has six inverse and three forward FFTs for a total of nine
+transforms.  The pointwise operator is
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3, f_4, f_5\)
+  \rightarrow
+  \(
+  f_4 f_2 - f_5 f_1,
+  f_5 f_1 - f_3 f_2,
+  f_3 f_1 - f_4 f_0
+  \)
+\end{dmath}
+where
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3, f_4, f_5\)
+  =
+  \(u_x, u_y, u_z, \omega_x, \omega_y, \omega_z\).
+\end{dmath}
+
+In (FIXME: ref dealias2), the transform count can be reduced for
+incompressible turbulence.  Let $D_{ij}=u_iu_j$, and
+$S_{ij}=\frac{1}{3}\delta_{ij}\Tr{D}$  Then the nonlinearity
+can ge written as
+\begin{dmath}
+  \frac{\partial \(D_{ij} - S_{ij}\)}{\partial x_j}
+\end{dmath}
+FIXME: where do we go from here?
+
+
+
+\subsubsection{Including other terms in post-processing}
 
 We can also include the linear terms (ie dissipation and forcing) in a
-post-processing phase.
+post-processing phase, further reducing global memory round-trips.
 
+\subsubsection{Can we do some transforms before finishing them all?}
+
+FIXME: write this
+
+Poisson operator?  If we need $\partial_x$ in a 3D, then the first two
+transforms can be done on the same data, no?
 
 \section{Other libraries}
 
