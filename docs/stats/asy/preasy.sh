@@ -53,3 +53,8 @@
 ~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s sep -b ~/sync/amd/ntrial/ixt-hq-107 -a ~/sync/amd/ntrial/crusher -o ~/repo/rocfft-misc/docs/stats/data/ixt-hq-107_crusher_moods.dat
 ~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s sep -b ~/sync/amd/ntrial/ixt-hq-107 -a ~/sync/amd/ntrial/crusher -o ~/repo/rocfft-misc/docs/stats/data/ixt-hq-107_crusher_mwu.dat
 ~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s sep -b ~/sync/amd/ntrial/ixt-hq-107 -a ~/sync/amd/ntrial/crusher -o ~/repo/rocfft-misc/docs/stats/data/ixt-hq-107_crusher_ttest.dat
+
+~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s sep -b ~/sync/amd/ntrial/x1000c0s2b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s2b0n0_sep.dat
+~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s seq -b ~/sync/amd/ntrial/x1000c0s2b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s2b0n0_seq.dat
+~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s alt -b ~/sync/amd/ntrial/x1000c0s2b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s2b0n0_alt.dat
+~/sync/amd/ntrial/ntrials_test.py -m moods  -B -s ran -b ~/sync/amd/ntrial/x1000c0s2b0n0 -o ~/repo/rocfft-misc/docs/stats/data/x1000c0s2b0n0_ran.dat

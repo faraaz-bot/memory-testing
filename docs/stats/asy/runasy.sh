@@ -30,3 +30,5 @@ asy fpr.asy -u 'filelist="../data/ixt-rack-60_sep.dat,../data/ixt-rack-60_seq.da
 asy fpr.asy -u 'filelist="../data/ixt-hq-107_ran.dat,../data/ixt-hq-107_ran_mwu.dat,../data/ixt-hq-107_ran_ttest.dat";legendlist="moods,mwu,ttest"' -o ixt-hq-107_fpr_method.pdf -f pdf
 
 asy fnr.asy -u 'filelist="../data/ixt-hq-107_crusher_moods.dat,../data/ixt-hq-107_crusher_mwu.dat,../data/ixt-hq-107_crusher_ttest.dat";legendlist="moods,mwu,ttest"' -o ixt-hq-107_crusher_fnr.pdf -f pdf
+
+asy fpr.asy -u 'filelist="../data/x1000c0s2b0n0_sep.dat,../data/x1000c0s2b0n0_seq.dat,../data/x1000c0s2b0n0_alt.dat,../data/x1000c0s2b0n0_ran.dat";legendlist="separate,sequential,alternating,random"' -o x1000c0s2b0n0_fpr.pdf -f pdf

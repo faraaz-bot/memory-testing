@@ -363,7 +363,7 @@ so
   \begin{matrix}
     \(\partial_z u_x -\partial_x u_z\) u_z
     - \(\partial_x u_y - \partial_y u_x\) u_y\\
-    \partial_x u_y - \partial_y u_x u_x
+    \(\partial_x u_y - \partial_y u_x\) u_x
     -\(\partial_y u_z - \partial_z u_y\) u_z\\
     \( \partial_y u_z - \partial_z u_y\) u_y
     - \(\partial_z u_x -\partial_x u_z\) u_x
@@ -388,15 +388,114 @@ where
   \(u_x, u_y, u_z, \omega_x, \omega_y, \omega_z\).
 \end{dmath}
 
-In (FIXME: ref dealias2), the transform count can be reduced for
-incompressible turbulence.  Let $D_{ij}=u_iu_j$, and
-$S_{ij}=\frac{1}{3}\delta_{ij}\Tr{D}$  Then the nonlinearity
-can ge written as
-\begin{dmath}
-  \frac{\partial \(D_{ij} - S_{ij}\)}{\partial x_j}
-\end{dmath}
-FIXME: where do we go from here?
 
+
+
+In (FIXME: ref basdevant 1983), the transform count can be reduced for
+incompressible turbulence.  In particular, we take
+\begin{dmath}
+  \partial_t u_x
+  + \frac{1}{3} \partial_x \(u_x^2 -u_y^2\)
+  + \frac{1}{3} \partial_x \(u_x^2 -u_z^2\)
+  + \partial_y u_x u_y
+  + \partial_y u_x u_z
+  =
+  -\partial_x \(P + \frac{1}{3}\(u_x^2 + u_y^2 + u_z^2\)\)
+  + \nu \nabla^2 u.
+\end{dmath}
+The $u_y$ and $u_z$ evolution equations follow similarly.  The data
+flow looks ike
+\begin{dmath}
+  \(
+  \begin{matrix}
+    U_x\\
+    U_y\\
+    U_z
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    u_x\\
+    u_y\\
+    u_z
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    u_x^2 - u_y^2\\
+    u_y^2 - u_z^2\\
+    u_x u_y\\
+    u_y u_z\\
+    u_z u_x\\
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    U_x \ast U_x - U_y \ast U_y\\
+    U_y \ast U_y - U_z \ast U_z\\
+    U_x \ast U_y\\
+    U_y \ast U_z\\
+    U_z \ast U_x\\
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    U_x \ast U_x - U_y \ast U_y\\
+    U_y \ast U_y - U_z \ast U_z\\
+    U_x \ast U_y\\
+    U_y \ast U_z\\
+    U_z \ast U_x
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    ik_x U_x \ast U_x + ik_y U_x \ast U_x + ik_z U_x \ast U_z  \\
+    ik_x U_y \ast U_x + ik_y U_y \ast U_x + ik_z U_y \ast U_z  \\
+    ik_x U_z \ast U_x + ik_y U_z \ast U_x + ik_z U_z \ast U_z  
+  \end{matrix}
+  \)
+\end{dmath}
+which has convolution operator
+\begin{dmath}
+  \(
+  \begin{matrix}
+    f_0\\ f_1\\ f_2
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    f_0  f_0 - f_1 f_1 \\
+    f_1  f_1 - f_2 f_2 \\
+    f_0 f_1\\
+    f_1 f_2\\
+    f_2 f_0
+  \end{matrix}
+  \)
+\end{dmath}
+and write operator
+\begin{dmath}
+  \(
+  \begin{matrix}
+    f_0\\ f_1\\ f_2 \\ f_3 \\ f_4
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    \frac{ik_x}{3}\(f_0 + f_1 \) + ik_y f_2 + i k_z f_3\\
+    \frac{ik_y}{3}\(-2f_0 + f_1 \) + ik_y f_3 + i k_z f_4\\
+    \frac{ik_z}{3}\(f_0 + f_1 ? \) + ik_y f_4 + i k_x f_5
+  \end{matrix}
+  \)  
+\end{dmath}
+which requires three inverse and five forward FFTs for a total of
+eight transforms.
 
 
 \subsubsection{Including other terms in post-processing}
@@ -406,10 +505,80 @@ post-processing phase, further reducing global memory round-trips.
 
 \subsubsection{Can we do some transforms before finishing them all?}
 
-FIXME: write this
+Note that the 3D FFT can be broken up into several steps.  Now, if we
+want to compute $\omega$ from $u$ to simulate Navier--Stokes flow, we
+can get $\omega_x=\partial_uu_z-\partial_zu_y$.  Note that, for
+example, the $x$-dirction differentiation commutes with the $y$- and
+$z$-direction transforms.  So, to get $\omega$ from
+$U=\mathcal{F}\left[u\right]$ to compute the nonlinearity of the 3D
+Navier--Stokes, we note that
+\begin{dmath}
+  \omega
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{xz}^{-1}\left[U_z\right]\right]
+    -
+    \mathcal{F}_{z}^{-1}\left[ik_y \mathcal{F}_{xy}^{-1}\left[U_y\right]\right]
+    \\
+    \mathcal{F}_{z}^{-1}\left[ik_z \mathcal{F}_{yx}^{-1}\left[U_x\right]\right]
+    -
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{yz}^{-1}\left[U_z\right]\right]
+    \\
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{zy}^{-1}\left[U_y\right]\right]
+    -
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{zx}^{-1}\left[U_x\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+So if we first compute
+\begin{dmath}
+  \tilde{U}
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_x^{-1}\left[U_x\right]\\
+    \mathcal{F}_y^{-1}\left[U_y\right]\\
+    \mathcal{F}_z^{-1}\left[U_z\right]
+  \end{matrix}
+  \),
+\end{dmath}
+then we can compute $u$ and $\omega$ via
+\begin{dmath}
+  u
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{yz}^{-1}\left[\tilde{U_x}\right]\\
+    \mathcal{F}_{xz}^{-1}\left[\tilde{U_y}\right]\\
+    \mathcal{F}_{xy}^{-1}\left[\tilde{U_z}\right]
+  \end{matrix}
+  \)
+\end{dmath}
+and
+\begin{dmath}
+  \omega
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{x}^{-1}\left[\tilde{U_z}\right]\right]
+    -
+    \mathcal{F}_{z}^{-1}\left[ik_y \mathcal{F}_{x}^{-1}\left[\tilde{U_y}\right]\right]
+    \\
+    \mathcal{F}_{z}^{-1}\left[ik_z \mathcal{F}_{x}^{-1}\left[\tilde{U_x}\right]\right]
+    -
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{z}^{-1}\left[\tilde{U_z}\right]\right]
+    \\
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{y}^{-1}\left[\tilde{U_y}\right]\right]
+    -
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{z}^{-1}\left[\tilde{U_x}\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+which skips three one-dimensional batched transforms, but we have to
+compute the vorticity as a sum of transforms (as opposed to a
+transform of sums), so this method is more expensive overall.
 
-Poisson operator?  If we need $\partial_x$ in a 3D, then the first two
-transforms can be done on the same data, no?
 
 \section{Other libraries}
 
