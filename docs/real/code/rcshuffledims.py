@@ -5,18 +5,16 @@ import random
 
 np.set_printoptions(precision=3)
 
+# makes an empty NumPy array with a random stride order
 def array_random_strides(a):
     axes = []
     for i in range(len(a)):
         axes.append(i)
-    
     axes = np.random.permutation(axes)
-
     dims = []
     for axis in axes:
         dims.append(a[axis])
     f = np.empty(dims)
-
     return np.transpose(f, np.argsort(axes))
 
 def rinit_2d(nx, ny, seed=10):
