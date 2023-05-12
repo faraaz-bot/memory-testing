@@ -109,6 +109,17 @@ dealiasing, this is not the case for centred convolutions, where
 \texttt{full} output will result in the convolution being
 non-associative.
 
+\subsubsection{Phase-shift dealiasing}
+
+Phase-shift dealiasing (cf: Rogallo 1981 FIXME ref) is used for
+pseudospetral simulation with a quadratic nonlinearity. Only some of
+the terms are recovered, specifically those within a certain radius of
+the Fourier origin.  This technique does not zero-pad the transform,
+but instead perform two identical round-trip transformations, one of
+which has an extra read operator which shifts the transform by $1/2$ a
+grid point in each dimension.  I don't totally understand this yet.
+Seems to be used by GESTS?
+
 \subsection{Shift}
 
 The shift function is a nice Fourier transform trick which allows one
@@ -578,6 +589,67 @@ and
 which skips three one-dimensional batched transforms, but we have to
 compute the vorticity as a sum of transforms (as opposed to a
 transform of sums), so this method is more expensive overall.
+
+
+However, we do get some fun if we need to compute the gradiant of some
+scalar $\phi$, ie
+$\nabla\phi=\(\partial_x\phi,\partial_y\phi,\partial_z\phi\)$,
+starting with $\Phi=\mathcal{F}\left[\phi\right]$.  Then, we have
+\begin{dmath}
+  \nabla\phi
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xyz}\left[ ik_x \Phi\right]\\
+    \mathcal{F}^{-1}_{xyz}\left[ ik_y \Phi\right]\\
+    \mathcal{F}^{-1}_{xyz}\left[ ik_z \Phi\right]
+  \end{matrix}
+  \)
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x\mathcal{F}^{-1}_{z}\left[  \Phi\right]\right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y\mathcal{F}^{-1}_{z}\left[  \Phi\right]\right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+Let $\tilde{\Phi_z}=\mathcal{F}^{-1}_{z}\left[\Phi\right]$ .  Then,
+\begin{dmath}
+  \nabla\phi
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+which means that we can save a $z$-dimension transform.  The data flow
+is then
+\begin{dmath}
+  \Phi
+  \rightarrow
+  \left(
+  \begin{matrix}
+    \tilde\Phi_z=\mathcal{F}^{-1}_{z}\left[\Phi\right]\\
+    \mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]
+  \end{matrix}
+  \right)
+  \rightarrow
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+
+Moreover, if we start with $\phi$, then we can just use the fact that
+$\tilde\Phi_z=\mathcal{F}^{-1}_{xy}\left[\phi\right]$, skipping a
+forward transforms as well.
 
 
 \section{Other libraries}
