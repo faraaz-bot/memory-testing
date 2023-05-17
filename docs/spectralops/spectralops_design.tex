@@ -261,29 +261,42 @@ so,
 \end{dmath}
 which implies that
 \begin{dmath}
+  \label{vort2vel2d}
   u = -\nabla^{ -2} \(\nabla \times \omega \).
+\end{dmath}
+In fourier space, this is
+\begin{dmath}
+  \(U_x,U_y\)
+  =
+  \(
+  \frac{ik_y}{k_x^2 + k_y^2}\Omega_z,
+  \frac{-ik_x}{k_x^2 + k_y^2}\Omega_z
+  \)
 \end{dmath}
 This is easy to solve in Fourier space.  Thus, we can recover
 $u=\(u_x,u_y,0\)$ from $\omega_z$.  Now, we would like to get the
 source equation for $\partial_t \omega$ in equation~\eqref{2dvort}
-given $\omega$.
+given $\Omega_z = \mathcal{F}\left[\omega_z\right]$,
 \begin{dmath}
-  \omega_z
+  \Omega_z
   \rightarrow
-  u \nobreak{=}
-  - \nabla^{-2}
-  \(\partial_y \omega_z , -\partial_x \omega_z \)
+  U \nobreak{=}
+  \frac{1}{k_x^2 + k_y^2}
+  \(ik_y \Omega_z , -ik_x \Omega_z \)
   \rightarrow
-  \(u \cdot{} \nabla \) \omega
+  \mathcal{F}\left[\(u \cdot{} \nabla \) \omega\right]
   \nobreak{=}
-  \(- \nabla^{-2}\partial_y \omega_z \partial_x+
-  \nabla^{-2}\partial_x \omega_z \partial_y\)
-  \omega_z
+  \(
+  \frac{ik_y}{k_x^2 + k_y^2} \Omega_z ik_x
+  -\frac{ik_x}{k_x^2 + k_y^2} \Omega_z ik_y
+  \)
+  \ast
+  \Omega_z
 \end{dmath}
 which can be written as
 \begin{dmath}
-  -\nabla^{-2}\partial_y \omega_z \partial_x \omega_z
-  +\nabla^{-2}\partial_x \omega_z \partial_y \omega_z.
+  \frac{ik_y}{k_x^2 + k_y^2} \Omega_z \ast ik_x \Omega_z
+  -\frac{ik_x}{k_x^2 + k_y^2} \Omega_z \ast ik_y \Omega_z
 \end{dmath}
 In Fourier space, the multiplications are mapped to convolutions.
 This takes a single input $\omega_z$, which is read-callback-RTC'd to
@@ -299,18 +312,27 @@ However, in dealias2 (FIXME:ref), we have a formulation which involves
 fewer inputs.  This is
 \begin{dmath}
   \(\partial_x^2 - \partial_y^2 \) \(u_x u_y\)
-  + \partial_x\partial_y \(u_y^2 - u_x^2\)
+  + \partial_x\partial_y \(u_y^2 - u_x^2\).
 \end{dmath}
-which can be written as
+Given $\Omega_z$ and using equation~\eqref{vort2vel2d}, we can write
 \begin{dmath}
-  \(\partial_x^2 - \partial_y^2 \)
+  \(-k_x^2 +k_y^2 \)
   \(
-  \(-\nabla^{-2}\partial_y \omega_z\)
-  \(\nabla^{-2}\partial_x \omega_z\)
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \ast
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
   \)
-  + \partial_x\partial_y
-  \(\(\nabla^{-2}\partial_x \omega_z\)^2
-  - \(\nabla^{-2}\partial_y \omega_z\)^2
+  - k_x k_y
+  \(
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \ast
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \)
+  -k_x k_y
+  \(
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
+  \ast
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
   \) 
 \end{dmath}
 which is mapped to a convolution and has pointwise operator
