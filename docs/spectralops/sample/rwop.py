@@ -16,8 +16,10 @@ length = np.array([3, 4], dtype=int)
 nbatch = 1
 
 # Allocate and initialize the data:
-init = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0] + idx[1]* idx[1] + 1))
-#init = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0]  + 1))
+init = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0]  + 1))
+if len(length) > 1:
+    init = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0] + idx[1]* idx[1] + 1))
+
 x = np.zeros(shape=np.append(nbatch, length), dtype=float)
 for ibatch in range(nbatch):
     for idx in (list(itertools.product(*[range(l) for l in length]))):

@@ -18,11 +18,11 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
         Zlength = np.append(length[0:-1], length[-1] // 2)
         z = np.zeros(shape=Zlength, dtype=complex)
         for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
-            ridx0 = list(idx)
-            ridx0[-1] *= 2
-            ridx1 = list(idx)
-            ridx1[-1] *= 2
-            ridx1[-1] += 1
+            lidx = list(idx)
+            ridx0 = lidx[0:-1]
+            ridx0.append(lidx[-1] * 2)
+            ridx1 = lidx[0:-1]
+            ridx1.append(lidx[-1] * 2 + 1)
             # Read op here.
             z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
         Z = np.fft.fft(z)
