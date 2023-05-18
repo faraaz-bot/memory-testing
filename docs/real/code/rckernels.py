@@ -1,6 +1,54 @@
 import math
 import cmath
 import numpy as np
+import copy
+import itertools
+
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def rcfft_even(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    if length[-1] %2 != 0:
+        raise ValueError("Last dimension is not even")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+    
+    for ibatch in range(batch):
+        Zlength = np.append(length[0:-1], length[-1] // 2)
+        z = np.zeros(shape=Zlength, dtype=complex)
+        for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
+            ridx0 = list(idx)
+            ridx0[-1] *= 2
+            ridx1 = list(idx)
+            ridx1[-1] *= 2
+            ridx1[-1] += 1
+            # Read op here.
+            z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+        Z = np.fft.fft(z)
+        for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
+            X[ibatch][idx] = postkernel(Z[idx])
+
+    for dim in range(len(Zlength) - 1):
+        X = np.fft.fft(X, axis=dim+1)
+
+    # Write op here.
+    
+    return X
+    
+def rfft(x, length, batch):
+    # x: real input data
+    # length: array-like int
+    # batch: int
+    if len(length) == 0:
+        X = np.array(length, dtype=complex)
+        X = x
+    if length[-1] % 2 == 0:
+        print("even!")
+    else:
+        print("odd!")
+
+    
 
 def postkernel(Z):
     # Real-to-complex post kernel.
@@ -49,6 +97,7 @@ def postkernel(Z):
         
 
 def prekernel(X):
+    # Complex-to-real pre kernel
     Nhalf = len(X) - 1
     N = 2 * Nhalf
     Z = np.empty(Nhalf, dtype=complex)
