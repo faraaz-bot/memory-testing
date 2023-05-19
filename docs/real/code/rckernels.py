@@ -24,15 +24,24 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
             ridx1 = lidx[0:-1]
             ridx1.append(lidx[-1] * 2 + 1)
             # Read op here.
-            z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+            if readop == None:
+                z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+            else:
+                z[idx] = readop(x[ibatch][tuple(ridx0)],ibatch,ridx0) \
+                    + 1j * readop(x[ibatch][tuple(ridx1)],ibatch,ridx1) 
         Z = np.fft.fft(z)
         for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
             X[ibatch][idx] = postkernel(Z[idx])
 
+    # Complex-to-complex transform on all of the non-batch dimensions:
     for dim in range(len(Zlength) - 1):
-        X = np.fft.fft(X, axis=dim+1)
+        X = np.fft.fft(X, axis = dim + 1)
 
     # Write op here.
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[idx], ibatch, idx)
     
     return X
     

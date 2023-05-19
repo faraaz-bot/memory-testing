@@ -12,7 +12,7 @@ import rckernels
 import itertools
 
 # Batch of 1D transforms.
-length = np.array([3, 4], dtype=int)
+length = np.array([4, 4], dtype=int)
 nbatch = 1
 
 # Allocate and initialize the data:
@@ -27,7 +27,14 @@ for ibatch in range(nbatch):
 print("x:")
 print(x)
 
-X = rckernels.rcfft_even(x, length, nbatch)
+readop = None
+#readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0])  / length[0])
+#readop = lambda readval, ibatch, idx: readval if (idx[0] % 2 == 0) else -readval
+
+writeop = None
+readop = lambda readval, ibatch, idx: 1 * readval
+
+X = rckernels.rcfft_even(x, length, nbatch, readop=readop, writeop=writeop)
 
 print("X:")
 print(X)
@@ -37,4 +44,5 @@ X0 = np.fft.rfftn(x, axes=range(1, len(xlength)))
 
 print("X0:")
 print(X0)
-print(np.allclose(X, X0))
+print("all close:", np.allclose(X, X0))
+   
