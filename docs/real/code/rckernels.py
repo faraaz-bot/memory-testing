@@ -13,7 +13,8 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
     hlength = copy.deepcopy(length)
     hlength[-1] = hlength[-1] // 2 + 1 
     X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
-    
+
+    # The real-to-complex dimension:
     for ibatch in range(batch):
         Zlength = np.append(length[0:-1], length[-1] // 2)
         z = np.zeros(shape=Zlength, dtype=complex)
@@ -27,6 +28,8 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
             if readop == None:
                 z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
             else:
+                # TODO: instead of complex addition, just use complex(a,b) to ensure that the
+                # read-op is real-to-real?
                 z[idx] = readop(x[ibatch][tuple(ridx0)],ibatch,ridx0) \
                     + 1j * readop(x[ibatch][tuple(ridx1)],ibatch,ridx1) 
         Z = np.fft.fft(z)
@@ -37,6 +40,43 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
     for dim in range(len(Zlength) - 1):
         X = np.fft.fft(X, axis = dim + 1)
 
+    # Write op here.
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[idx], ibatch, idx)
+    
+    return X
+    
+# Perform a general-dimensional batched real-to-complex FFT via complex embedding.
+def rcfft_embed(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+
+    
+    # The real-to-complex dimension:
+    for ibatch in range(batch):
+        for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
+            Z = np.zeros(length[-1], dtype=complex)
+            for idx0 in range(length[-1]):
+                # TODO: read-op
+                if readop == None:
+                    Z[idx0] = x[ibatch][idx][idx0]
+                else:
+                    idxx = list(idx)
+                    idxx.append(idx0)
+                    Z[idx0] = readop(x[ibatch][idx][idx0],ibatch,idxx)
+            Z = np.fft.fft(Z)
+            for idx0 in range(hlength[-1]):
+                X[ibatch][idx][idx0] = Z[idx0]
+            
+    # Complex-to-complex transform on all of the non-batch dimensions:
+    for dim in range(len(hlength) - 1):
+        X = np.fft.fft(X, axis = dim + 1)
+    
     # Write op here.
     if writeop != None:
         for ibatch in range(batch):
