@@ -26,8 +26,8 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
             ridx1.append(lidx[-1] * 2 + 1)
             # Read op here.
             if readop == None:
-                #z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
-                z[idx] = x[ibatch][tuple(ridx0)] + ij * x[ibatch][tuple(ridx1)]
+                z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+                #z[idx] = x[ibatch][tuple(ridx0)] + ij * x[ibatch][tuple(ridx1)]
             else:
                 # TODO: instead of complex addition, just use complex(a,b) to ensure that the
                 # read-op is real-to-real?
@@ -48,6 +48,45 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
                 X[ibatch][idx] = writeop(X[idx], ibatch, idx)
     
     return X
+
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def crfft_even(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    if length[-1] %2 != 0:
+        raise ValueError("Last dimension is not even")
+    x = np.zeros(shape=np.append(batch, length), dtype=float)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                x[ibatch][idx] = writeop(x[idx], ibatch, idx)
+    
+    # Complex-to-complex transform on all of the non-batch dimensions:
+    for dim in range(len(length) - 1):
+        X = np.fft.ifft(X, axis = dim + 1) * length[dim]
+
+    for ibatch in range(batch):
+        Zlength = np.append(length[0:-1], length[-1] // 2)
+        Z = np.zeros(shape=Zlength, dtype=complex)
+        for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
+            Z[idx] = prekernel(X[ibatch][idx])
+            Z[idx] = np.fft.ifft(Z[idx]) * len(Z[idx])
+        
+        for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
+            lidx = list(idx)
+            ridx0 = lidx[0:-1]
+            ridx0.append(lidx[-1] * 2)
+            ridx1 = lidx[0:-1]
+            ridx1.append(lidx[-1] * 2 + 1)
+            if writeop == None:
+                x[ibatch][tuple(ridx0)] = Z[idx].real
+                x[ibatch][tuple(ridx1)] = Z[idx].imag
+            else:
+                x[ibatch][tuple(ridx0)] = writeop(Z[idx].real, ibatch, ridx0)
+                x[ibatch][tuple(ridx1)] = writeop(Z[idx].imag, ibatch, ridx1)
+        
+    return x
 
 # Perform a general-dimensional batched real-to-complex FFT via complex embedding.
 def rcfft_embed(x, length, batch, readop=None, writeop=None):
@@ -320,3 +359,79 @@ def repackND(X, lengths):
         if even:
             Xplanar[idx][stop] = X[idxe][stop] + I * X[idxo][stop]
     return Xplanar
+
+def symmetrize_1d(hdata, nx):
+    sdata = np.empty([nx // 2 + 1], dtype=complex)
+    for i in range(nx // 2 + 1):
+        sdata[i] = hdata[i]
+        
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+        
+    for xval in xvals:
+        sdata[xval] = sdata[xval].real
+        
+    return sdata
+
+def symmetrize_2d(hdata, nx, ny):
+    sdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny // 2 + 1):
+            sdata[i][j] = hdata[i][j]
+            
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
+
+    for yval in yvals:
+        # DY/Nyquists:
+        for xval in xvals:
+            sdata[xval][yval] = sdata[xval][yval].real
+        # x-axes:
+        for i in range(1, nx // 2):
+            sdata[nx - i][yval] = sdata[i][yval].conj()
+            
+    return sdata
+
+def symmetrize_3d(hdata, nx, ny, nz, only_conj=False):
+    sdata  = np.empty([nx, ny, nz // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz // 2 + 1):
+                sdata[i][j][k] = hdata[i][j][k]
+    
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
+    zvals = [0]
+    if nz % 2 == 0:
+        zvals.append(nz // 2)
+        
+    for zval in zvals:
+        if not only_conj:
+            # DC/nyquists:
+            for xval in xvals:
+                for yval in yvals:
+                    sdata[xval][yval][zval] = sdata[xval][yval][zval].real
+
+        # x-axes:
+        for yval in yvals:
+            for i in range(1, nx // 2):
+                sdata[nx - i][yval][zval] = sdata[i][yval][zval].conj()
+        # y-axes:
+        for xval in xvals:
+            for j in range(1, ny // 2):
+                sdata[xval][ny - j][zval] = sdata[xval][j][zval].conj()
+        # xy-planes:
+        for i in range(1, nx // 2):
+            for j in range(1, ny):
+                sdata[nx - i][ny - j][zval] = sdata[i][j][zval].conj()
+
+    return sdata
