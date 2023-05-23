@@ -63,4 +63,8 @@ print(X)
 print("all close:", np.allclose(X, X0))
 
 
+
+print("rcfft_pair:")
+X = rckernels.rcfft_pair(x, length, nbatch, readop=readop, writeop=writeop)
+
 # TODO: rcfft_pair

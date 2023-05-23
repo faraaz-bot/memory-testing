@@ -26,7 +26,8 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
             ridx1.append(lidx[-1] * 2 + 1)
             # Read op here.
             if readop == None:
-                z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+                #z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+                z[idx] = x[ibatch][tuple(ridx0)] + ij * x[ibatch][tuple(ridx1)]
             else:
                 # TODO: instead of complex addition, just use complex(a,b) to ensure that the
                 # read-op is real-to-real?
@@ -72,7 +73,8 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
             Z = np.fft.fft(Z)
             for idx0 in range(hlength[-1]):
                 X[ibatch][idx][idx0] = Z[idx0]
-            
+
+    # TODO: what if we apply the non-Hermitian symmetric readop here?  For shift at least.
     # Complex-to-complex transform on all of the non-batch dimensions:
     for dim in range(len(hlength) - 1):
         X = np.fft.fft(X, axis = dim + 1)
@@ -84,6 +86,24 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
                 X[ibatch][idx] = writeop(X[idx], ibatch, idx)
     
     return X
+    
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def rcfft_pair(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    otherlength = batch * np.prod(length[:-1])
+    if otherlength %2 != 0:
+        raise ValueError("not an even number somewhere")
+    
+    x0 = np.reshape(x, [otherlength, length[-1]])
+    for idx0 in range(otherlength // 2):
+        z = np.empty([length[-1]], dtype=complex)
+        for idx1 in range(length[-1]):
+            z[idx1] = complex(x0[idx0 * 2][idx1], x0[idx0 * 2 + 1][idx1])
+        z = np.fft.fft(z)
+        # FIXME: unpack
+
+    # FIXME: do the rest.
     
 def rfft(x, length, batch):
     # x: real input data
