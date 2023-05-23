@@ -13,7 +13,7 @@ import itertools
 
 # Batch of 1D transforms.
 length = np.array([4, 4], dtype=int)
-nbatch = 1
+nbatch = 2
 
 # Allocate and initialize the data:
 init = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0]  + 1))
@@ -34,8 +34,8 @@ print("X0:")
 print(X0)
 
 readop = None
-readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0])  / length[0])
-#readop = lambda readval, ibatch, idx: readval if (idx[0] % 2 == 0) else -readval
+#readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0]) / length[0])
+readop = lambda readval, ibatch, idx: readval if (idx[0] % 2 == 0) else -readval
 
 writeop = None
 #writeop = lambda readval, ibatch, idx: 2 * readval
@@ -66,5 +66,9 @@ print("all close:", np.allclose(X, X0))
 
 print("rcfft_pair:")
 X = rckernels.rcfft_pair(x, length, nbatch, readop=readop, writeop=writeop)
+
+print("X:")
+print(X)
+print("all close:", np.allclose(X, X0))
 
 # TODO: rcfft_pair

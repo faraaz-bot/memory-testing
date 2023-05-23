@@ -48,7 +48,7 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
                 X[ibatch][idx] = writeop(X[idx], ibatch, idx)
     
     return X
-    
+
 # Perform a general-dimensional batched real-to-complex FFT via complex embedding.
 def rcfft_embed(x, length, batch, readop=None, writeop=None):
     if len(length) == 0:
@@ -95,15 +95,42 @@ def rcfft_pair(x, length, batch, readop=None, writeop=None):
     if otherlength %2 != 0:
         raise ValueError("not an even number somewhere")
     
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+    
     x0 = np.reshape(x, [otherlength, length[-1]])
+    X = np.reshape(X, [otherlength, hlength[-1]])
     for idx0 in range(otherlength // 2):
+        
         z = np.empty([length[-1]], dtype=complex)
         for idx1 in range(length[-1]):
-            z[idx1] = complex(x0[idx0 * 2][idx1], x0[idx0 * 2 + 1][idx1])
-        z = np.fft.fft(z)
-        # FIXME: unpack
+            pp0 = np.unravel_index(np.ravel_multi_index((idx0*2, idx1), x0.shape), x.shape)
+            pp1 = np.unravel_index(np.ravel_multi_index((idx0*2 + 1, idx1), x0.shape), x.shape)
+            batch0 = pp0[0]
+            idx00 = pp0[1:]
+            batch1 = pp1[0]
+            idx11 = pp1[1:]
+            
+            if readop == None:
+                z[idx1] = complex(x0[idx0 * 2][idx1], x0[idx0 * 2 + 1][idx1])
+            else:
+                z[idx1] = readop(x0[idx0 * 2][idx1], batch0, idx00) \
+                    + 1j * readop(x0[idx0 * 2 + 1][idx1], batch1, idx11)
+        Z = np.fft.fft(z)
+        X[idx0 * 2], X[idx0 * 2 + 1] = unpackbatch(Z)
+        
+    X = np.reshape(X, np.append(batch, hlength))
 
-    # FIXME: do the rest.
+    for dim in range(len(hlength) - 1):
+        X = np.fft.fft(X, axis = dim + 1)
+           
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[idx], ibatch, idx) 
+    return X
+
     
 def rfft(x, length, batch):
     # x: real input data
