@@ -4,9 +4,10 @@
 import math
 import sys
 import itertools
+import numpy as np
+import copy
 
-
-from valid import *
+import  valid 
 
 def get_offsets(length, stride):
     if len(length) == 0:
@@ -33,68 +34,64 @@ def simple_linear_diophantine_i(a, b, debug=False):
         if debug:
             print(f'x={x}, y={y}, q={q}')
         x, y = y, x - q * y
-    return x, y
+    return [x, y]
 
-def getidx(offset, s0, s1, l0, l1, x, y):
-    g = math.gcd(s0, s1)
+def getidx(offset, s, l, X):
+    x = copy.deepcopy(X)
+    g = math.gcd(s[0], s[1])
     og = offset // g
-    x *= og
-    y *= og
+    x[0] *= og
+    x[1] *= og
     
     n = 0
-    if x < 0:
-        n = (x // s1)
-    if y < 0:
-        n = y // s0
+    if x[0] < 0:
+        n = (x[0] // s[1])
+    if x[1] < 0:
+        n = x[1] // s[0]
     
-    x = x + n * s1
-    y = y - n * s0
+    x[0] = x[0] + n * s[1]
+    x[1] = x[1] - n * s[0]
 
-    if x >= l0:
+    if x[0] >= l[0]:
         n -= 1
-        x -= s1
-        y += s0
+        x[0] -= s[1]
+        x[1] += s[0]
         
-    if y >= l1:
+    if x[1] >= l[1]:
         n += 1
-        x += s1
-        y -= s0
+        x[0] += s[1]
+        x[1] -= s[0]
     
-    return x, y
+    return x
     
 if True:
-    s0 = 3
-    s1 = 5
+    s = [3, 5]
+    l = [5, 4]
     #s0 = 258
     #s1 = 147
 
-    l0 = 5
-    l1 = 4
-    print("s:", (s0, s1))
-    print("l:", (l0, l1))
-    print(lcm(s0, s1))
-    #cols = strides.collisions2(s0, s1, l0, l1)
-    print(is_valid2(s0, s1, l0, l1))
-    #print(cols)
-    lengths = [l0, l1]
-    strides = [s0, s1]
+    print("s:", s)
+    print("l:", l)
+    if not valid.is_valid2(s[0], s[1], l[0], l[1]):
+        print("invalid array format")
+        sys.exit(1)
 
-    x,y = simple_linear_diophantine_i(s0, s1)
-    x0, y0 = x // math.gcd(s0, s1), y // math.gcd(s0, s1), 
-    print(x, y)
-    print(math.gcd(s0, s1))
-    print((s0 * x0 + s1 * y0))
+    sgcd = math.gcd(s[0], s[1])
     
-    for idx in itertools.product(range(l0), range(l1)):
-        offset = idx[0] * s0 + idx[1] * s1
+    idx00 = simple_linear_diophantine_i(s[0], s[1])
+    print("idx00:", idx00)
+    print(sgcd)
+    print(np.dot(idx00, s))
+
+    for idx in (list(idx) for idx in itertools.product(range(l[0]), range(l[1]))):
+        offset = np.dot(idx, s)
         print(idx, offset)
-        x, y = getidx(offset, s0, s1, l0, l1, x0, y0)
-        offset0 = s0 * x + s1 * y
-        print("\t", x, y, offset0 )
-        if offset == offset0 and x == idx[0] and y == idx[1]:
+        idx0 = getidx(offset, s, l, idx00)
+        offset0 = np.dot(s, idx0)
+        print("\t", idx0, offset0 )
+        
+        if offset == offset0 and idx0 == idx:
             print("good")
         else:
             print("FAIL!")
-                
-        
-            
+
