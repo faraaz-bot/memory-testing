@@ -194,7 +194,7 @@ for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), r
                 idx00 = [idx0[0] * offset, idx0[1] * offset,idx0[2] * offset]
                 loffset = np.dot(idx00, s)
                 #print("\t\t",idx, offset, loffset, offset==loffset)
-                # TODO: 
+                # TODO: re-index
                 if offset != loffset:
                     fails3.append([s,l])
 
