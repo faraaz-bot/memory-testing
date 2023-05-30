@@ -49,28 +49,28 @@ def getidx(offset, sgcd, S, l, X):
     x[1] *= og
     s[0] //= sgcd
     s[1] //= sgcd
-    print("sgcd:", sgcd)
+    #print("sgcd:", sgcd)
     
-    print("x:", x, "s:", s, "l:", l, np.dot(x, s))
+    #print("x:", x, "s:", s, "l:", l, np.dot(x, s))
     #print("og:", og)
    
 
     # If any indices are out-of-bounds, shift so that they're in-bounds.
-    print(x)
+    #print(x)
 
-    if False:
+    if True:
         while x[0] >= l[0] or x[1] < 0:
             x[0] -= s[1]
             x[1] += s[0]
-            print("asdf", x)
+            #print("asdf", x)
         while x[1] >= l[1] or x[0] < 0:
             x[0] += s[1]
             x[1] -= s[0]
-            print("qwer", x)
+            #print("qwer", x)
     else:
         n = 0
         if x[0] >= l[0]:
-            print("x =", x, "l[0] =", l[0], "s[1] =", s[1] )
+            #print("x =", x, "l[0] =", l[0], "s[1] =", s[1] )
             n = (l[0] - 1 - x[0]) // s[1]
         elif x[0] < 0:
             n = (-x[0]) // s[1]
@@ -83,7 +83,7 @@ def getidx(offset, sgcd, S, l, X):
 
         n = 0
         if x[1] >= l[1]:
-            print("x =", x, "l[1] = ", l[1])
+            #print("x =", x, "l[1] = ", l[1])
             n = -((l[1] - 1 - x[1]) // s[0])
         elif x[1] < 0:
             n = (-x[1]) // s[0]
@@ -95,7 +95,7 @@ def getidx(offset, sgcd, S, l, X):
             x[0] += s[1]
             x[1] -= s[0]
         
-        print("n:", n)
+        #print("n:", n)
     
     return x
     
@@ -135,9 +135,9 @@ if True:
             sys.exit(1)
 
 
-lmax = 20
+lmax = 5
             
-fails = []
+fails2 = []
 for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
     sgcd = math.gcd(s[0], s[1])
     idx00 = simple_linear_diophantine_i(s[0] // sgcd, s[1] // sgcd)
@@ -158,6 +158,45 @@ for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
                     print("good")
                 else:
                     print("FAIL!")
+                    fails2.append([s,l])
                     sys.exit(1)
-            
+      
+fails3 = []      
     
+lmax = 6
+for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), range(1, lmax))):
+    for l in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax), range(2, lmax))):
+        valid3 = valid.is_valid3(s, l)
+        if valid3:
+            sgcd = math.gcd(s[0], s[1], s[2])
+            #print(s, l, sgcd)
+            
+            s2 = [s[0], math.gcd(s[1],s[2])]
+            s2gcd = math.gcd(s2[0], s2[1])
+            s2[0] //= s2gcd
+            s2[1] //= s2gcd
+            idx2 =  simple_linear_diophantine_i(s2[0], s2[1])
+            #print("\tidx2:", idx2, s2, s2gcd, np.dot(s2, idx2))
+            
+            
+            s3 = [s[1], s[2]]
+            s3gcd = math.gcd(s3[0], s3[1])
+            s3[0] //= s3gcd
+            s3[1] //= s3gcd
+            idx3 = simple_linear_diophantine_i(s3[0], s3[1])
+            #print("\tidx3:", idx3, s3, np.dot(s3, idx3))
+
+            idx0 = [idx2[0], idx2[1] * idx3[0], idx2[1] * idx3[1]]
+            #print("\tidx0:", idx0, np.dot(idx0, s))
+            
+            for idx in (list(idx) for idx in itertools.product(*[range(l0) for l0 in l])):
+                offset = np.dot(s, idx)
+                idx00 = [idx0[0] * offset, idx0[1] * offset,idx0[2] * offset]
+                loffset = np.dot(idx00, s)
+                #print("\t\t",idx, offset, loffset, offset==loffset)
+                # TODO: 
+                if offset != loffset:
+                    fails3.append([s,l])
+
+print(fails3)
+                
