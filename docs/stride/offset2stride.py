@@ -9,6 +9,9 @@ import copy
 
 import valid 
 
+def ceildiv(num, dem):
+    return (num + dem - 1) // dem
+
 def get_offsets(length, stride):
     if len(length) == 0:
         yield 0
@@ -54,8 +57,8 @@ def getidx(offset, sgcd, S, l, X):
 
     # If any indices are out-of-bounds, shift so that they're in-bounds.
     print(x)
-    n = 0
-    if True:
+
+    if False:
         while x[0] >= l[0] or x[1] < 0:
             x[0] -= s[1]
             x[1] += s[0]
@@ -64,26 +67,35 @@ def getidx(offset, sgcd, S, l, X):
             x[0] += s[1]
             x[1] -= s[0]
             print("qwer", x)
-    else: 
+    else:
+        n = 0
         if x[0] >= l[0]:
-            print("x[0] < 0")
-            n = (x[0]) // (l[0])
-        if x[1] >= l[1]:
-            print("x[1] =", x[1], "< 0")
-            n = (x[1]) // (l[1])
-            
-        x[0] = x[0] + n * s[1]
-        x[1] = x[1] - n * s[0]
-        while x[1] < 0:
+            print("x =", x, "l[0] =", l[0], "s[1] =", s[1] )
+            n = (l[0] - 1 - x[0]) // s[1]
+        elif x[0] < 0:
+            n = (-x[0]) // s[1]
+
+        x[0] += n * s[1]
+        x[1] -= n * s[0]
+        if x[1] < 0:
             x[0] -= s[1]
             x[1] += s[0]
-        while x[0] < 0:
+
+        n = 0
+        if x[1] >= l[1]:
+            print("x =", x, "l[1] = ", l[1])
+            n = -((l[1] - 1 - x[1]) // s[0])
+        elif x[1] < 0:
+            n = (-x[1]) // s[0]
+
+        x[0] += n * s[1]
+        x[1] -= n * s[0]
+        
+        if x[0] < 0:
             x[0] += s[1]
             x[1] -= s[0]
-            
-
         
-    print("n:", n)
+        print("n:", n)
     
     return x
     
