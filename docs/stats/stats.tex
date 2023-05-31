@@ -780,9 +780,12 @@ basicstyle=\ttfamily\small,
     Our data can be quite skewed and has outliers \pause{} - the mean
     can be quite unstable in this context.
    
-    \begin{center}
-      \includegraphics[width=0.5\textwidth]{img/mean_median_skew_meme.jpg}
-    \end{center}
+    %% \begin{center}
+    %%   \includegraphics[width=0.5\textwidth]{img/mean_median_skew_meme.jpg}
+    %% \end{center}
+
+    \bigskip
+    
     \pause{}
     
     The median is also stable under monotonic transforms, eg:
@@ -1111,6 +1114,17 @@ basicstyle=\ttfamily\small,
    
 \end{frame}
 
+
+\begin{frame}
+  \frametitle{Statistical tests: Lockhart MI250X A1 with CrayOS}
+
+   \begin{center}
+     \includegraphics[width=0.9\textwidth]{asy/x1000c0s2b0n0_fpr.pdf}
+   \end{center}
+   
+\end{frame}
+
+
 \begin{frame}
   \frametitle{Statistical tests: Radeon 7}
 
@@ -1248,18 +1262,18 @@ basicstyle=\ttfamily\small,
     
 \end{frame}
 
-\begin{frame}
-    \frametitle{Roberts and Son Colocation Services}
+%% \begin{frame}
+%%     \frametitle{Roberts and Son Colocation Services}
 
-    \begin{center}
-      A far better solution than what we have now.
-    \end{center}
+%%     \begin{center}
+%%       A far better solution than what we have now.
+%%     \end{center}
     
-    \begin{center}
-      \includegraphics[width=0.5\textwidth]{img/roberts_son_hosting.jpg}
-    \end{center}
+%%     \begin{center}
+%%       \includegraphics[width=0.5\textwidth]{img/roberts_son_hosting.jpg}
+%%     \end{center}
     
-\end{frame}
+%% \end{frame}
 
 
 \begin{frame}
@@ -1268,7 +1282,7 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item Using longitudinal data
     \medskip
-  \item Testing on other libraries
+  \item Testing on other libraries / hardware
     \medskip
   \item Look at more hardware
     \medskip
@@ -1304,7 +1318,7 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Other Libraries}
+  \frametitle{Other Libraries / Hardware}
 
   We have tested on rocFFT
   \begin{itemize}
@@ -1319,29 +1333,17 @@ basicstyle=\ttfamily\small,
   \item rocBLAS - compute bound
   \item rocSPARSE - more complex memory access patterns
   \end{itemize}
-
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Other Hardware}
-
-  The results here are (basically) all GPU.
   
   \bigskip
-
+  
   What about on:
   \begin{itemize}
   \item CPU?
   \item Multi-GPU?
   \item Over MPI?
   \end{itemize}
-
-  \bigskip
-
-  Also, what's up with the NVIDIA devices?
-  
 \end{frame}
+
 
 \begin{frame}
   \frametitle{Performance Tuning}
@@ -1375,12 +1377,11 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{Performance Tuning}
 
-  \begin{center}
-  This model is known as a multi-armed bandit.
-  \begin{center}
-  \end{center}
-  The solution algorithm is called Thompson Sampling.
-  \end{center}
+  \begin{itemize}
+  \item This model is known as a multi-armed bandit.
+  \item The solution algorithm is called Thompson Sampling.
+  \item We can apply Bayesian techniques to reduce test time.
+  \end{itemize}
   
   \begin{center}
     \includegraphics[width=0.9\textwidth]{asy/thompsonsampling.pdf}
