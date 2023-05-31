@@ -39,7 +39,7 @@ def simple_linear_diophantine_i(a, b, debug=False):
         x, y = y, x - q * y
     return [x, y]
 
-def getidx(offset, sgcd, S, l, X):
+def getidx2(offset, sgcd, S, l, X):
     x = copy.deepcopy(X)
     s = copy.deepcopy(S)
 
@@ -124,7 +124,7 @@ if True:
     for idx in (list(idx) for idx in itertools.product(*[range(l0) for l0 in l])):
         offset = np.dot(idx, s)
         print("forward", idx, "dot", s, "=", offset)
-        idx0 = getidx(offset, sgcd, s, l, idx00)
+        idx0 = getidx2(offset, sgcd, s, l, idx00)
         offset0 = np.dot(s, idx0)
         print("\t", idx0, offset0 )
         
@@ -150,7 +150,7 @@ for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
             for idx in (list(idx) for idx in itertools.product(*[range(l0) for l0 in l])):
                 offset = np.dot(idx, s)
                 print("forward:", idx, offset)
-                idx0 = getidx(offset, sgcd, s, l, idx00)
+                idx0 = getidx2(offset, sgcd, s, l, idx00)
                 offset0 = np.dot(s, idx0)
                 print("\t", idx0, offset0 )
                 
@@ -162,41 +162,125 @@ for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
                     sys.exit(1)
       
 fails3 = []      
+
+# Parametrize a 3D multi-index solution.
+def idx3gen(idx, s, n, m):
+    g = math.gcd(s[0], s[1])
+    h = math.gcd(s[0], s[2])
+    pidx = [idx[0] - n * s[1] // g  - m * s[2] // h,
+            idx[1] + n * s[0] // g,
+            idx[2]  + m * s[0] // h]
+    return pidx
+
+def getidx3(offset, s, l, idx0):
+    
+    x = [idx0[0] * offset, idx0[1] * offset, idx0[2] * offset]
+    
+    g = math.gcd(s[0], s[1])
+    h = math.gcd(s[0], s[2])
+    
+    itmax = 40
+    it = 0
+    print(x)
+
+    # Get index 1 and 2 to zero.
+    n = g * x[1] // s[0]
+    m = h * x[2] // s[0]
+
+    x = idx3gen(x, s, m, n)
+
+    if x[0] < 0:
+        x[0] += s[1] // g
+        x[1] -= s[0] // g
+        x[0] += s[2] // h
+        x[2] -= s[0] // h
+
+    while x[0] >= l[0] and it < itmax:
+        it += 1
+        if x[1] < l[1] - s[0] // g and x[0] >= s[1] // g:
+            x[0] -= s[1] // g
+            x[1] += s[0] // g
+        if x[2] < l[2] - s[0] // h and x[0] >= s[2] // h:
+            x[0] -= s[2] // h
+            x[2] += s[0] // h
+        print(x)
+    
+    while False and (x[0] < 0 or x[0] >= l[0]):
+        #it += 1
+        print(x, l)
+        if x[0] < 0:
+            if x[2] < l[2]:
+                x[0] += s[1] // g
+                x[1] -= s[0] // g
+                continue
+            if x[1] < l[1]:
+                x[0] += s[2] // h
+                x[2] -= s[0] // h
+                continue
+            x[0] += s[1] // g
+            x[1] -= s[0] // g
+            x[0] += s[2] // h
+            x[2] -= s[0] // h
+        else:
+            x[0] -= s[1] // g
+            x[1] += s[0] // g
+
+            if x[1] < 0:
+                x[0] -= s[1] // g
+                x[1] += s[0] // g
+                continue
+            x[0] -= s[2] // h
+            x[2] += s[0] // h
+
+            if x[2] < 0:
+                x[0] -= s[2] // h
+                x[2] += s[0] // h
+                continue
+                
+    return x
     
 lmax = 6
 for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), range(1, lmax))):
+    
+    sgcd = math.gcd(s[0], s[1], s[2])
+    #print(s, l, sgcd)
+
+    s2 = [s[0], math.gcd(s[1],s[2])]
+    s2gcd = math.gcd(s2[0], s2[1])
+    s2[0] //= s2gcd
+    s2[1] //= s2gcd
+    idx2 =  simple_linear_diophantine_i(s2[0], s2[1])
+    #print("\tidx2:", idx2, s2, s2gcd, np.dot(s2, idx2))
+
+    s3 = [s[1], s[2]]
+    s3gcd = math.gcd(s3[0], s3[1])
+    s3[0] //= s3gcd
+    s3[1] //= s3gcd
+    idx3 = simple_linear_diophantine_i(s3[0], s3[1])
+    #print("\tidx3:", idx3, s3, np.dot(s3, idx3))
+
+    idx0 = [idx2[0], idx2[1] * idx3[0], idx2[1] * idx3[1]]
+    #print("\tidx0:", idx0, np.dot(idx0, s))
+    
     for l in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax), range(2, lmax))):
         valid3 = valid.is_valid3(s, l)
         if valid3:
-            sgcd = math.gcd(s[0], s[1], s[2])
-            #print(s, l, sgcd)
-            
-            s2 = [s[0], math.gcd(s[1],s[2])]
-            s2gcd = math.gcd(s2[0], s2[1])
-            s2[0] //= s2gcd
-            s2[1] //= s2gcd
-            idx2 =  simple_linear_diophantine_i(s2[0], s2[1])
-            #print("\tidx2:", idx2, s2, s2gcd, np.dot(s2, idx2))
-            
-            
-            s3 = [s[1], s[2]]
-            s3gcd = math.gcd(s3[0], s3[1])
-            s3[0] //= s3gcd
-            s3[1] //= s3gcd
-            idx3 = simple_linear_diophantine_i(s3[0], s3[1])
-            #print("\tidx3:", idx3, s3, np.dot(s3, idx3))
-
-            idx0 = [idx2[0], idx2[1] * idx3[0], idx2[1] * idx3[1]]
-            #print("\tidx0:", idx0, np.dot(idx0, s))
-            
             for idx in (list(idx) for idx in itertools.product(*[range(l0) for l0 in l])):
                 offset = np.dot(s, idx)
+                print("\t\tidx:", idx, s, offset)
                 idx00 = [idx0[0] * offset, idx0[1] * offset,idx0[2] * offset]
-                loffset = np.dot(idx00, s)
-                #print("\t\t",idx, offset, loffset, offset==loffset)
+                #pidx = idx3gen(idx00, s, 1, 2)
+
+                pidx = getidx3(offset, s, l, idx0)
+
+                loffset = np.dot(pidx, s)
+                print("\t\t",idx, pidx, offset, loffset, offset==loffset)
                 # TODO: re-index
                 if offset != loffset:
                     fails3.append([s,l])
+                if pidx != idx:
+                    print(pidx, idx, s, l)
+                    sys.exit(0)
 
 print(fails3)
                 
