@@ -27,6 +27,8 @@ def iodims_collapsible(iodim1, iodim2):
 if __name__ == '__main__':
     lengths = [4,4,4]
     strides = [1,4,32]
+    lengths = [3,5]
+    strides = [5,4]
 
     # gather iodims, sort them from fastest to slowest.
     iodims = []
@@ -53,8 +55,11 @@ if __name__ == '__main__':
     print("{} divs needed to compute transform index".format(len(iodims)))
 
     print(iodims)
+    import itertools
     
-    for offset in get_offsets(lengths, strides):
+    for idx in itertools.product(range(lengths[0]), range(lengths[1])):
+        offset = idx[0] * strides[0] + idx[1] * strides[1]
+        #for offset in get_offsets(lengths, strides):
         # for each reachable offset, work backwards to get the
         # indexes used to reach that offset
         cur_offset = offset
@@ -62,5 +67,6 @@ if __name__ == '__main__':
         for iodim in reversed(iodims):
             cur_index = cur_offset // iodim.stride
             cur_offset = cur_offset % iodim.stride
+        print(idx)
         print("offset {} transform_index={}".format(offset, cur_index))
     

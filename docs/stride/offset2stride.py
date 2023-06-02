@@ -185,7 +185,7 @@ if False:
             sys.exit(1)
 
 
-lmax = 10
+lmax = 2
             
 fails2 = []
 for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
@@ -212,6 +212,7 @@ for s in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax))):
                     print("FAIL!")
                     fails2.append([s,l])
                     sys.exit(1)
+print("fails2:", fails2)
       
 fails3 = []
 print("lmax:", lmax)
@@ -219,86 +220,110 @@ print("maxoknsize:", maxoknsize)
 
 
 # Parametrize a 3D multi-index solution.
-def idx3gen(idx, s, n, m):
+def idx3gen(idx, s, m, n, offset):
+    # idx is a solution to the case where s is coprime.
     g = math.gcd(s[0], s[1])
     h = math.gcd(s[0], s[2])
-    pidx = [idx[0] - n * s[1] // g  - m * s[2] // h,
-            idx[1] + n * s[0] // g,
-            idx[2]  + m * s[0] // h]
+    k = math.gcd(s[1], s[2])
+
+    l = math.gcd(k, s[0])
+
+    # TODO: move solvers out of this function.
+    vals = simple_linear_diophantine_i(s[0], k)
+    w = vals[1]
+    v = simple_linear_diophantine_i(s[1], s[2])
+    
+    
+    sgcd = math.gcd(s[0], s[1], s[2])
+    og = offset // sgcd
+
+    print(s)
+    print(k)
+    print(s[0], s[2] // k, s[2])
+    print(s[0], s[1] // k, s[1])
+
+    print(m, n)
+        
+    pidx = [og * idx[0] + m * k,
+            og * idx[1] - m * v[0] // k - n * s[2] // k,
+            og * idx[2] - m * v[1] // k + n * s[1] // k]
+    print(pidx)
     return pidx
 
-def getidx3(offset, s, l, idx0):
+# Find the 3D index which is in the bounded domain, given the initial solution idx0.
+def getidx3(offset, s, l, idx):
+
+    if offset == 0:
+        return [0, 0, 0]
     
-    x = [idx0[0] * offset, idx0[1] * offset, idx0[2] * offset]
+    sgcd = math.gcd(s[0], s[1], s[2])
+
+    og = offset // sgcd
+    
+    #x = [idx0[0] * og, idx0[1] * og, idx0[2] * og]
     
     g = math.gcd(s[0], s[1])
     h = math.gcd(s[0], s[2])
+    k = math.gcd(s[1], s[2])
     
-    itmax = 40
-    it = 0
-    print(x)
+    #print(x)
 
-    # Get index 1 and 2 to zero.
-    n = g * x[1] // s[0]
-    m = h * x[2] // s[0]
+    if False:
+        # Find the valid values for n:
+        r0 = -np.sign(og * idx[1])* (np.abs(og * idx[1])// (s[0] // g))
+        r1 = np.sign((l[1] - og * idx[1])) * ceildiv(np.abs(l[1] - og * idx[1]) , s[0] // g)
+        print("r0, r1:", r0, r1)
+        okn = set(())
+        for n0 in range(min(r0, r1) - 1, max(r0, r1) + 1):
+            x1 = og * (idx[1]) + n0 * s[0] // g
+            if x1 >= 0 and x1 < l[1]:
+                okn.add(int(n0))
+        print("okn:", okn)
 
-    x = idx3gen(x, s, m, n)
+        # Find the valid values for n:
+        q0 = -np.sign(og * idx[2])* (np.abs(og * idx[2])// (s[0] // h))
+        q1 = np.sign((l[2] - og * idx[2])) * ceildiv(np.abs(l[2] - og *idx[2]) , s[0] // h)
+        print("q0, q1:", q0, q1)
+        okm = set(())
+        for m0 in range(min(q0, q1) - 1, max(q0, q1) + 1):
+            x2 = og * (idx[2]) + m0 * s[0] // h
+            # x2 = x[2] + m0 * s[0] // h
+            if x2 >= 0 and x2 < l[2]:
+                okm.add(int(m0))
+        print("okm:", okm)
 
-    if x[0] < 0:
-        x[0] += s[1] // g
-        x[1] -= s[0] // g
-        x[0] += s[2] // h
-        x[2] -= s[0] // h
+        n = None
+        m = None
 
-    while x[0] >= l[0] and it < itmax:
-        it += 1
-        if x[1] < l[1] - s[0] // g and x[0] >= s[1] // g:
-            x[0] -= s[1] // g
-            x[1] += s[0] // g
-        if x[2] < l[2] - s[0] // h and x[0] >= s[2] // h:
-            x[0] -= s[2] // h
-            x[2] += s[0] // h
-        print(x)
+        for n0 in okn:
+            for m0 in okm:
+                x0 = og * idx[0] - n0 * s[1] // g  - m0 * s[2] // h
+                if x0 >= 0 and x0 < l[0]:
+                    n = n0
+                    m = m0
+                    break
+        if n == None or m == None:
+            print("no solution found")
+            print("l:", l)
+            print("s:", s)
+            print("idx0:", idx0)
+            print("offset:", offset)
+            print("g, h:", g, h)
+            sys.exit(1)
+
+            
     
-    while False and (x[0] < 0 or x[0] >= l[0]):
-        #it += 1
-        print(x, l)
-        if x[0] < 0:
-            if x[2] < l[2]:
-                x[0] += s[1] // g
-                x[1] -= s[0] // g
-                continue
-            if x[1] < l[1]:
-                x[0] += s[2] // h
-                x[2] -= s[0] // h
-                continue
-            x[0] += s[1] // g
-            x[1] -= s[0] // g
-            x[0] += s[2] // h
-            x[2] -= s[0] // h
-        else:
-            x[0] -= s[1] // g
-            x[1] += s[0] // g
+    #x = [idx[0] * og, idx[1] * og, idx[2] * og]
+    x = idx3gen(idx, s, 1, 0, offset)
 
-            if x[1] < 0:
-                x[0] -= s[1] // g
-                x[1] += s[0] // g
-                continue
-            x[0] -= s[2] // h
-            x[2] += s[0] // h
-
-            if x[2] < 0:
-                x[0] -= s[2] // h
-                x[2] += s[0] // h
-                continue
-                
+    
     return x
     
-lmax = 1
+lmax = 5
+print("lmax:", lmax)
 for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), range(1, lmax))):
     
     sgcd = math.gcd(s[0], s[1], s[2])
-    #print(s, l, sgcd)
 
     s2 = [s[0], math.gcd(s[1],s[2])]
     s2gcd = math.gcd(s2[0], s2[1])
@@ -315,27 +340,29 @@ for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), r
     #print("\tidx3:", idx3, s3, np.dot(s3, idx3))
 
     idx0 = [idx2[0], idx2[1] * idx3[0], idx2[1] * idx3[1]]
-    #print("\tidx0:", idx0, np.dot(idx0, s))
+    print("idx0:", idx0, "s:", s)
     
     for l in (list(ss) for ss in itertools.product(range(2, lmax), range(2, lmax), range(2, lmax))):
         valid3 = valid.is_valid3(s, l)
         if valid3:
             for idx in (list(idx) for idx in itertools.product(*[range(l0) for l0 in l])):
                 offset = np.dot(s, idx)
-                print("\t\tidx:", idx, s, offset)
-                idx00 = [idx0[0] * offset, idx0[1] * offset,idx0[2] * offset]
+                print("forward: dot(x,s):", idx, s, "->", offset)
+                #print("\t\tidx:", idx, s, offset)
+                #idx00 = [idx0[0] * offset, idx0[1] * offset,idx0[2] * offset]
                 #pidx = idx3gen(idx00, s, 1, 2)
 
                 pidx = getidx3(offset, s, l, idx0)
 
                 loffset = np.dot(pidx, s)
                 print("\t\t",idx, pidx, offset, loffset, offset==loffset)
-                # TODO: re-index
+
                 if offset != loffset:
                     fails3.append([s,l])
                 if pidx != idx:
+                    print("index doesn't match")
                     print(pidx, idx, s, l)
                     sys.exit(0)
 
-print(fails3)
+print("fails3:", fails3)
                 
