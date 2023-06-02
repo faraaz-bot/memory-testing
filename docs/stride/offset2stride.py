@@ -229,8 +229,8 @@ def idx3gen(idx, s, m, n, offset):
     l = math.gcd(k, s[0])
 
     # TODO: move solvers out of this function.
-    vals = simple_linear_diophantine_i(s[0], k)
-    w = vals[1]
+    w = simple_linear_diophantine_i(s[0], k)
+    
     v = simple_linear_diophantine_i(s[1], s[2])
     
     
@@ -239,14 +239,20 @@ def idx3gen(idx, s, m, n, offset):
 
     print(s)
     print(k)
+    print(l)
     print(s[0], s[2] // k, s[2])
     print(s[0], s[1] // k, s[1])
 
+    m = 1
+    n = 1
+    
     print(m, n)
-        
-    pidx = [og * idx[0] + m * k,
-            og * idx[1] - m * v[0] // k - n * s[2] // k,
-            og * idx[2] - m * v[1] // k + n * s[1] // k]
+
+    
+    pidx = [og * idx[0] + m * k // l,
+            v[0] * (og * w[1] - m * s[0] // l ) // k + n * s[2] // k,
+            v[1] * (og * w[1] - m * s[0] // l ) // k - n * s[1] // k]
+
     print(pidx)
     return pidx
 
@@ -358,11 +364,13 @@ for s in (list(ss) for ss in itertools.product(range(1, lmax), range(1, lmax), r
                 print("\t\t",idx, pidx, offset, loffset, offset==loffset)
 
                 if offset != loffset:
+                    print("offset doesn't match")
                     fails3.append([s,l])
+                    sys.exit(0)
                 if pidx != idx:
                     print("index doesn't match")
                     print(pidx, idx, s, l)
-                    sys.exit(0)
+                    #sys.exit(0)
 
 print("fails3:", fails3)
                 
