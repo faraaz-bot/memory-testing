@@ -309,7 +309,6 @@ def getidx3(offset, s, L, idx):
             q1 =  np.sign( L[1] - x1m ) * ceildiv(np.abs( L[1] - x1m ) , s[2] // k )
             print( np.abs( L[1] - x1m ), s[2], k, s[2] // k )
             print("q0, q1:", q0, q1)
-            # FIXME: these bounds are totally wrong somehow.
             for n0 in range(min(q0, q1) - 1, max(q0, q1) + 1):
                 x1 = x1m + n0 * s[2] // k
                 x2 = x2m - n0 * s[1] // k
