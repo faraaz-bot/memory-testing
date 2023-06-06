@@ -107,3 +107,25 @@ print("crfft_embed")
 x = rckernels.crfft_embed(X, length, nbatch, ireadop, iwriteop)
 print(x)
 print("all close:", np.allclose(x, x0))
+
+
+
+print()
+
+X = np.zeros(shape=np.append(nbatch, length), dtype=complex)
+for ibatch in range(nbatch):
+    for idx in (list(itertools.product(*[range(l) for l in length]))):
+        X[ibatch][idx] = cinit(ibatch, idx)
+print("X:")
+print(X)
+
+readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0]) / length[0])
+writeop = lambda readval, ibatch, idx: 2 * readval
+
+
+Y = rckernels.fft(X, length, nbatch, readop=readop, writeop=writeop)
+print("Y:")
+print(Y)
+
+X00 = rckernels.ifft(Y, length, nbatch, readop=readop, writeop=writeop)
+print(X00)

@@ -481,3 +481,51 @@ def symmetrize_3d(hdata, nx, ny, nz, only_conj=False):
                 sdata[nx - i][ny - j][zval] = sdata[i][j][zval].conj()
 
     return sdata
+
+def fft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+
+    X0 = np.empty(shape=np.append(batch, length), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+            
+    
+    for ibatch in range(batch):
+        X0[ibatch] = np.fft.fftn(X0[ibatch])
+        
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = writeop(X0[ibatch][idx], ibatch, idx)
+
+    return X0
+
+                
+def ifft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+
+    X0 = np.empty(shape=np.append(batch, length), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+    
+    for ibatch in range(batch):
+        X0[ibatch] = np.fft.ifftn(X0[ibatch])
+        
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = writeop(X0[ibatch][idx], ibatch, idx)
+
+    return X0
