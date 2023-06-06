@@ -87,8 +87,6 @@ def crfft_even(X, length, batch, readop=None, writeop=None):
     else:
         X0 = copy.deepcopy(X)
 
-    print(X0)
-        
     # Complex-to-complex transform on all of the non-batch dimensions:
     for dim in range(len(length) - 1):
         X0 = np.fft.ifft(X, axis = dim + 1) * length[dim]
@@ -99,7 +97,7 @@ def crfft_even(X, length, batch, readop=None, writeop=None):
         for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
             
             Z = prekernel(X0[ibatch][idx])
-            Z = np.fft.ifft(Z[idx]) / len(Z)
+            Z = np.fft.ifft(Z) * len(Z)
 
             Nhalf = length[-1] // 2
             for i in range(0, Nhalf):

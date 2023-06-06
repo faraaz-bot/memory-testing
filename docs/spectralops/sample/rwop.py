@@ -59,6 +59,11 @@ print("X:")
 print(X)
 print("all close:", np.allclose(X, X0))
 
+print("rcfft:")
+X = rckernels.rcfft(x, length, nbatch, readop=readop, writeop=writeop)
+print("X:")
+print(X)
+print("all close:", np.allclose(X, X0))
 
 
 # Allocate and initialize the (real) data:
