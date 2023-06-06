@@ -12,7 +12,7 @@ import rckernels
 import itertools, copy
 
 # Batch of 1D transforms.
-length = np.array([4, 4], dtype=int)
+length = [4, 4]
 nbatch = 1
 
 # Allocate and initialize the (real) data:

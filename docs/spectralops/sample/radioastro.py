@@ -5,16 +5,19 @@ import cmath
 
 np.set_printoptions(suppress=True,linewidth=np.nan)
 
+import sys
+sys.path.insert(1, '../../real/code')
+import rckernels
+
 # Batch of 1D transforms.
-length = 4
+length = [4]
 nbatch = 4
 
-
 # Complex length:
-hlength = length // 2 + 1
+hlength = [length[-1] // 2 + 1]
 
 # Allocate and initialize the data:
-x = np.zeros(shape=(nbatch, hlength), dtype=complex)
+x = np.zeros(shape=np.append(nbatch, hlength), dtype=complex)
 init = lambda ibatch, ix : ix
 for ibatch in range(len(x)):
     for ix in range(len(x[ibatch])):
@@ -26,26 +29,16 @@ print(x)
 # sample python code, we're doing extra read/writes, but this isn't
 # representative of the 
 
-# If the length is even, move the Fourier origin to length/2:
-# readop = lambda readval, ibatch, ix: -readval if (ix % 2 != 0 and ibatch > 0) else readval
-
 # Move each batch one index over:
-readop = lambda readval, ibatch, ix: readval * cmath.exp(1j * 2 * np.pi * (ix * ibatch) / length)
+readop = lambda readval, ibatch, ixd: readval * cmath.exp(1j * 2.0 * np.pi * ( ixd[0] * ibatch) / length[0] )
+#readop = None
 
 # Perform a function on the output that depends frequency and batch:
-writeop = lambda writeval, ibatch, ix: writeval * np.exp(1/(ibatch + ix + 1))
-
-# Allocate the output buffer:
-xout = np.zeros(shape=(nbatch, length), dtype=float)
+writeop = lambda writeval, ibatch, idx: writeval * np.exp(1 / (ibatch + idx[0] + 1))
+#writeop = None
 
 # Perform the pointwise read op, perform the batched 1D
-# real-to-complex transform, and perform the write op.
-for ibatch in range(len(x)):
-    for ix in range(len(x[ibatch])):
-        x[ibatch, ix] = readop(x[ibatch, ix], ibatch, ix)
-    xout[ibatch] = np.fft.irfft(x[ibatch], length)
-    for ix in range(len(xout[ibatch])):
-        xout[ibatch, ix] = writeop(xout[ibatch, ix], ibatch, ix)
+xout = rckernels.crfft_even(x, length, nbatch, readop, writeop)
 
 # The output:
 print(xout)

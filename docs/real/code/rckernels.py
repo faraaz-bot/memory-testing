@@ -4,6 +4,26 @@ import numpy as np
 import copy
 import itertools
 
+# Main function for real-to-complex FFT with read/write ops.
+def rcfft(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    # We ignore the paired algorithm.
+    if length[-1] %2 != 0:
+        return rcfft_even(x, length, batch, readop, writeop)
+    else:
+        return rcfft_embed(x, length, batch, readop, writeop)
+
+# Main function for complex-to-real FFT with read/write ops:
+def crfft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    # We ignore the paired algorithm.
+    if length[-1] %2 != 0:
+        return crfft_even(X, length, batch, readop, writeop)
+    else:
+        return crfft_embed(X, length, batch, readop, writeop)
+        
 # Perform a general-dimensional batched real-to-complex even-length FFT.
 def rcfft_even(x, length, batch, readop=None, writeop=None):
     if len(length) == 0:
@@ -55,37 +75,45 @@ def crfft_even(X, length, batch, readop=None, writeop=None):
         raise ValueError("No lengths were provided")
     if length[-1] %2 != 0:
         raise ValueError("Last dimension is not even")
-    x = np.zeros(shape=np.append(batch, length), dtype=float)
+
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1
+    X0 = np.empty(shape=np.append(batch, hlength), dtype=complex)
 
     if readop != None:
         for ibatch in range(batch):
-            for idx in (list(itertools.product(*[range(l) for l in length]))):
-                x[ibatch][idx] = writeop(x[idx], ibatch, idx)
-    
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+
+    print(X0)
+        
     # Complex-to-complex transform on all of the non-batch dimensions:
     for dim in range(len(length) - 1):
-        X = np.fft.ifft(X, axis = dim + 1) * length[dim]
+        X0 = np.fft.ifft(X, axis = dim + 1) * length[dim]
 
+    x = np.zeros(shape=np.append(batch, length), dtype=float)
+    
     for ibatch in range(batch):
-        Zlength = np.append(length[0:-1], length[-1] // 2)
-        Z = np.zeros(shape=Zlength, dtype=complex)
         for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
-            Z[idx] = prekernel(X[ibatch][idx])
-            Z[idx] = np.fft.ifft(Z[idx]) * len(Z[idx])
-        
-        for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
-            lidx = list(idx)
-            ridx0 = lidx[0:-1]
-            ridx0.append(lidx[-1] * 2)
-            ridx1 = lidx[0:-1]
-            ridx1.append(lidx[-1] * 2 + 1)
-            if writeop == None:
-                x[ibatch][tuple(ridx0)] = Z[idx].real
-                x[ibatch][tuple(ridx1)] = Z[idx].imag
-            else:
-                x[ibatch][tuple(ridx0)] = writeop(Z[idx].real, ibatch, ridx0)
-                x[ibatch][tuple(ridx1)] = writeop(Z[idx].imag, ibatch, ridx1)
-        
+            
+            Z = prekernel(X0[ibatch][idx])
+            Z = np.fft.ifft(Z[idx]) / len(Z)
+
+            Nhalf = length[-1] // 2
+            for i in range(0, Nhalf):
+                if writeop == None:
+                    x[ibatch][idx][2 * i] = Z[i].real
+                    x[ibatch][idx][2 *i + 1] = Z[i].imag
+                else:
+                    ridx = list(idx)
+                    ridx.append(2 * i)
+                    iidx = list(idx)
+                    iidx.append(2 * i + 1)
+                    x[ibatch][idx][2 * i] = writeop(Z[i].real, ibatch, ridx)
+                    x[ibatch][idx][2 * i + 1] = writeop(Z[i].imag, ibatch, iidx)
+                
     return x
 
 # Perform a general-dimensional batched real-to-complex FFT via complex embedding.
@@ -95,7 +123,6 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
     hlength = copy.deepcopy(length)
     hlength[-1] = hlength[-1] // 2 + 1 
     X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
-
     
     # The real-to-complex dimension:
     for ibatch in range(batch):
@@ -125,6 +152,35 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
                 X[ibatch][idx] = writeop(X[idx], ibatch, idx)
     
     return X
+
+def crfft_embed(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X0 = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X0[ibatch][idx] = readop(X[idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+
+    for dim in range(len(hlength) - 1):
+        X0 = np.fft.ifft(X0, axis = dim + 1)
+
+    x = np.zeros(shape=np.append(batch, length), dtype=float)
+
+    
+    for ibatch in range(batch):
+        for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
+            Z = np.zeros(length[-1], dtype=complex)
+        
+    
+    return x
+
+                
     
 # Perform a general-dimensional batched real-to-complex even-length FFT.
 def rcfft_pair(x, length, batch, readop=None, writeop=None):
@@ -170,21 +226,6 @@ def rcfft_pair(x, length, batch, readop=None, writeop=None):
                 X[ibatch][idx] = writeop(X[idx], ibatch, idx) 
     return X
 
-    
-def rfft(x, length, batch):
-    # x: real input data
-    # length: array-like int
-    # batch: int
-    if len(length) == 0:
-        X = np.array(length, dtype=complex)
-        X = x
-    if length[-1] % 2 == 0:
-        print("even!")
-    else:
-        print("odd!")
-
-    
-
 def postkernel(Z):
     # Real-to-complex post kernel.
     Nhalf = len(Z)
@@ -229,7 +270,6 @@ def postkernel(Z):
             X[p] = Z[p].conjugate()
         X[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
         return X
-        
 
 def prekernel(X):
     # Complex-to-real pre kernel
