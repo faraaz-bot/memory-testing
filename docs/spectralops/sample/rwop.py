@@ -29,11 +29,11 @@ print("x:")
 print(x)
 
 readop = None
-#readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0]) / length[0])
+readop = lambda readval, ibatch, idx: readval * cmath.exp( 2.0 * np.pi * 1j * (idx[0]) / length[0])
 #readop = lambda readval, ibatch, idx: readval if (idx[0] % 2 == 0) else -readval
 
 writeop = None
-#writeop = lambda readval, ibatch, idx: 2 * readval
+writeop = lambda readval, ibatch, idx: 2 * readval
 
 
 print("np.fft.rfftn:")
@@ -66,6 +66,9 @@ print(X)
 print("all close:", np.allclose(X, X0))
 
 
+
+print()
+
 # Allocate and initialize the (real) data:
 cinit = lambda ibatch, idx : np.exp(1.0 / (ibatch + idx[0]  + 1))
 if len(length) > 1:
@@ -73,6 +76,7 @@ if len(length) > 1:
 
 hlength = copy.deepcopy(length)
 hlength[-1] = hlength[-1] // 2 + 1 
+
 
 X = np.zeros(shape=np.append(nbatch, hlength), dtype=complex)
 for ibatch in range(nbatch):
@@ -87,8 +91,8 @@ for ibatch in range(nbatch):
 print("X:")
 print(X)
 
-ireadop = None
-iwriteop = None
+ireadop = lambda readval, ibatch, idx: 2 * readval
+iwriteop = lambda readval, ibatch, idx: 1 * readval
 
 print("x0")
 x0 = np.fft.irfftn(X, axes=range(1, len(np.append(nbatch, length)))) * np.prod(length)
@@ -96,5 +100,10 @@ print(x0)
 
 print("crfft_even")
 x = rckernels.crfft_even(X, length, nbatch, ireadop, iwriteop)
+print(x)
+print("all close:", np.allclose(x, x0))
+
+print("crfft_embed")
+x = rckernels.crfft_embed(X, length, nbatch, ireadop, iwriteop)
 print(x)
 print("all close:", np.allclose(x, x0))

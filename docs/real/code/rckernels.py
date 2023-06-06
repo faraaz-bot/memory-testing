@@ -65,7 +65,7 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
     if writeop != None:
         for ibatch in range(batch):
             for idx in (list(itertools.product(*[range(l) for l in hlength]))):
-                X[ibatch][idx] = writeop(X[idx], ibatch, idx)
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx)
     
     return X
 
@@ -89,7 +89,7 @@ def crfft_even(X, length, batch, readop=None, writeop=None):
 
     # Complex-to-complex transform on all of the non-batch dimensions:
     for dim in range(len(length) - 1):
-        X0 = np.fft.ifft(X, axis = dim + 1) * length[dim]
+        X0 = np.fft.ifft(X0, axis = dim + 1) * length[dim]
 
     x = np.zeros(shape=np.append(batch, length), dtype=float)
     
@@ -147,7 +147,7 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
     if writeop != None:
         for ibatch in range(batch):
             for idx in (list(itertools.product(*[range(l) for l in hlength]))):
-                X[ibatch][idx] = writeop(X[idx], ibatch, idx)
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx)
     
     return X
 
@@ -161,21 +161,29 @@ def crfft_embed(X, length, batch, readop=None, writeop=None):
     if readop != None:
         for ibatch in range(batch):
             for idx in (list(itertools.product(*[range(l) for l in hlength]))):
-                X0[ibatch][idx] = readop(X[idx], ibatch, idx)
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
     else:
         X0 = copy.deepcopy(X)
 
     for dim in range(len(hlength) - 1):
-        X0 = np.fft.ifft(X0, axis = dim + 1)
+        X0 = np.fft.ifft(X0, axis = dim + 1) * length[dim]
 
     x = np.zeros(shape=np.append(batch, length), dtype=float)
-
     
     for ibatch in range(batch):
         for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
             Z = np.zeros(length[-1], dtype=complex)
-        
-    
+            for ix in range(hlength[-1]):
+                Z[ix] = X0[ibatch][idx][ix]
+                Z[-ix] = X0[ibatch][idx][ix].conjugate()
+            Z = np.fft.ifft(Z) * len(Z)
+            for ix in range(length[-1]):
+                if writeop == None:
+                    x[ibatch][idx][ix] = Z[ix].real
+                else:
+                    idxx = list(idx)
+                    idxx.append(ix)
+                    x[ibatch][idx][ix] = writeop(Z[ix].real, ibatch, idxx)
     return x
 
                 
@@ -221,7 +229,7 @@ def rcfft_pair(x, length, batch, readop=None, writeop=None):
     if writeop != None:
         for ibatch in range(batch):
             for idx in (list(itertools.product(*[range(l) for l in hlength]))):
-                X[ibatch][idx] = writeop(X[idx], ibatch, idx) 
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx) 
     return X
 
 def postkernel(Z):
