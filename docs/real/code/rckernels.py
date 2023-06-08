@@ -9,7 +9,7 @@ def rcfft(x, length, batch, readop=None, writeop=None):
     if len(length) == 0:
         raise ValueError("No lengths were provided")
     # We ignore the paired algorithm.
-    if length[-1] %2 != 0:
+    if length[-1] % 2 == 0:
         return rcfft_even(x, length, batch, readop, writeop)
     else:
         return rcfft_embed(x, length, batch, readop, writeop)
@@ -19,7 +19,7 @@ def crfft(X, length, batch, readop=None, writeop=None):
     if len(length) == 0:
         raise ValueError("No lengths were provided")
     # We ignore the paired algorithm.
-    if length[-1] %2 != 0:
+    if length[-1] %2 == 0:
         return crfft_even(X, length, batch, readop, writeop)
     else:
         return crfft_embed(X, length, batch, readop, writeop)
@@ -36,7 +36,8 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
 
     # The real-to-complex dimension:
     for ibatch in range(batch):
-        Zlength = np.append(length[0:-1], length[-1] // 2)
+        Zlength = copy.deepcopy(length)
+        Zlength[-1] //= 2
         z = np.zeros(shape=Zlength, dtype=complex)
         for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
             lidx = list(idx)
@@ -47,10 +48,7 @@ def rcfft_even(x, length, batch, readop=None, writeop=None):
             # Read op here.
             if readop == None:
                 z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
-                #z[idx] = x[ibatch][tuple(ridx0)] + ij * x[ibatch][tuple(ridx1)]
             else:
-                # TODO: instead of complex addition, just use complex(a,b) to ensure that the
-                # read-op is real-to-real?
                 z[idx] = readop(x[ibatch][tuple(ridx0)],ibatch,ridx0) \
                     + 1j * readop(x[ibatch][tuple(ridx1)],ibatch,ridx1) 
         Z = np.fft.fft(z)
@@ -127,7 +125,6 @@ def rcfft_embed(x, length, batch, readop=None, writeop=None):
         for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
             Z = np.zeros(length[-1], dtype=complex)
             for idx0 in range(length[-1]):
-                # TODO: read-op
                 if readop == None:
                     Z[idx0] = x[ibatch][idx][idx0]
                 else:
@@ -529,3 +526,27 @@ def ifft(X, length, batch, readop=None, writeop=None):
                 X0[ibatch][idx] = writeop(X0[ibatch][idx], ibatch, idx)
 
     return X0
+
+
+# TODO: midop specifies the order of the convolution.
+
+def rfft_round(x, length, batch, readop=None, midop=None, writeop=None):
+    X = rcfft(x, length, batch, readop=readop, writeop=midop)
+    x0 = crfft(X, length, batch, readop=None, writeop=writeop)
+    return x0
+
+def hfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    x = crfft(X, length, batch, readop=readop, writeop=midop)
+    X0 = rcfft(x, length, batch, readop=None, writeop=writeop)
+    return X0
+
+def cfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    Y = fft(X, length, batch, readop=readop, writeop=midop)
+    X0 = ifft(Y, length, batch, readop=readop, writeop=midop)
+    return X0
+
+def icfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    Y = ifft(X, length, batch, readop=readop, writeop=midop)
+    X0 = fft(Y, length, batch, readop=readop, writeop=midop)
+    return X0
+
