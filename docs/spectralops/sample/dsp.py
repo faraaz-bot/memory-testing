@@ -32,6 +32,9 @@ for ibatch in range(len(x)):
 
 # Hann filter
 readop = lambda val, ibatch, idx: val * 0.5 * (1 - np.cos(2* np.pi * idx[0] / length[-1]))
+# Lots of other filters are possible: https://en.wikipedia.org/wiki/Window_function
+# https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
+
 
 #readop = None
 writeop = None
