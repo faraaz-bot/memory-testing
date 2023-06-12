@@ -107,13 +107,15 @@ def plot_mall_chart(df):
             plt.clear_figure()
             plt.theme("pro")
             data = []
+            labels = []
             for item in it["items"]:
                 data.append(field_dfs[item]["GPUDF_" + str(i)].tolist())
+                labels.append(fields[item]["label"])
 
             plt.multiple_bar(
                 field_dfs[it["items"][0]].index.values.tolist(),
                 data,
-                label=[v["label"] for v in fields.values()],
+                label=labels,
                 color=["blue", "blue+", 68, 63],
             )
             sub_title = "AID"
