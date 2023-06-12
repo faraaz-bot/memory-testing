@@ -9,7 +9,7 @@ def rcfft(x, length, batch, readop=None, writeop=None):
     if len(length) == 0:
         raise ValueError("No lengths were provided")
     # We ignore the paired algorithm.
-    if False and length[-1] % 2 == 0:
+    if length[-1] % 2 == 0:
         return rcfft_even(x, length, batch, readop, writeop)
     else:
         return rcfft_embed(x, length, batch, readop, writeop)
@@ -19,7 +19,7 @@ def crfft(X, length, batch, readop=None, writeop=None):
     if len(length) == 0:
         raise ValueError("No lengths were provided")
     # We ignore the paired algorithm.
-    if False and length[-1] %2 == 0:
+    if length[-1] %2 == 0:
         return crfft_even(X, length, batch, readop, writeop)
     else:
         return crfft_embed(X, length, batch, readop, writeop)
