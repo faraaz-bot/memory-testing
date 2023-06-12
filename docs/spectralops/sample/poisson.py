@@ -22,8 +22,8 @@ import functools
 domain = [1, 1]
 
 # Batch of 1D transforms:
-N = 16
-length = [N]
+N = 128
+length = [N, N]
 nbatch = 1
 
 
@@ -39,13 +39,8 @@ f_input = np.zeros(shape=np.append(nbatch, length), dtype=float)
 for ibatch in range(len(f_input)):
     for idx in (list(itertools.product(*[range(l) for l in length]))):
         f_input[ibatch][tuple(idx)] = init(ibatch, tuple(idx))
-        print( idx[0], init(ibatch, idx) )
         
 #print(x[0])
-
-# for ix in range(length[0]):
-#     f[ibatch, ix] = np.sin( 2.0 * np.pi * ix / length[0] )
-#     print(ix, np.sin( 2.0 * np.pi * ix / length[0] ))
 
 if True:
     if len(length) == 1:
@@ -53,7 +48,7 @@ if True:
     elif len(length) == 2:
         plt.imshow( f_input[0], label="input" )
     plt.legend()
-    plt.show()
+    #plt.show()
 
    
 # The readop and writeop lambdas would be used like callbacks in
@@ -103,7 +98,7 @@ if len(length) == 1:
 elif len(length) == 2:
     plt.imshow(phi[0], label="phi")
 plt.legend()
-plt.show()
+#plt.show()
 
 
 # Let's compute the finite-difference of phi and compare it with x:
@@ -116,7 +111,7 @@ for ibatch in range(nbatch):
             ixp = (ix + 1) % length[0]
             ixm = (ix - 1) % length[0]
             lap_phi[ix] = ( phi[ibatch][ixm] - 2.0 * phi[ibatch][ix] + phi[ibatch][ixp] ) / ( dx * dx )
-            print(lap_phi[ix], f_input[ibatch][ix], f_input[ibatch][ix] / lap_phi[ix] )
+            #print(lap_phi[ix], f_input[ibatch][ix], f_input[ibatch][ix] / lap_phi[ix] )
             maxerr = max( maxerr, np.abs( lap_phi[ix] - f_input[ibatch][ix] ) )
         print("max err:", maxerr)
         if len(length) == 1:
@@ -126,3 +121,17 @@ for ibatch in range(nbatch):
             plt.imshow(laph_phi, label="lap_phi")
         plt.legend()
         plt.show()
+    elif len(length) == 2:
+        dx = domain[0] / length[1]
+        dy = domain[1] / length[1]
+        for ix in range(length[0]):
+            ixp = (ix + 1) % length[0]
+            ixm = (ix - 1) % length[0]
+            for iy in range(length[1]):
+                iyp = (iy + 1) % length[1]
+                iym = (iy - 1) % length[1]
+                lap_phi[ix, iy] = ( phi[ibatch][ixm, iy] - 2.0 * phi[ibatch][ix, iy] + phi[ibatch][ixp, iy] ) / ( dx * dx ) \
+                    + ( phi[ibatch][ix, iym] - 2.0 * phi[ibatch][ix, iy] + phi[ibatch][ix, iyp] ) / ( dy * dy ) 
+                maxerr = max( maxerr, np.abs( lap_phi[ix, iy] - f_input[ibatch][ix, iy] ) )
+                
+        print("max err:", maxerr)                
