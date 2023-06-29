@@ -331,12 +331,19 @@ basicstyle=\ttfamily\small,
 
   \begin{itemize}
   \item Single-node and multi-node.
+    \begin{itemize}
+    \item single-node doesn't need a communicator
+    \item multi-node needs a communicator
+    \end{itemize}
   \item block decomposition
     \begin{itemize}
     \item pencil and slab are just degenerate cases
     \end{itemize}
   \item MPI and rocSCHMEM back-ends
-  \item decomposition should work also work with the normal interface
+  \item Decomposition should work also work with the normal interface
+    \begin{itemize}
+    \item This allows for sparsity in the single-gpu case.
+    \end{itemize}
   \end{itemize}
   
 \end{frame}
@@ -349,27 +356,50 @@ basicstyle=\ttfamily\small,
     Sparsity is about \emph{data properties}.
   \end{center}
 
+  
   Given the block decomposition in the multi-gpu section, we can mark
   blocks as containing only zero data.
 
-  for inputs and output.
-  
-  
+  \medskip
+
+  \begin{itemize}
+  \item blocks can be marked as sparse, ie all zero.
+  \item separate sparsity for inputs and output.
+  \item block-based sparsity design
+    \begin{itemize}
+    \item spectral ops seem to have coarser sparsity patterns
+    \item csr or coordinate list doesn't seem relevant
+    \end{itemize}
+  \end{itemize}
+      
 \end{frame}
 
 \begin{frame}
   \frametitle{Implementation objectives}
 
-  hipfft: fully functional, no performance goals with cufft.
-
-  staged release - allows for prioritization
-
-  primary objective: empower users
-
-  secondary objective: stop users from shooting themselves in the foot.
-  
+  \begin{itemize}
+  \item hipfft support
+    \begin{itemize}
+    \item fully functional
+    \item no performance goals with cufft
+    \end{itemize}
+  \item staged release
+    \begin{itemize}
+    \item allows for prioritization
+    \item reduces risk - we can use feedback
+    \end{itemize}
+  \end{itemize}
   
 \end{frame}
 
+\begin{frame}
+  \frametitle{Implementation DAG}
+
+  \begin{center}
+    \includegraphics[width=0.5\textwidth]{implementdag.pdf}
+  \end{center}
+
+
+\end{frame}
 
 \end{document}
