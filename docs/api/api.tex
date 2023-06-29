@@ -212,15 +212,164 @@ basicstyle=\ttfamily\small,
 
   \bigskip
 
-  
-  \begin{center}
-    \begin{minipage}[b][45mm][t]{80mm}
-      FIXME
-    \end{minipage}
-  \end{center}
+  \begin{itemize}
+  \item API themes
+    \begin{itemize}
+    \item Spectral Ops
+    \item Multi-gpu
+    \item Sparsity
+    \end{itemize}
+  \item API proposal objectives
+  \item Feature implemnetation DAG
+  \item Optimization plan
+  \end{itemize}
   
 \end{frame}
 
+\begin{frame}
+  \frametitle{Spectral Ops}
+
+  \begin{center}
+    Spectral ops are about \emph{data flow}.
+  \end{center}
+    
+  \medskip
+  
+  Two categories:
+  \begin{itemize}
+  \item One-way
+    \begin{itemize}
+      \item $
+    \text{input}
+    \rightarrow \text{read op}
+    \rightarrow \mathcal{F}
+    \rightarrow \text{write op}
+    \rightarrow \text{output}
+    $
+    \item examples: shift, window, filter, scale
+    \end{itemize}
+
+  \item round-trip\\
+    \begin{itemize}
+    \item$
+      \text{input}
+      \rightarrow \text{read op}
+      \rightarrow \mathcal{F}
+      \rightarrow \text{mid op}
+      \rightarrow \mathcal{F}^{-1}
+      \rightarrow \text{write op}
+      \rightarrow \text{output}
+      $
+      \item examples: Poisson solve, convolution, correlation
+    \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Spectral Ops: ops}
+
+  \medskip
+  Operations are:
+  \begin{itemize}
+  \item local (scalar)
+  \item can have many inputs
+  \item can have many outputs
+  \item depend on index and batch number
+  \item have user-supplied constants
+  \item quadratic mid-ops may require dealiasing (ie conv)
+  \end{itemize}
+
+  \medskip
+
+  There are lots of possible operations and combinations thereof.
+
+  \medskip
+
+  You know, maybe we need to specify an array of ops at each stage,
+  each op associated with certain inputs/outputs.  For example, with
+  GESTS, they probably have different differential operator for the
+  passive scalar field than for the velocity field, and the scalar
+  field is simulated with lower resolution.  But they both need to end
+  up at the same mid-op length.
+  
+
+\end{frame}
+  
+\begin{frame}
+  \frametitle{Spectral Ops: inputs and outputs}
+  
+  \medskip
+  Input and outputs
+  \begin{itemize} 
+  \item may have different types
+    \begin{itemize}
+      \item float, int4, double, \dots
+    \end{itemize}
+  \item may have different lengths
+    \begin{itemize}
+    \item seemingly only for round-trip?
+    \end{itemize}
+  \item some data may be constant across executions
+    \begin{itemize}
+    \item eg: filters, ML weights, Bluestein method
+    \end{itemize}
+  \end{itemize}
+  
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Multi-gpu}
+
+  \begin{center}
+    Multi-gpu is about \emph{data distribution}.
+  \end{center}
+
+  \medskip
+
+  \begin{itemize}
+  \item Single-node and multi-node.
+  \item block decomposition
+    \begin{itemize}
+    \item pencil and slab are just degenerate cases
+    \end{itemize}
+  \item MPI and rocSCHMEM back-ends
+  \item decomposition should work also work with the normal interface
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Sparsity}
+
+  \begin{center}
+    Sparsity is about \emph{data properties}.
+  \end{center}
+
+  Given the block decomposition in the multi-gpu section, we can mark
+  blocks as containing only zero data.
+
+  for inputs and output.
+  
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Implementation objectives}
+
+  hipfft: fully functional, no performance goals with cufft.
+
+  staged release - allows for prioritization
+
+  primary objective: empower users
+
+  secondary objective: stop users from shooting themselves in the foot.
+  
+  
+\end{frame}
 
 
 \end{document}
