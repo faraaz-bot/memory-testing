@@ -56,7 +56,7 @@ add(new void(picture pic, transform t) {
     draw(pic, oneway.bottom(t)--twoway.top(t), Arrow);
     draw(pic, twoway.bottom(t)--twowaypad.top(t), Arrow);
     
-    draw(pic, api.bottom(t)--oneway.top(t), Arrow);
+    //draw(pic, api.bottom(t)--oneway.top(t), Arrow);
     draw(pic, api.bottom(t)--blockdata.top(t), Arrow);
 
     draw(pic, blockdata.bottom(t)--singlenode.top(t), Arrow);
