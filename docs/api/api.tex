@@ -335,7 +335,7 @@ basicstyle=\ttfamily\small,
     \item single-node doesn't need a communicator
     \item multi-node needs a communicator
     \end{itemize}
-  \item block decomposition
+  \item brick decomposition
     \begin{itemize}
     \item pencil and slab are just degenerate cases
     \end{itemize}
@@ -357,15 +357,15 @@ basicstyle=\ttfamily\small,
   \end{center}
 
   
-  Given the block decomposition in the multi-gpu section, we can mark
-  blocks as containing only zero data.
+  Given the brick decomposition in the multi-gpu section, we can mark
+  bricks as containing only zero data.
 
   \medskip
 
   \begin{itemize}
-  \item blocks can be marked as sparse, ie all zero.
+  \item bricks can be marked as sparse, ie all zero.
   \item separate sparsity for inputs and output.
-  \item block-based sparsity design
+  \item brick-based sparsity design
     \begin{itemize}
     \item spectral ops seem to have coarser sparsity patterns
     \item csr or coordinate list doesn't seem relevant

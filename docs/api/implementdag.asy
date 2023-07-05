@@ -21,7 +21,7 @@ block oneway = roundrectangle(Label("One-way ops"), (xop,-2dy));
 block twoway = roundrectangle(Label("Round-trip unpadded ops"), (xop,-3dy));
 block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-4dy));
 
-block blockdata = roundrectangle(Label("Block decomposition"), (0,-2dy));
+block brickdata = roundrectangle(Label("Brick decomposition"), (0,-2dy));
 
 block singlenode = roundrectangle(Label("Single-node multi-gpu"), (-0.8dx,-3dy));
 block multinode = roundrectangle(Label("Multi-node MPI"), (0,-4dy));
@@ -40,7 +40,7 @@ draw(oneway);
 draw(twoway);
 draw(twowaypad);
 
-draw(blockdata);
+draw(brickdata);
 draw(singlenode);
 draw(multinode);
 draw(multinodeschmem);
@@ -60,11 +60,11 @@ add(new void(picture pic, transform t) {
     draw(pic, oneway.bottom(t)--twoway.top(t), Arrow);
     draw(pic, twoway.bottom(t)--twowaypad.top(t), Arrow);
     
-    draw(pic, api.bottom(t)--blockdata.top(t), Arrow);
+    draw(pic, api.bottom(t)--brickdata.top(t), Arrow);
 
-    draw(pic, blockdata.position(-1.3, t)--singlenode.top(t), Arrow);
-    draw(pic, blockdata.bottom(t)--multinode.top(t), Arrow);
-    draw(pic, blockdata.position(-1.7, t)--multinodeschmem.top(t), Arrow);
+    draw(pic, brickdata.position(-1.3, t)--singlenode.top(t), Arrow);
+    draw(pic, brickdata.bottom(t)--multinode.top(t), Arrow);
+    draw(pic, brickdata.position(-1.7, t)--multinodeschmem.top(t), Arrow);
     
-    draw(pic, blockdata.bottomright(t)--sparse.top(t), Arrow);
+    draw(pic, brickdata.bottomright(t)--sparse.top(t), Arrow);
   });
