@@ -139,7 +139,7 @@ basicstyle=\ttfamily\small,
 
 
 
-\def\thetitle{API proposal for rocFFT}
+\def\thetitle{Data-centric API proposal for rocFFT}
 \def\thesubtitle{Spectral Ops, Multi-GPU, and Sparsity}
 \def\theauthor{rocFFT group}
 \def\theauthorinstitute{AMD}
@@ -266,6 +266,66 @@ basicstyle=\ttfamily\small,
 
 \end{frame}
 
+
+\begin{frame}
+  \frametitle{Spectral Ops: examples}
+
+  \begin{itemize}
+  \item Phase-shift-and-scale
+    \begin{itemize}
+    \item Input: multiple 1D complex arrays of length $N$
+    \item Each 1D array is shifted by phase $\theta(b)$ and scaled by $\lambda(b)$
+    \item Read op: $X_{i_x,b} \rightarrow \omega_N^{i_x \theta(b)} \lambda(b)X_{i_x,b}$
+    \item Use case: radio astronomy.
+    \end{itemize}
+  \item Poisson solve
+    \begin{itemize}
+    \item Input: Real array (2D, $N_x\times{}N_y$), unbatched
+    \item Output: find $f$ such that $\nabla^2{f} = \phi$
+    \item Mid op: $x_{i_x, i_y} \rightarrow \frac{-x_{i_x, i_y} }{((i_x < N_x/2 ? i_x : N_x - i_x ) /L_x)^2 + (i_y / L_y)^2}$
+    \item Maybe a constant scale as well
+    \item Use case: molecular dynamics
+    \end{itemize}
+  \item Window filter
+    \begin{itemize}
+      \item TODO
+    \end{itemize}
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Spectral Ops: examples}
+
+  \begin{itemize}
+  \item Phase-shift dealiased convolution for Navier--Stokes
+    \begin{itemize}
+    \item Input: Three 3D arrays
+    \item Read op:
+      \begin{itemize}
+      \item $f_0 \rightarrow (f_0, g_0)$ TOD add phase-shift!
+      \end{itemize}
+    \item Mid-op: $f_0, f_1, f_2, f_3, f_4, f_5 \rightarrow f_0 f_1,
+      f_2, f_3, f_4 f_5$ (or something like that)
+    \item Use-case: gests
+    \end{itemize}
+  \item Fully dealiased convolution for Navier--Stokes 2D
+    \begin{itemize}
+      \item TODO
+    \end{itemize}
+  \item Fully dealiased convolution for ML
+    \begin{itemize}
+      \item TODO
+    \end{itemize}
+  \item Fully dealiased autocorrelation
+    \begin{itemize}
+      \item TODO
+    \end{itemize}
+  \end{itemize}
+  
+\end{frame}
+
+
 \begin{frame}
   \frametitle{Spectral Ops: ops}
 
@@ -282,17 +342,12 @@ basicstyle=\ttfamily\small,
 
   \medskip
 
-  There are lots of possible operations and combinations thereof.
+  There are lots of possible operations, and combinations thereof.
 
   \medskip
 
-  You know, maybe we need to specify an array of ops at each stage,
-  each op associated with certain inputs/outputs.  For example, with
-  GESTS, they probably have different differential operator for the
-  passive scalar field than for the velocity field, and the scalar
-  field is simulated with lower resolution.  But they both need to end
-  up at the same mid-op length.
-  
+  Not all spectral ops will apply to all fields; we may have some depth-1 DAG assocaited with
+  input/output fields for each spectral op.
 
 \end{frame}
   
@@ -353,7 +408,7 @@ basicstyle=\ttfamily\small,
   \frametitle{Sparsity}
 
   \begin{center}
-    Sparsity is about \emph{data properties}.
+    Sparsity is about \emph{data oproperties}.
   \end{center}
 
   
@@ -364,6 +419,7 @@ basicstyle=\ttfamily\small,
 
   \begin{itemize}
   \item bricks can be marked as sparse, ie all zero.
+  \item Compression, too?   More in fields?
   \item separate sparsity for inputs and output.
   \item brick-based sparsity design
     \begin{itemize}
