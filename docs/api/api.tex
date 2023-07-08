@@ -246,7 +246,7 @@ basicstyle=\ttfamily\small,
     \rightarrow \text{write op}
     \rightarrow \text{output}
     $
-    \item examples: shift, window, filter, scale
+  \item examples: shift, window, filter, scale
     \end{itemize}
 
   \item round-trip\\
@@ -271,6 +271,14 @@ basicstyle=\ttfamily\small,
   \frametitle{Spectral Ops: examples}
 
   \begin{itemize}
+  \item Window filter
+    \begin{itemize}
+    \item Input: real 1D array.
+    \item Read-op: $f_{i_x} \rightarrow H(i_x) f_{i_x}$
+    \item $H$ is a Hamming window, Hann windows, Blackman windows, \dots
+    \item USe case: DSP
+    \end{itemize}
+
   \item Phase-shift-and-scale
     \begin{itemize}
     \item Input: multiple 1D complex arrays of length $N$
@@ -278,17 +286,14 @@ basicstyle=\ttfamily\small,
     \item Read op: $X_{i_x,b} \rightarrow \omega_N^{i_x \theta(b)} \lambda(b)X_{i_x,b}$
     \item Use case: radio astronomy.
     \end{itemize}
-  \item Poisson solve
+  %% \item $y$ derivative of a 2D Hermitian array
+  %%   \begin{itemize}
+  %%   \item Read op: $X_{i_x, i_Y,b} \rightarrow \frac{2 \pi}{L_y} i_y  X_{i_x,b}$
+  %%   \end{itemize}
+  \item $x$ derivative of a 2D Hermitian array
     \begin{itemize}
-    \item Input: Real array (2D, $N_x\times{}N_y$), unbatched
-    \item Output: find $f$ such that $\nabla^2{f} = \phi$
-    \item Mid op: $x_{i_x, i_y} \rightarrow \frac{-x_{i_x, i_y} }{((i_x < N_x/2 ? i_x : N_x - i_x ) /L_x)^2 + (i_y / L_y)^2}$
-    \item Maybe a constant scale as well
-    \item Use case: molecular dynamics
-    \end{itemize}
-  \item Window filter
-    \begin{itemize}
-      \item TODO
+    \item Define $$k_x= \frac{2 \pi}{L_x}\begin{cases}i_x &\text{ if } i_x < N_x / 2\\ N_x -i_x &\text{otherwise}\end{cases} $$
+    \item Read op: $X_{i_x, i_Y,b} \rightarrow i k_x  X_{i_x,b}$
     \end{itemize}
   \end{itemize}
   
@@ -298,28 +303,77 @@ basicstyle=\ttfamily\small,
   \frametitle{Spectral Ops: examples}
 
   \begin{itemize}
+
+   \item Poisson solve
+    \begin{itemize}
+    \item Round-trip, input: Real array (2D, $N_x\times{}N_y$)
+    \item Output: find $f$ such that $\nabla^2{f} = \phi$
+    \item Mid op: $x_{i_x, i_y} \rightarrow \frac{-x_{i_x, i_y} }{ k_x^2 + k_y^2}$
+    \item Maybe a constant scale as well
+    \item Use case: molecular dynamics
+    \end{itemize}
   \item Phase-shift dealiased convolution for Navier--Stokes
     \begin{itemize}
-    \item Input: Three 3D arrays
+    \item Input: Three Hermitian 3D arrays, cubic
     \item Read op:
       \begin{itemize}
-      \item $f_0 \rightarrow (f_0, g_0)$ TOD add phase-shift!
+      \item Read-op:
+        $u
+          \rightarrow \(u, \omega = \nabla \times u\)
+          \rightarrow \(u, \omega, \tilde{u}, \tilde{\omega}\)
+          $
+        \item $\tilde{u}$ is $u$ with a $\(1/2, 1/2, 1/2\)$ phase shift.
       \end{itemize}
-    \item Mid-op: $f_0, f_1, f_2, f_3, f_4, f_5 \rightarrow f_0 f_1,
-      f_2, f_3, f_4 f_5$ (or something like that)
-    \item Use-case: gests
+    \item Mid-op: two copies of 
+      \begin{dmath}
+        \(f_0, f_1, f_2, f_3, f_4, f_5\)
+        \rightarrow
+        \(
+        f_4 f_2 - f_5 f_1,
+        f_5 f_1 - f_3 f_2,
+        f_3 f_1 - f_4 f_0
+        \)
+      \end{dmath}
+    \item write-op: combine-and-zero
+      \begin{itemize}
+      \item $\(f_0, f_1, f_2, f_3, f_4, f_5\)
+        \rightarrow
+        \(f_0 + f_1, f_2 + f_3, f_4 + f_5 \)$
+      \item All values with $\left|k\right| > N$ set to zero.
+      \end{itemize}
+    \item Use-case: GESTS (they also add a passive scalar field).
     \end{itemize}
-  \item Fully dealiased convolution for Navier--Stokes 2D
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Spectral Ops: convolution examples}
+
+  These examples need zero-padding to dealias convolutions.
+  
+  \begin{itemize}
+
+  \item Source term for vorticity Navier--Stokes 2D
     \begin{itemize}
-      \item TODO
+      \item Input: 2D Hermitian array
+      \item Read-op: $\omega \rightarrow
+        \(
+        ik_x\omega,
+        \frac{ik_x}{k_x^2 + k_y^2}\omega,
+        ik_y\omega,
+        \frac{ik_y}{k_x^2 + k_y^2}\omega
+        \)$
+      \item mid-op: $\(f_0, f_1, f_2, f_3\) \rightarrow \( f_3 f_0 - f_2 f_0 \)$
     \end{itemize}
-  \item Fully dealiased convolution for ML
+  \item Convolution for ML
     \begin{itemize}
-      \item TODO
+    \item Mid-op: $f,g\rightarrow fg$
+    \item $f$ is a constant filter: only transform once, keep data for later mid-ops.
     \end{itemize}
-  \item Fully dealiased autocorrelation
+  \item Dealiased autocorrelation
     \begin{itemize}
-      \item TODO
+    \item mid-op: input multiplied by its complex conjugate: $f \rightarrow \bar{f}f$
     \end{itemize}
   \end{itemize}
   
@@ -408,7 +462,7 @@ basicstyle=\ttfamily\small,
   \frametitle{Sparsity}
 
   \begin{center}
-    Sparsity is about \emph{data oproperties}.
+    Sparsity is about \emph{data properties}.
   \end{center}
 
   
