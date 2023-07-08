@@ -268,7 +268,7 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Spectral Ops: examples}
+  \frametitle{Spectral Ops: One-way Examples}
 
   \begin{itemize}
   \item Window filter
@@ -300,7 +300,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Spectral Ops: examples}
+  \frametitle{Spectral Ops: Round-Trip Examples}
 
   \begin{itemize}
 
@@ -368,7 +368,7 @@ basicstyle=\ttfamily\small,
     \end{itemize}
   \item Convolution for ML
     \begin{itemize}
-    \item Mid-op: $f,g\rightarrow fg$
+    \item Mid-op: $\(f,g\)\rightarrow fg$
     \item $f$ is a constant filter: only transform once, keep data for later mid-ops.
     \end{itemize}
   \item Dealiased autocorrelation
@@ -473,11 +473,11 @@ basicstyle=\ttfamily\small,
 
   \begin{itemize}
   \item bricks can be marked as sparse, ie all zero.
-  \item Compression, too?   More in fields?
-  \item separate sparsity for inputs and output.
-  \item brick-based sparsity design
+  \item Or we can add compression!  Perhaps lossy!
+  \item Separate sparsity for inputs and output.
+  \item Brick-based sparsity design
     \begin{itemize}
-    \item spectral ops seem to have coarser sparsity patterns
+    \item spectral data seem to have coarser sparsity patterns
     \item csr or coordinate list doesn't seem relevant
     \end{itemize}
   \end{itemize}
@@ -506,10 +506,16 @@ basicstyle=\ttfamily\small,
   \frametitle{Implementation DAG}
 
   \begin{center}
-    \includegraphics[width=0.5\textwidth]{implementdag.pdf}
+    \includegraphics[width=0.9\textwidth]{implementdag.pdf}
   \end{center}
 
+\end{frame}
 
+\begin{frame}
+  \frametitle{API proposals}
+
+  FIXME
+  
 \end{frame}
 
 \end{document}
