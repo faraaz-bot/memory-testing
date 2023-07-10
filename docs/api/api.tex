@@ -386,7 +386,7 @@ basicstyle=\ttfamily\small,
   \medskip
   Operations are:
   \begin{itemize}
-  \item local (scalar)
+  \item local (single index)
   \item can have many inputs
   \item can have many outputs
   \item depend on index and batch number
@@ -400,8 +400,9 @@ basicstyle=\ttfamily\small,
 
   \medskip
 
-  Not all spectral ops will apply to all fields; we may have some depth-1 DAG assocaited with
-  input/output fields for each spectral op.
+  Not all spectral ops will apply to all fields; we may have some
+  depth-1 DAG assocaited with input/output fields for each spectral
+  op.
 
 \end{frame}
   
@@ -448,7 +449,7 @@ basicstyle=\ttfamily\small,
     \begin{itemize}
     \item pencil and slab are just degenerate cases
     \end{itemize}
-  \item MPI and rocSCHMEM back-ends
+  \item MPI and rocSHMEM back-ends
   \item Decomposition should work also work with the normal interface
     \begin{itemize}
     \item This allows for sparsity in the single-gpu case.
@@ -619,6 +620,15 @@ basicstyle=\ttfamily\small,
   \end{itemize}
 
   \end{frame}
+
+\begin{frame}
+
+  Alternative convolution: vkFFT, FFTW++, the hyena paper, OneAPI?
+
+  Combination of some specific cases and the general version?
+\end{frame}
+
+   
 
 \end{document}
 

@@ -1,4 +1,3 @@
-
 import flowchart;
 //defaultpen(fontsize(8pt));
 size(18cm, 0);
@@ -18,16 +17,18 @@ block sparseapi   = roundrectangle(Label("Sparsity API"),     (xsparse,0));
 block api         = roundrectangle(Label("API Proposal"),     (0,-dy));
 
 block oneway = roundrectangle(Label("One-way ops"), (xop,-2dy));
-block twoway = roundrectangle(Label("Round-trip unpadded ops"), (xop,-3dy));
-block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-4dy));
+block onewayfields = roundrectangle(Label("One-way ops with fields"), (xop,-3dy));
+block twoway = roundrectangle(Label("Round-trip unpadded ops"), (xop,-4dy));
+block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-5dy));
 
-block brickdata = roundrectangle(Label("Brick decomposition"), (0,-2dy));
+block fields = roundrectangle(Label("Fields"), (0,-2dy));
+block brickdata = roundrectangle(Label("Brick decomposition"), (0,-3dy));
 
-block singlenode = roundrectangle(Label("Single-node multi-gpu"), (-0.8dx,-3dy));
-block multinode = roundrectangle(Label("Multi-node MPI"), (0,-4dy));
-block multinodeschmem = roundrectangle(Label("Multi-node SCHMEM"), (dx,-5dy));
+block singlenode = roundrectangle(Label("Single-node multi-gpu"), (-0.8dx,-4dy));
+block multinode = roundrectangle(Label("Multi-node MPI"), (0,-5dy));
+block multinodeschmem = roundrectangle(Label("Multi-node SCHMEM"), (dx,-6dy));
 
-block sparse = roundrectangle(Label("Sparse data"), (xsparse,-3dy));
+block sparse = roundrectangle(Label("Sparse data"), (xsparse,-4dy));
 
 // draw the blocks
 draw(spectralapi);
@@ -36,9 +37,13 @@ draw(sparseapi);
 
 draw(api);
 
+draw(fields);
+
 draw(oneway);
+draw(onewayfields);
 draw(twoway);
 draw(twowaypad);
+
 
 draw(brickdata);
 draw(singlenode);
@@ -57,10 +62,13 @@ add(new void(picture pic, transform t) {
     draw(pic, sparseapi.bottomleft(t)--api.topright(t), Arrow);
 
     draw(pic, api.bottomleft(t)--oneway.topright(t), Arrow);
-    draw(pic, oneway.bottom(t)--twoway.top(t), Arrow);
+    draw(pic, oneway.bottom(t)--onewayfields.top(t), Arrow);
+    draw(pic, fields.bottomleft(t)--onewayfields.topright(t), Arrow);
+    draw(pic, onewayfields.bottom(t)--twoway.top(t), Arrow);
     draw(pic, twoway.bottom(t)--twowaypad.top(t), Arrow);
     
-    draw(pic, api.bottom(t)--brickdata.top(t), Arrow);
+    draw(pic, api.bottom(t)--fields.top(t), Arrow);
+    draw(pic, fields.bottom(t)--brickdata.top(t), Arrow);
 
     draw(pic, brickdata.position(-1.3, t)--singlenode.top(t), Arrow);
     draw(pic, brickdata.bottom(t)--multinode.top(t), Arrow);
