@@ -532,9 +532,10 @@ basicstyle=\ttfamily\small,
   \item RTC-based general API:
     \begin{itemize}
     \item \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119}
-    \item Similar difficulty to callbacks.
+    \item Similar complexityw to callbacks.
     \item Minor interaction with internals
     \item Users can add their own functionality.
+    \item (Can we just extend callbacks?)
     \end{itemize}
   \end{itemize}
 
@@ -548,12 +549,76 @@ basicstyle=\ttfamily\small,
   \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119} also provides multi-gpu and sparse functionality.
 
   \begin{itemize}
-  \item A new \texttt{field} struct is added.
-  \item FIXME: how do bricks and fields interact?
+  \item A new \texttt{rocfft_field} struct is added.
+  \item Fields contain:
+    \begin{itemize}
+    \item Precision/type information
+    \item Brick decomposition information
+    \end{itemize}
+  \item Multiple fields can be added to a \texttt{rocfft_plan_description}
+  \item Desciptors are (optionally) passed to a \texttt{rocfft_plan}.
+  \item Plans are executed, performing the FFT.
   \end{itemize}
 
-
+     
 \end{frame}
+
+\begin{frame}
+  \frametitle{Multi-gpu, sparsity API proposals}
+
+  For spectral ops, fields are used to
+  \begin{itemize}
+  \item Set the number of inputs and outputs for the op.
+  \item Set which particular fields are touched by the op.
+  \item Set the per-field precision and data type.
+  \end{itemize}
+  
+  If no fields are present, execution defaults to a single input and a
+  single output.
+
+  \medskip
+
+  For multi-gpu and sparsity, fields are used to
+  \begin{itemize}
+  \item to coordinate the data decomposition
+    \begin{itemize}
+    \item Bricks are added to a field
+    \item Each brick has a device ID, a rank, and a sparsity/compression value.
+    \end{itemize}
+  \end{itemize}
+  
+  
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Multi-gpu, sparsity API proposals}
+
+  \medskip
+  If fields are specified, then \texttt{rocfft_execute} takes fields
+  passed as \texttt{void **}.
+  \begin{itemize}
+  \item Fields also store (user-specified) gpu buffer pointers.
+  \end{itemize}
+  Alternatively, we just let the user specify the array of
+  (rank-local) pointers in the execution function.
+  
+
+  \bigskip
+
+  Internally, all data is a \texttt{rocfft_precision}; our kernels
+  handle only specific data types.
+
+  \medskip
+  For internal computation, we can
+  \begin{itemize}
+  \item specify the per-transform precision (for multi-field spectral ops)
+  \item allow for lossy data compression / type change for multi-gpu
+    communication.
+  \end{itemize}
+
+  \end{frame}
 
 \end{document}
 
