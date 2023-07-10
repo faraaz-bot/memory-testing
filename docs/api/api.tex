@@ -216,11 +216,11 @@ basicstyle=\ttfamily\small,
   \item API themes
     \begin{itemize}
     \item Spectral Ops
-    \item Multi-gpu
+    \item Multi-GPU
     \item Sparsity
     \end{itemize}
   \item API proposal objectives
-  \item Feature implemnetation DAG
+  \item Feature implementation DAG
   \item Optimization plan
   \end{itemize}
   
@@ -276,7 +276,7 @@ basicstyle=\ttfamily\small,
     \item Input: real 1D array.
     \item Read-op: $f_{i_x} \rightarrow H(i_x) f_{i_x}$
     \item $H$ is a Hamming window, Hann windows, Blackman windows, \dots
-    \item USe case: DSP
+    \item Use case: DSP
     \end{itemize}
 
   \item Phase-shift-and-scale
@@ -401,7 +401,7 @@ basicstyle=\ttfamily\small,
   \medskip
 
   Not all spectral ops will apply to all fields; we may have some
-  depth-1 DAG assocaited with input/output fields for each spectral
+  depth-1 DAG associated with input/output fields for each spectral
   op.
 
 \end{frame}
@@ -431,10 +431,10 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Multi-gpu}
+  \frametitle{Multi-GPU}
 
   \begin{center}
-    Multi-gpu is about \emph{data distribution}.
+    Multi-GPU is about \emph{data distribution}.
   \end{center}
 
   \medskip
@@ -452,7 +452,7 @@ basicstyle=\ttfamily\small,
   \item MPI and rocSHMEM back-ends
   \item Decomposition should work also work with the normal interface
     \begin{itemize}
-    \item This allows for sparsity in the single-gpu case.
+    \item This allows for sparsity in the single-GPU case.
     \end{itemize}
   \end{itemize}
   
@@ -467,7 +467,7 @@ basicstyle=\ttfamily\small,
   \end{center}
 
   
-  Given the brick decomposition in the multi-gpu section, we can mark
+  Given the brick decomposition in the multi-GPU section, we can mark
   bricks as containing only zero data.
 
   \medskip
@@ -533,7 +533,7 @@ basicstyle=\ttfamily\small,
   \item RTC-based general API:
     \begin{itemize}
     \item \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119}
-    \item Similar complexityw to callbacks.
+    \item Similar complexity to callbacks.
     \item Minor interaction with internals
     \item Users can add their own functionality.
     \item (Can we just extend callbacks?)
@@ -545,9 +545,9 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Multi-gpu, sparsity API proposals}
+  \frametitle{Multi-GPU, sparsity API proposals}
 
-  \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119} also provides multi-gpu and sparse functionality.
+  \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119} also provides multi-GPU and sparse functionality.
 
   \begin{itemize}
   \item A new \texttt{rocfft_field} struct is added.
@@ -557,7 +557,7 @@ basicstyle=\ttfamily\small,
     \item Brick decomposition information
     \end{itemize}
   \item Multiple fields can be added to a \texttt{rocfft_plan_description}
-  \item Desciptors are (optionally) passed to a \texttt{rocfft_plan}.
+  \item Descriptors are (optionally) passed to a \texttt{rocfft_plan}.
   \item Plans are executed, performing the FFT.
   \end{itemize}
 
@@ -565,7 +565,7 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Multi-gpu, sparsity API proposals}
+  \frametitle{Multi-GPU, sparsity API proposals}
 
   For spectral ops, fields are used to
   \begin{itemize}
@@ -579,7 +579,7 @@ basicstyle=\ttfamily\small,
 
   \medskip
 
-  For multi-gpu and sparsity, fields are used to
+  For multi-GPU and sparsity, fields are used to
   \begin{itemize}
   \item to coordinate the data decomposition
     \begin{itemize}
@@ -594,13 +594,13 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Multi-gpu, sparsity API proposals}
+  \frametitle{Multi-GPU, sparsity API proposals}
 
   \medskip
   If fields are specified, then \texttt{rocfft_execute} takes fields
   passed as \texttt{void **}.
   \begin{itemize}
-  \item Fields also store (user-specified) gpu buffer pointers.
+  \item Fields also store (user-specified) GPU buffer pointers.
   \end{itemize}
   Alternatively, we just let the user specify the array of
   (rank-local) pointers in the execution function.
@@ -615,20 +615,62 @@ basicstyle=\ttfamily\small,
   For internal computation, we can
   \begin{itemize}
   \item specify the per-transform precision (for multi-field spectral ops)
-  \item allow for lossy data compression / type change for multi-gpu
+  \item allow for lossy data compression / type change for multi-GPU
     communication.
   \end{itemize}
 
   \end{frame}
 
 \begin{frame}
+  \frametitle{Other Notable APIs}
 
-  Alternative convolution: vkFFT, FFTW++, the hyena paper, OneAPI?
+  Spectral ops:
+  \begin{itemize}
+  \item \texttt{cuFFTDx}: allows users to call \texttt{cuFFT} from
+    their kernels.
+  \item \texttt{vkFFT}: Convolution matrix, symmetry, fused kernels.
+  \item \texttt{OneAPI}: Some c2c convolutions for ML.
+  \item \texttt{FFTW++}: pointer-based spectral ops for convolutions.
+  \item \texttt{safari}: binary convolution with normalized spec op for ML.
+  \end{itemize}
 
-  Combination of some specific cases and the general version?
+  \medskip
+
+  Multi-GPU:
+  \begin{itemize}
+  \item \texttt{cuFFTXt}: single-node, only slab decomposition.
+  \item \texttt{cuFFTMp}: brick decomposition.
+  \item \texttt{heFFTe}: brick decomposition.
+  \item \texttt{FFTW++}: pencil decomposition.
+  \end{itemize}
+
 \end{frame}
 
-   
+\begin{frame}
+  \frametitle{Optional Additions}
+
+  Besides the basic API design shown above, we have more optional
+  functionality that we can add:
+
+  \medskip
+  
+  \begin{itemize}
+  \item Multi-transform specops can have different precisions per transform
+  \item Multi-value spectral ops can have a field-dependancy list.
+  \item Multi-GPU transforms can have lossy compression for communication.
+  \item Different fields can have different lengths
+  \item Convolution outputs can have different lengths than inputs.
+  \end{itemize}
+  
+  
+\end{frame}
 
 \end{document}
 
+
+% LocalWords:  bg fg frametitle footline lR Hann Blackman DSP Navier
+% LocalWords:  dealiased GESTS dealias vorticity ik autocorrelation
+% LocalWords:  dealiasing ie conv eg Bluestein MPI rocSHMEM lossy csr
+% LocalWords:  hipfft cufft ROCm JIT RTC rocFFT APIs rocfft struct
+% LocalWords:  FFT cuFFTDx cuFFT vkFFT OneAPI FFTW cuFFTXt cuFFTMp
+% LocalWords:  heFFTe
