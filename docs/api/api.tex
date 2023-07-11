@@ -647,6 +647,113 @@ basicstyle=\ttfamily\small,
     
 \end{frame}
 
+
+\begin{frame}[fragile]
+  \frametitle{Spectral op example: binary convolution}
+
+  \begin{itemize}
+  \item Add two \texttt{field}s (type \lstinline{double}) as infields.
+  \item Type is \texttt{rocfft_transform_type_real_forward_roundtrip}
+  \item Create a midop with \lstinline{out0 = in0 * in1;}
+  \item \texttt{rocFFT} generates midop function signature
+    \lstinline{ __device__ void(double out0, const double in0, const double in1);}
+  \item Allocate buffers, pass pointers to the \texttt{field}s.
+  \item Execute, using the fields as arguments.
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}[fragile]
+  \frametitle{Spectral op example: 1D binary convolution}
+
+  \begin{itemize}
+  \item Add two \texttt{field}s (type \lstinline{double}) as infields.
+  \item Type is \texttt{rocfft_transform_type_real_forward_roundtrip}
+  \item Create a midop with \lstinline{out0 = in0 * in1;}
+  \item \texttt{rocFFT} generates midop function signature
+    \lstinline{ __device__ void(double out0, const double in0, const double in1, size_t posx, void* args);}
+  \item Specify convolution order 2 (so we can zero-pad).
+  \item Allocate buffers, pass pointers to the \texttt{field}s.
+  \item Execute, using the fields as arguments.
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Spectral op example: 2D Navier--Stokes convolution}
+
+  
+  \begin{itemize}
+  \item Type is \texttt{rocfft_transform_type_real_inverse_roundtrip}
+  \item Create readop with
+    \begin{lstlisting}
+      if(posx == 0 && posy == 0) {
+        out0 = 0.0;
+        out1 = 0.0;
+        out2 = 0.0;
+        out3 = 0.0;
+        return;
+      }
+      const double Lx = 2.0, Ly = 2.0; // Depends on physical domain.
+      const double kx = 2 * pi * (posx < Nx / 2 ? posx : Nx - posx) /  Lx;
+      const double ky = 2 * pi * posy / Ly;
+      const double denom = 1.0 / (kx * kx + ky * ky)
+      out0 = in0 * i * ky * denom;
+      out1 = in0 * i * kx;
+      out2 = in0 * i * kx * denom;
+      out3 = in0 * i * ky;
+    \end{lstlisting}
+  \end{itemize}
+
+\end{frame}
+  
+\begin{frame}[fragile]
+  \frametitle{Spectral op example: 2D Navier--Stokes convolution}
+  \begin{itemize}
+  \item Specify that readop takes input field 0 and output fields $0,1,2,3$.
+  \item Create a midop which takes fields  $0,1,2,3$ and produces field 0.
+  \item Midop rtc string is \lstinline{out0 = in0 * in1 - in2 * in3}.
+  \item Specify convolution order 2.
+  \item \texttt{rocFFT} creates 4 internal fields, and we execute with the normal GPU bufs.
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Spectral op example: per-batch 1D complex-to-real phase shift-and-scale}
+  \begin{itemize}
+  \item Readop with string
+    \begin{lstlisting}
+      out0 = in1 * s(posb0) * exp(2 * pi * i * f(posb0);
+    \end{lstlisting}
+  \item \lstinline{posb0} is the batch index.
+  \item \texttt{rocFFT} creates the function signature
+    \begin{lstlisting}
+      __device__ void(double out0, const double in0, size_t posx, size_t posb0, void* args);
+    \end{lstlisting}
+  \item Transform type is \texttt{rocfft_transform_type_real_inverse}
+  \item Allocate a 1D batch of 1D (Hermitian-symmetric) complex arrays.
+  \item Execute with the GPU buffer pointers.
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Special cases}
+
+  It may be worth having special cases for certain functions, eg convolution, Poisson solve.
+
+  \medskip
+
+  \begin{itemize}
+  \item Binary convolution can also be possibly optimized (eg Winograd, matrix cores, etc).
+  \item Easier for users to get at common use cases.
+  \item Heavier API: more to test, more to document, more to write.
+  \end{itemize}
+  
+\end{frame}
+
 \begin{frame}
   \frametitle{Optional Additions}
 
@@ -657,7 +764,7 @@ basicstyle=\ttfamily\small,
   
   \begin{itemize}
   \item Multi-transform specops can have different precisions per transform
-  \item Multi-value spectral ops can have a field-dependancy list.
+  \item Multi-value spectral ops can have a field-dependency list.
   \item Multi-GPU transforms can have lossy compression for communication.
   \item Different fields can have different lengths
   \item Convolution outputs can have different lengths than inputs.
@@ -672,6 +779,7 @@ basicstyle=\ttfamily\small,
 % LocalWords:  bg fg frametitle footline lR Hann Blackman DSP Navier
 % LocalWords:  dealiased GESTS dealias vorticity ik autocorrelation
 % LocalWords:  dealiasing ie conv eg Bluestein MPI rocSHMEM lossy csr
-% LocalWords:  hipfft cufft ROCm JIT RTC rocFFT APIs rocfft struct
-% LocalWords:  FFT cuFFTDx cuFFT vkFFT OneAPI FFTW cuFFTXt cuFFTMp
-% LocalWords:  heFFTe
+% LocalWords:  hipfft cufft ROCm JIT RTC rocFFT APIs rocfft struct Lx
+% LocalWords:  FFT cuFFTDx cuFFT vkFFT OneAPI FFTW cuFFTXt cuFFTMp Ly
+% LocalWords:  heFFTe SpFFT roundtrip midop const posx args readop kx
+% LocalWords:  Nx ky denom rtc bufs posb Winograd specops precisions
