@@ -18,10 +18,8 @@ intT1 ceildiv(const intT1 numerator, const intT2 divisor)
 }
 
 // Hermitrizing/Complex Conjugation Kernel
-__global__ void impose_expected_format_2d(const float* obuffer_transpose_real,
-                                          const float* obuffer_transpose_imag,
-                                          float*       obuffer_real,
-                                          float*       obuffer_imag,
+__global__ void impose_expected_format_2d(const float* obuffer_transpose,
+                                          float*       obuffer,
                                           size_t       ostride_transpose_x,
                                           size_t       ostride_transpose_y,
                                           size_t       ostride_x,
@@ -36,26 +34,25 @@ __global__ void impose_expected_format_2d(const float* obuffer_transpose_real,
     {
         if(idx < length_x / 2 + 1)
         {
-            size_t obuffer_pos           = idx * ostride_x + idy * ostride_y;
-            size_t obuffer_transpose_pos = idx * ostride_transpose_x + idy * ostride_transpose_y;
+            size_t obuffer_pos           = 2 * (idx * ostride_x + idy * ostride_y);
+            size_t obuffer_transpose_pos = 2 * (idx * ostride_transpose_x + idy * ostride_transpose_y);
 
-            obuffer_real[obuffer_pos] = obuffer_transpose_real[obuffer_transpose_pos];
-            obuffer_imag[obuffer_pos] = obuffer_transpose_imag[obuffer_transpose_pos];
+            obuffer[obuffer_pos] = obuffer_transpose[obuffer_transpose_pos];
+            obuffer[obuffer_pos + 1] = obuffer_transpose[obuffer_transpose_pos + 1];
         }
         else if(idx < length_x)
         {
-            size_t obuffer_pos           = idx * ostride_x + idy * ostride_y;
-            size_t obuffer_transpose_pos = (length_x - idx) * ostride_transpose_x
-                                           + (idy == 0 ? 0 : length_y - idy) * ostride_transpose_y;
+            size_t obuffer_pos           = 2 * (idx * ostride_x + idy * ostride_y);
+            size_t obuffer_transpose_pos = 2 * ((length_x - idx) * ostride_transpose_x
+                                           + (idy == 0 ? 0 : length_y - idy) * ostride_transpose_y);
 
-            obuffer_real[obuffer_pos] = obuffer_transpose_real[obuffer_transpose_pos];
-            obuffer_imag[obuffer_pos] = -obuffer_transpose_imag[obuffer_transpose_pos];
+            obuffer[obuffer_pos] = obuffer_transpose[obuffer_transpose_pos];
+            obuffer[obuffer_pos + 1] = -obuffer_transpose[obuffer_transpose_pos + 1];
         }
     }
 }
 // TO DO: void impose_expected_format_3d
 
-// Should this be a kernel?
 void transpose(std::vector<size_t>&       length,
                std::vector<size_t>&       stride,
                const std::vector<size_t>& axes)
@@ -71,9 +68,9 @@ void transpose(std::vector<size_t>&       length,
     stride.swap(tmp_stride);
 }
 
-void symmetrize_2d(std::vector<std::vector<float>>& buffer,
-                   const std::vector<size_t>&       length,
-                   const std::vector<size_t>&       stride)
+void symmetrize_2d(std::vector<float2>&       buffer,
+                   const std::vector<size_t>& length,
+                   const std::vector<size_t>& stride)
 {
     std::vector<size_t> xvals = {0};
     if(length[0] % 2 == 0)
@@ -92,88 +89,89 @@ void symmetrize_2d(std::vector<std::vector<float>>& buffer,
         for(size_t xval : xvals)
         {
             size_t idx     = xval * stride[0] + yval * stride[1];
-            buffer[1][idx] = 0;
+            buffer[idx].y = 0;
         }
         // x-axes:
         for(size_t i = 1; i < length[0] / 2; i++)
         {
             size_t idx_dest     = (length[0] - i) * stride[0] + yval * stride[1];
             size_t idx_src      = i * stride[0] + yval * stride[1];
-            buffer[0][idx_dest] = buffer[0][idx_src];
-            buffer[1][idx_dest] = -buffer[1][idx_src];
+            buffer[idx_dest].x = buffer[idx_src].x;
+            buffer[idx_dest].y = -buffer[idx_src].y;
         }
     }
 }
 // TO DO: void symmetrize_3d
 
-void fill_buffer_2d(std::vector<std::vector<float>>& buffer,
-                    const std::vector<size_t>&       length,
-                    const std::vector<size_t>&       stride)
+// overload for real
+void fill_buffer_2d(std::vector<float>&        buffer,
+                    const std::vector<size_t>& length,
+                    const std::vector<size_t>& stride)
 {
-    if(buffer.size() == 1) // real input
+    for(size_t i = 0; i < length[0]; ++i)
     {
-        for(size_t i = 0; i < length[0]; ++i)
+        for(size_t j = 0; j < length[1]; ++j)
         {
-            for(size_t j = 0; j < length[1]; ++j)
-            {
-                size_t idx     = i * stride[0] + j * stride[1];
-                buffer[0][idx] = sin(i * 1 - j * 2) + cos((i + 3) * (j + 4));
-            }
+            size_t idx     = i * stride[0] + j * stride[1];
+            buffer[idx] = sin(i * 1 - j * 2) + cos((i + 3) * (j + 4));
         }
     }
-    else // complex output
+}
+// overload for complex
+void fill_buffer_2d(std::vector<float2>&       buffer,
+                    const std::vector<size_t>& length,
+                    const std::vector<size_t>& stride)
+{
+    for(size_t i = 0; i < length[0]; ++i)
     {
-        for(size_t i = 0; i < length[0]; ++i)
+        for(size_t j = 0; j < length[1]; ++j)
         {
-            for(size_t j = 0; j < length[1]; ++j)
-            {
-                size_t idx     = i * stride[0] + j * stride[1];
-                buffer[0][idx] = sin(i * 1 - j * 2) + cos((i + 3) * (j + 4)); // real part
-                buffer[1][idx] = sin(i * 4 - j * 3) + cos((i + 2) * (j + 1)); // complex part
-            }
+            size_t idx     = i * stride[0] + j * stride[1];
+            buffer[idx].x = sin(i * 1 - j * 2) + cos((i + 3) * (j + 4));
+            buffer[idx].y = sin(i * 4 - j * 3) + cos((i + 2) * (j + 1));
         }
     }
 }
 // TO DO: void fill_buffer_3d
 
-void print_buffer_2d(const std::vector<std::vector<float>>& buffer,
-                     const std::vector<size_t>&             length,
-                     const std::vector<size_t>&             stride)
+// overload for real
+void print_buffer_2d(const std::vector<float>&  buffer,
+                     const std::vector<size_t>& length,
+                     const std::vector<size_t>& stride)
 {
-    if(buffer.size() == 1) // real
+    for(size_t i = 0; i < length[0]; ++i)
     {
-        for(size_t i = 0; i < length[0]; ++i)
+        for(size_t j = 0; j < length[1]; ++j)
         {
-            for(size_t j = 0; j < length[1]; ++j)
-            {
-                size_t idx = i * stride[0] + j * stride[1];
+            size_t idx = i * stride[0] + j * stride[1];
 
-                std::stringstream ss;
-                ss << std::noshowpos << buffer[0][idx] << std::flush;
+            std::stringstream ss;
+            ss << std::noshowpos << buffer[idx] << std::flush;
 
-                std::cout << std::left << std::setw(12) << std::setfill(' ') << ss.str()
-                          << std::flush;
-            }
-            std::cout << std::endl;
+            std::cout << std::left << std::setw(12) << std::setfill(' ') << ss.str()
+                        << std::flush;
         }
+        std::cout << std::endl;
     }
-    else // complex
+    std::cout << std::endl;
+}
+// overload for complex
+void print_buffer_2d(const std::vector<float2>& buffer,
+                     const std::vector<size_t>& length,
+                     const std::vector<size_t>& stride)
+{
+    for(size_t i = 0; i < length[0]; ++i)
     {
-        for(size_t i = 0; i < length[0]; ++i)
+        for(size_t j = 0; j < length[1]; ++j)
         {
-            for(size_t j = 0; j < length[1]; ++j)
-            {
-                size_t idx = i * stride[0] + j * stride[1];
+            size_t idx = i * stride[0] + j * stride[1];
 
-                std::stringstream ss;
-                ss << std::noshowpos << buffer[0][idx] << std::showpos << buffer[1][idx] << "j"
-                   << std::flush;
-
-                std::cout << std::left << std::setw(21) << std::setfill(' ') << ss.str()
-                          << std::flush;
-            }
-            std::cout << std::endl;
+            std::stringstream ss;
+            ss << std::noshowpos << buffer[idx].x << std::showpos << buffer[idx].y << "j" << std::flush;
+            
+            std::cout << std::left << std::setw(21) << std::setfill(' ') << ss.str() << std::flush;
         }
+        std::cout << std::endl;
     }
     std::cout << std::endl;
 }
@@ -199,8 +197,7 @@ int main()
     std::vector<size_t> olength = {length[0], length[1] / 2 + 1};
     std::vector<size_t> ostride = {1, olength[0]};
 
-    std::vector<std::vector<float>> ibuffer(1); // real
-    ibuffer[0].resize(compute_ptrdiff(ilength, istride));
+    std::vector<float> ibuffer(compute_ptrdiff(ilength, istride)); // real
 
     // initialize data
     fill_buffer_2d(ibuffer, ilength, istride);
@@ -223,15 +220,12 @@ int main()
     std::vector<size_t> olength_transpose = {ilength[0], ilength[1] / 2 + 1};
     std::vector<size_t> ostride_transpose = {1, olength_transpose[0]};
 
-    std::vector<std::vector<float>> obuffer_transpose(2); // complex
     size_t osize_transpose = compute_ptrdiff(olength_transpose, ostride_transpose);
-    for(size_t i = 0; i < obuffer_transpose.size(); i++)
-    {
-        obuffer_transpose[i].resize(osize_transpose);
-    }
+    std::vector<float2> obuffer_transpose(osize_transpose); // complex
 
     fill_buffer_2d(obuffer_transpose, olength_transpose, ostride_transpose);
     // print_buffer_2d(obuffer_transpose, olength_transpose, ostride_transpose);
+
     symmetrize_2d(obuffer_transpose, ilength, ostride_transpose);
     // print_buffer_2d(obuffer_transpose, olength_transpose, ostride_transpose);
 
@@ -240,47 +234,30 @@ int main()
     // print_buffer_2d(obuffer_transpose, olength_transpose, ostride_transpose);
 
     // impose expected format
-    std::vector<std::vector<float>> obuffer(2);
-    size_t                          osize = compute_ptrdiff(olength, ostride);
-    for(size_t i = 0; i < obuffer.size(); i++)
-    {
-        obuffer[i].resize(osize);
-    }
+    size_t              osize = compute_ptrdiff(olength, ostride);
+    std::vector<float2> obuffer(osize);
 
-    size_t obuffer_bytes           = osize * sizeof(float);
-    size_t obuffer_transpose_bytes = osize_transpose * sizeof(float);
+    size_t obuffer_bytes           = 2 * osize * sizeof(float);
+    size_t obuffer_transpose_bytes = 2 * osize_transpose * sizeof(float);
 
-    float* d_obuffer_transpose_real;
-    assert(hipMalloc(&d_obuffer_transpose_real, obuffer_transpose_bytes) == hipSuccess);
-    assert(hipMemcpy(d_obuffer_transpose_real,
-                     obuffer_transpose[0].data(),
+    float* d_obuffer_transpose;
+    assert(hipMalloc(&d_obuffer_transpose, obuffer_transpose_bytes) == hipSuccess);
+    assert(hipMemcpy(d_obuffer_transpose,
+                     obuffer_transpose.data(),
                      obuffer_transpose_bytes,
                      hipMemcpyHostToDevice)
            == hipSuccess);
 
-    float* d_obuffer_transpose_imag;
-    assert(hipMalloc(&d_obuffer_transpose_imag, obuffer_transpose_bytes) == hipSuccess);
-    assert(hipMemcpy(d_obuffer_transpose_imag,
-                     obuffer_transpose[1].data(),
-                     obuffer_transpose_bytes,
-                     hipMemcpyHostToDevice)
-           == hipSuccess);
-
-    float* d_obuffer_real;
-    assert(hipMalloc(&d_obuffer_real, obuffer_bytes) == hipSuccess);
-
-    float* d_obuffer_imag;
-    assert(hipMalloc(&d_obuffer_imag, obuffer_bytes) == hipSuccess);
+    float* d_obuffer;
+    assert(hipMalloc(&d_obuffer, obuffer_bytes) == hipSuccess);
 
     hipLaunchKernelGGL(impose_expected_format_2d,
                        dim3(32, 32),
                        dim3(ceildiv(olength[1], 32), ceildiv(olength[0], 32)),
                        0,
                        0,
-                       d_obuffer_transpose_real,
-                       d_obuffer_transpose_imag,
-                       d_obuffer_real,
-                       d_obuffer_imag,
+                       d_obuffer_transpose,
+                       d_obuffer,
                        ostride_transpose[0],
                        ostride_transpose[1],
                        ostride[0],
@@ -288,20 +265,15 @@ int main()
                        length[0],
                        length[1]);
 
-    assert(hipMemcpy(obuffer[0].data(), d_obuffer_real, obuffer_bytes, hipMemcpyDeviceToHost)
-           == hipSuccess);
-    assert(hipMemcpy(obuffer[1].data(), d_obuffer_imag, obuffer_bytes, hipMemcpyDeviceToHost)
+    assert(hipMemcpy(obuffer.data(), d_obuffer, obuffer_bytes, hipMemcpyDeviceToHost)
            == hipSuccess);
 
     // output
-    print_buffer_2d(obuffer, olength, ostride);
+    // print_buffer_2d(obuffer, olength, ostride);
 
     // Release device memory
-    assert(hipFree(d_obuffer_transpose_real) == hipSuccess);
-    assert(hipFree(d_obuffer_transpose_imag) == hipSuccess);
-
-    assert(hipFree(d_obuffer_real) == hipSuccess);
-    assert(hipFree(d_obuffer_imag) == hipSuccess);
+    assert(hipFree(d_obuffer_transpose) == hipSuccess);
+    assert(hipFree(d_obuffer) == hipSuccess);
 
     return 0;
 }
