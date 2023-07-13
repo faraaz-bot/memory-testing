@@ -450,7 +450,7 @@ basicstyle=\ttfamily\small,
     \item pencil and slab are just degenerate cases
     \end{itemize}
   \item MPI and rocSHMEM back-ends
-  \item Decomposition should work also work with the normal interface
+  \item Decomposition should also work with the normal interface
     \begin{itemize}
     \item This allows for sparsity in the single-GPU case.
     \end{itemize}
@@ -768,6 +768,7 @@ basicstyle=\ttfamily\small,
   \item Multi-GPU transforms can have lossy compression for communication.
   \item Different fields can have different lengths
   \item Convolution outputs can have different lengths than inputs.
+  \item Cooperation with CPU and FPGA groups at AMD.
   \end{itemize}
   
   
