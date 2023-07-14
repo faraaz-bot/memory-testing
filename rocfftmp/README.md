@@ -1,6 +1,6 @@
-# rocFFT-mp
+# rocFFTmp
 
-rocFFT-mp is a prototype implementation to compute 3-D FFTs using
+rocFFTmp is a prototype implementation to compute 3-D FFTs using
 either [rocFFT] or [FFTW3] as backends and advanced MPI for tensor transposition.
 
 [rocFFT]: https://github.com/ROCmSoftwarePlatform/rocFFT
@@ -8,13 +8,13 @@ either [rocFFT] or [FFTW3] as backends and advanced MPI for tensor transposition
 
 
 ## Dependencies
-rocFFT-mp requires [rocFFT] or [FFTW3] libraries to be installed in the system, and an MPI distribution such as [OpenMPI] or [MVAPICH].
+rocFFTmp requires [rocFFT] or [FFTW3] libraries to be installed in the system, and an MPI distribution such as [OpenMPI] or [MVAPICH].
 
 [OpenMPI]: https://www.open-mpi.org
 [MVAPICH]: https://mvapich.cse.ohio-state.edu
 
 ## How it works?
-rocFFT-mp currently takes as input distributed data on slabs configurations as shown below:
+rocFFTmp currently takes as input distributed data on slabs configurations as shown below:
 
 ![alt text](https://github.com/af-ayala/images/blob/master/slabs_rocfft.jpg?raw=true)
 
@@ -36,13 +36,13 @@ where we measure the max-norm of the input minus the inverse transform (calculat
 
 ### Library build dependencies
 
-To build the rocFFT-mp library:
-* rocFFT-mp depends on [rocFFT] on AMD platforms;
-* rocFFT-mp depends on [FFTW3] on other platforms.
+To build the rocFFTmp library:
+* rocFFTmp depends on [rocFFT] on AMD platforms;
+* rocFFTmp depends on [FFTW3] on other platforms.
 
-## Building from source
+## Compiling source and tests
 
-The initial release of rocFFT-mp is provided as a header file
+The initial release of rocFFTmp is provided as a header file
 [rocfft_mp.h].
 
 [rocfft_mp.h]: https://github.com/ROCmSoftwarePlatform/rocFFT-misc/blob/master/rocfft_mp/rocfft_mp.h
@@ -59,7 +59,7 @@ hipcc test_rocfft_mp_3D.cpp -I<PATH_TO_ROCFFT>/include
 
 ## Current Features
 
-The following functionality is currently available for rocFFT-mp:
+The following functionality is currently available for rocFFTmp:
 1. 3-D Complex-to-Complex FFT computation using slabs decomposition.
 2. Precision: single and double.
 3. Tensor transposition can be used as an independent kernel.
