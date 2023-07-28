@@ -13,14 +13,14 @@ function [kernel_3d, kernel_3d_partial] = build_kernels_3d(kernel, item_sz_bytes
     lengths(i) = kernel(i).length;
   endfor
   
-  # Computes all k-combinations (k=3) with repetitions of 
-  # the supported 1-D lengths. 
-  # Ex: [32, 32, 64] is a valid combinations
-  # The combinations [16, 32, 64] and [32, 16, 64] are considered
-  # to be the same.
-  # Equation for total number of combinations is:
-  # num_3d_kernels = factorial(n+k-1) / (factorial(k) * factorial(n-1))
-  # where n = num_kernels and k = 3;
+  % Computes all k-combinations (k=3) with repetitions of 
+  % the supported 1-D lengths. 
+  % Ex: [32, 32, 64] is a valid combinations
+  % The combinations [16, 32, 64] and [32, 16, 64] are considered
+  % to be the same.
+  % Equation for total number of combinations is:
+  % num_3d_kernels = factorial(n+k-1) / (factorial(k) * factorial(n-1))
+  % where n = num_kernels and k = 3;
   lengths_3d = nmultichoosek(lengths,3);    
   num_3d_kernels = size(lengths_3d, 1);  
      
@@ -71,7 +71,7 @@ function [kernel_3d, kernel_3d_partial] = build_kernels_3d(kernel, item_sz_bytes
      
       kernel_count = kernel_count + 1;
     elseif (length_fits_in_ram)                        
-      # Try partial pass in first off dimension 
+      % Try partial pass in first off dimension 
       if ~((length2*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes) && ...
            (length3*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes))
         [new_factors2, new_factors3] = solve_prod_partition_problem(prime_factors1, factors2, factors3);      
@@ -89,7 +89,7 @@ function [kernel_3d, kernel_3d_partial] = build_kernels_3d(kernel, item_sz_bytes
         endif
       endif      
       
-      # Try partial pass in second off dimension
+      % Try partial pass in second off dimension
       if ~((length1*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes) && ...
            (length3*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes))           
         [new_factors1, new_factors3] = solve_prod_partition_problem(prime_factors2, factors1, factors3);
@@ -107,7 +107,7 @@ function [kernel_3d, kernel_3d_partial] = build_kernels_3d(kernel, item_sz_bytes
         endif           
       endif
 
-      # Try partial pass in third off dimension
+      % Try partial pass in third off dimension
       if ~((length1*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes) && ...
            (length2*tpb_1d_partial*item_sz_bytes>=max_lds_sz_bytes))
         [new_factors1, new_factors2] = solve_prod_partition_problem(prime_factors3, factors1, factors2);
