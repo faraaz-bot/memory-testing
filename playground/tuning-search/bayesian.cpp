@@ -10,6 +10,8 @@ std::vector<int> counts;
 std::vector<double> alpha;
 std::vector<double> beta;
 
+const int num_buttons = 5;
+
 class normal_dist_machine
 {
     double mean;
@@ -40,18 +42,18 @@ void update_posterior_params(int test_counter, int button_id, double outcome)
     alpha[button_id] += outcome;
     beta[button_id] += 100.0 - outcome;
 
-    auto prob = alpha[button_id] / (alpha[0] + beta[0]);
-    std::cout << "test " << test_counter << "\t button " << button_id
+    auto prob = alpha[button_id] / (alpha[button_id] + beta[button_id]);
+    std::cout << "\ntest " << test_counter << "\t button " << button_id
               << ": outcome is " << outcome << "\t posterior prob is "
               <<  prob << "\t";
 }
 
-int find_most_probable_button(int total_btn)
+int find_most_probable_button()
 {
     int max_id = 0;
     double max_prob = alpha[0] / (alpha[0] + beta[0]);
 
-    for(int i = 1; i < total_btn; ++i)
+    for(int i = 1; i < num_buttons; ++i)
     {
         double prob = alpha[i] / (alpha[i] + beta[i]);
         if(prob > max_prob)
@@ -74,7 +76,7 @@ int main(int argc, char* argv[])
     alpha = std::vector<double>(N, 1.0);
     beta = std::vector<double>(N, 1.0);
 
-    std::vector<normal_dist_machine> buttons(5);
+    std::vector<normal_dist_machine> buttons(num_buttons);
     buttons[0] = normal_dist_machine(80.0, 12.0);
     buttons[1] = normal_dist_machine(50.0, 24.0);
     buttons[2] = normal_dist_machine(83.0, 6.0);
@@ -85,13 +87,13 @@ int main(int argc, char* argv[])
     for(int i = 0; i < N; ++i)
     {
         // from i to button id
-        int button_id = i % buttons.size();
+        int button_id = i % num_buttons;
         double outcome = buttons[button_id].sample();
         update_posterior_params(i, button_id, outcome);
 
         // current most probable result:
-        int most_probable_button = find_most_probable_button(N);
-        std::cout << "most_probable_button is: " << most_probable_button << std::endl;
+        int most_probable_button = find_most_probable_button();
+        std::cout << "most_probable_button is: " << most_probable_button;
     }
 
     return 0;
