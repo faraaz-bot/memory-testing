@@ -445,7 +445,7 @@ basicstyle=\ttfamily\small,
     \item single-node doesn't need a communicator
     \item multi-node needs a communicator
     \end{itemize}
-  \item brick decomposition
+  \item Brick decomposition
     \begin{itemize}
     \item pencil and slab are just degenerate cases
     \end{itemize}
@@ -473,7 +473,7 @@ basicstyle=\ttfamily\small,
   \medskip
 
   \begin{itemize}
-  \item bricks can be marked as sparse, ie all zero.
+  \item Bricks can be marked as sparse, ie all zero.
   \item Or we can add compression!  Perhaps lossy!
   \item Separate sparsity for inputs and output.
   \item Brick-based sparsity design
@@ -489,12 +489,16 @@ basicstyle=\ttfamily\small,
   \frametitle{Implementation objectives}
 
   \begin{itemize}
-  \item hipfft support
+  \item hipFFT support:
     \begin{itemize}
-    \item fully functional
-    \item no performance goals with cufft
+    \item rocFFT: full performance and functionality
+    \item cuFFT: either
+      \begin{itemize}
+      \item functional with poor performance, or
+      \item not implemented
+      \end{itemize}
     \end{itemize}
-  \item staged release
+  \item Staged release
     \begin{itemize}
     \item allows for prioritization
     \item reduces risk - we can use feedback
@@ -513,31 +517,22 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Spectral ops API proposals}
+  \frametitle{Spectral ops API proposal}
 
   Callbacks are absurdly slow in ROCm.
   \begin{itemize}
   \item NVIDIA has moved to JIT to improve callback performance (\href{https://www.nvidia.com/en-us/on-demand/session/gtcfall21-a31155/?playlistId=playList-ead11304-9931-4e91-9d5a-fb0e1ef27014}{link})
   \item Can we make use of RTC to do this in rocFFT?
   \end{itemize}
+
+  \bigskip
   
-  Spectral ops API proposals:
+  Spectral ops API proposal:
   \begin{itemize}
-    \item Separate APIs per op:
-    \begin{itemize}
-    \item \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1122}{Pr 1122}
-    \item Easier to use.
-    \item Restricts user interaction with internals.
-    \item Ops are bespoke: if we don't provide it, the user can't use it.
-    \end{itemize}
-  \item RTC-based general API:
-    \begin{itemize}
-    \item \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119}
-    \item Similar complexity to callbacks.
-    \item Minor interaction with internals
-    \item Users can add their own functionality.
-    \item (Can we just extend callbacks?)
-    \end{itemize}
+  \item RTC-based general API
+  \item rocFFT generates a function signature
+  \item The user provides the body of the function
+  \item Similar complexity to callbacks, but better ROCm perf
   \end{itemize}
 
 
@@ -545,33 +540,31 @@ basicstyle=\ttfamily\small,
 \end{frame}
 
 \begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposals}
-
-  \href{https://github.com/ROCmSoftwarePlatform/rocFFT-internal/pull/1119}{PR 1119} also provides multi-GPU and sparse functionality.
+  \frametitle{Multi-GPU, sparsity API proposal}
 
   \begin{itemize}
-  \item A new \texttt{rocfft_field} struct is added.
-  \item Fields contain:
+  \item A new \texttt{rocfft_field} struct is added
+  \item Fields can optionally specify:
     \begin{itemize}
     \item Precision/type information
     \item Brick decomposition information
     \end{itemize}
   \item Multiple fields can be added to a \texttt{rocfft_plan_description}
-  \item Descriptors are (optionally) passed to a \texttt{rocfft_plan}.
-  \item Plans are executed, performing the FFT.
+  \item Descriptors are (optionally) passed to a \texttt{rocfft_plan}
+  \item Plans are executed, performing the FFT
   \end{itemize}
 
      
 \end{frame}
 
 \begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposals}
+  \frametitle{Multi-GPU, sparsity API proposal}
 
   For spectral ops, fields are used to
   \begin{itemize}
-  \item Set the number of inputs and outputs for the op.
-  \item Set which particular fields are touched by the op.
-  \item Set the per-field precision and data type.
+  \item Set the number of inputs and outputs for the op
+  \item Set which particular fields are touched by the op
+  \item Set the per-field precision and data type
   \end{itemize}
   
   If no fields are present, execution defaults to a single input and a
@@ -594,7 +587,7 @@ basicstyle=\ttfamily\small,
 
 
 \begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposals}
+  \frametitle{Multi-GPU, sparsity API proposal}
 
   \medskip
   If fields are specified, then \texttt{rocfft_execute} takes fields

@@ -26,7 +26,7 @@ block brickdata = roundrectangle(Label("Brick decomposition"), (0,-3dy));
 
 block singlenode = roundrectangle(Label("Single-node multi-gpu"), (-0.8dx,-4dy));
 block multinode = roundrectangle(Label("Multi-node MPI"), (0,-5dy));
-block multinodeschmem = roundrectangle(Label("Multi-node SCHMEM"), (dx,-6dy));
+block multinodeschmem = roundrectangle(Label("Multi-node SHMEM"), (dx,-6dy));
 
 block sparse = roundrectangle(Label("Sparse data"), (xsparse,-4dy));
 
