@@ -387,11 +387,11 @@ basicstyle=\ttfamily\small,
   Operations are:
   \begin{itemize}
   \item local (single index)
-  \item can have many inputs
-  \item can have many outputs
+  \item can have many inputs and outputs
   \item depend on index and batch number
   \item have user-supplied constants
   \item quadratic mid-ops may require dealiasing (ie conv)
+  \item can have a separate buffer
   \end{itemize}
 
   \medskip
@@ -570,11 +570,11 @@ basicstyle=\ttfamily\small,
   If no fields are present, execution defaults to a single input and a
   single output.
 
-  \medskip
+  \bigskip
 
-  For multi-GPU and sparsity, fields are used to
+  For multi-GPU and sparsity, fields are used to:
   \begin{itemize}
-  \item to coordinate the data decomposition
+  \item coordinate the data decomposition
     \begin{itemize}
     \item Bricks are added to a field
     \item Each brick has a device ID, a rank, and a sparsity/compression value.
@@ -667,16 +667,13 @@ basicstyle=\ttfamily\small,
   \frametitle{Spectral op example: 2D Navier--Stokes vorticity formulation}
 
   \begin{itemize}
-  \item Create a spectral op \lstinline{readop} with RTC string
+  \item Create a spectral op \lstinline{readop} with RTC string:
     \begin{lstlisting}
 if(posx == 0 && posy == 0) {
-  out0 = 0.0;
-  out1 = 0.0;
-  out2 = 0.0;
-  out3 = 0.0;
+  out0 = out1 = out2 = out3 = 0.0;
   return;
 }
-const double Lx = 2.0, Ly = 2.0; // Physical constants.
+const double Lx = 2.0, Ly = 2.0; // Physical constants
 const double kx = 2 * pi * (posx < Nx/2 ? posx : Nx - posx) / Lx;
 const double ky = 2 * pi * posy / Ly;
 const double denom = 1.0 / (kx * kx + ky * ky)
