@@ -386,12 +386,10 @@ basicstyle=\ttfamily\small,
   \medskip
   Operations are:
   \begin{itemize}
-  \item local (single index)
+  \item local: depend on index and batch number
   \item can have many inputs and outputs
-  \item depend on index and batch number
   \item have user-supplied constants
   \item quadratic mid-ops may require dealiasing (ie conv)
-  \item can have a separate buffer
   \end{itemize}
 
   \medskip
@@ -410,19 +408,18 @@ basicstyle=\ttfamily\small,
   \frametitle{Spectral Ops: inputs and outputs}
   
   \medskip
-  Input and outputs
+  Input and output fields
   \begin{itemize} 
   \item may have different types
     \begin{itemize}
       \item float, int4, double, \dots
     \end{itemize}
   \item may have different lengths
-    \begin{itemize}
-    \item seemingly only for round-trip?
-    \end{itemize}
   \item some data may be constant across executions
     \begin{itemize}
     \item eg: filters, ML weights, Bluestein method
+    \item We lazy-compute the transform of the constant field
+    \item The plan stores the transformed data internally in a \lstinline{gpu_buf}
     \end{itemize}
   \end{itemize}
   
