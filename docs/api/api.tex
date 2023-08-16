@@ -387,45 +387,28 @@ basicstyle=\ttfamily\small,
   Operations are:
   \begin{itemize}
   \item local: depend on index and batch number
+    \begin{itemize}
+    \item Option: allow for a user-supplied buffer
+    \item Option: allow access to shared memory
+      \end{itemize}
   \item can have many inputs and outputs
-  \item have user-supplied constants
-  \item quadratic mid-ops may require dealiasing (ie conv)
+    \begin{itemize}
+    \item Option: ops may only touch a subset of inputs/outputs
+    \item Option: inputs/outputs can have different types
+    \item Option: inputs/outputs can have different lengths
+    \item Option: some inputs may be constant over executions
+    \end{itemize}
+  \item Have user-supplied constants (RTC'd in)
+  \item Multiplicative mid-ops may require dealiasing (eg conv)
   \end{itemize}
 
-  \medskip
+  \bigskip
 
   There are lots of possible operations, and combinations thereof.
 
-  \medskip
-
-  Not all spectral ops will apply to all fields; we may have some
-  depth-1 DAG associated with input/output fields for each spectral
-  op.
 
 \end{frame}
   
-\begin{frame}
-  \frametitle{Spectral Ops: inputs and outputs}
-  
-  \medskip
-  Input and output fields
-  \begin{itemize} 
-  \item may have different types
-    \begin{itemize}
-      \item float, int4, double, \dots
-    \end{itemize}
-  \item may have different lengths
-  \item some data may be constant across executions
-    \begin{itemize}
-    \item eg: filters, ML weights, Bluestein method
-    \item We lazy-compute the transform of the constant field
-    \item The plan stores the transformed data internally in a \lstinline{gpu_buf}
-    \end{itemize}
-  \end{itemize}
-  
-  
-\end{frame}
-
 
 \begin{frame}
   \frametitle{Multi-GPU}
@@ -482,36 +465,6 @@ basicstyle=\ttfamily\small,
       
 \end{frame}
 
-\begin{frame}
-  \frametitle{Implementation objectives}
-
-  \begin{itemize}
-  \item hipFFT support:
-    \begin{itemize}
-    \item rocFFT: full performance and functionality
-    \item cuFFT: either
-      \begin{itemize}
-      \item functional with poor performance, or
-      \item not implemented
-      \end{itemize}
-    \end{itemize}
-  \item Staged release
-    \begin{itemize}
-    \item allows for prioritization
-    \item reduces risk - we can use feedback
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Implementation DAG}
-
-  \begin{center}
-    \includegraphics[width=0.9\textwidth]{implementdag.pdf}
-  \end{center}
-
-\end{frame}
 
 \begin{frame}
   \frametitle{Spectral ops API proposal}
@@ -531,9 +484,72 @@ basicstyle=\ttfamily\small,
   \item The user provides the body of the function
   \item Similar complexity to callbacks, but better ROCm perf
   \end{itemize}
-
-
   
+\end{frame}
+
+\begin{frame}
+  \frametitle{Implementation objectives}
+
+  \begin{itemize}
+  \item hipFFT support:
+    \begin{itemize}
+    \item rocFFT: full performance and functionality
+    \item cuFFT: either
+      \begin{itemize}
+      \item functional (no performance target), or
+      \item not implemented
+      \end{itemize}
+    \end{itemize}
+  \end{itemize}
+
+  \medskip
+  
+  \begin{itemize}
+  \item Staged release
+    \begin{itemize}
+    \item allows for prioritization
+    \item reduces risk - we can use feedback
+    \item Need to liase with users
+    \item We would like to make public branches
+    \end{itemize}
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Comparable APIs}
+
+  Spectral ops:
+  \begin{itemize}
+  \item \texttt{cuFFTDx}: allows users to call \texttt{cuFFT} from
+    their kernels
+  \item \texttt{vkFFT}: Convolution matrix, symmetry, fused kernels
+  \item \texttt{OneAPI}: Some c2c convolutions for ML
+  \item \texttt{FFTW++}: pointer-based spectral ops for convolutions
+  \item \texttt{safari}: binary convolution with normalized spec op for ML
+  \end{itemize}
+
+  \medskip
+
+  Multi-GPU:
+  \begin{itemize}
+  \item \texttt{cuFFTXt}: single-node, only slab decomposition
+  \item \texttt{cuFFTMp}: brick decomposition
+  \item \texttt{heFFTe}: brick decomposition
+  \item \texttt{FFTW++}: pencil decomposition
+  \item \texttt{SpFFT}: also sparsity
+  \end{itemize}
+    
+\end{frame}
+
+\begin{frame}
+  \frametitle{Implementation DAG}
+
+  \begin{center}
+    \includegraphics[width=0.9\textwidth]{implementdag.pdf}
+  \end{center}
+
 \end{frame}
 
 \begin{frame}
@@ -610,33 +626,6 @@ basicstyle=\ttfamily\small,
   \end{itemize}
 
   \end{frame}
-
-\begin{frame}
-  \frametitle{Comparable APIs}
-
-  Spectral ops:
-  \begin{itemize}
-  \item \texttt{cuFFTDx}: allows users to call \texttt{cuFFT} from
-    their kernels.
-  \item \texttt{vkFFT}: Convolution matrix, symmetry, fused kernels.
-  \item \texttt{OneAPI}: Some c2c convolutions for ML.
-  \item \texttt{FFTW++}: pointer-based spectral ops for convolutions.
-  \item \texttt{safari}: binary convolution with normalized spec op for ML.
-  \end{itemize}
-
-  \medskip
-
-  Multi-GPU:
-  \begin{itemize}
-  \item \texttt{cuFFTXt}: single-node, only slab decomposition.
-  \item \texttt{cuFFTMp}: brick decomposition.
-  \item \texttt{heFFTe}: brick decomposition.
-  \item \texttt{FFTW++}: pencil decomposition.
-  \item \texttt{SpFFT}: also sparsity.
-  \end{itemize}
-    
-\end{frame}
-
 
 \begin{frame}[fragile]
   \frametitle{Spectral op example: binary convolution}

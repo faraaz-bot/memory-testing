@@ -17,7 +17,7 @@ block sparseapi   = roundrectangle(Label("Sparsity API"),     (xsparse,0));
 block api         = roundrectangle(Label("API Proposal"),     (0,-dy));
 
 block oneway = roundrectangle(Label("One-way ops"), (xop,-2dy));
-block onewayfields = roundrectangle(Label("One-way ops with fields"), (xop,-3dy));
+block onewayfields = roundrectangle(Label("Multi-valued one-way"), (xop,-3dy));
 block twoway = roundrectangle(Label("Round-trip unpadded ops"), (xop,-4dy));
 block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-5dy));
 
