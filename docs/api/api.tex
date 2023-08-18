@@ -552,9 +552,173 @@ basicstyle=\ttfamily\small,
 
 \end{frame}
 
+
+\begin{frame}
+  \frametitle{API: field}
+
+  Prerequisites:
+  \begin{itemize}
+  \item None
+  \end{itemize}
+
+  \bigskip
+  
+  API additions:
+  \begin{itemize}
+  \item \texttt{rocfft_field} struct (w.\ create/destroy)
+  \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
+                                      rocfft_field)}
+  \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
+                                      rocfft_field)}
+  \end{itemize}
+
+  More stuff: FIXME
+  \begin{itemize}
+  \item Per-field precision
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: One-Way Ops}
+  
+  Prerequisites:
+  \begin{itemize}
+  \item None
+  \end{itemize}
+
+  \bigskip
+
+  API additions:
+  \begin{itemize}
+  \item \texttt{rocfft_specop} struct (w.\ create/destroy)
+  \item \lstinline{rocfft_specop_set_op(rocfft_specop, char*)}
+  \end{itemize}
+  
+  \bigskip
+  
+  Applications:
+  \begin{itemize}
+  \item Digital Signal Processing
+  \item Basic interface for general spectral ops
+  \item Better performance than callbacks
+  \end{itemize}
+
+  Optional:
+  \begin{itemize}
+  \item FIXME: how do we specify a different type as input?
+  \item Set user-provided \lstinline{void*} user buffer.
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: Multi-valued one-Way Ops}
+  
+  Prerequisites:
+  \begin{itemize}
+  \item One-was single-valued spectral ops
+  \item \texttt{rocfft_field} struct
+  \end{itemize}
+  
+  \bigskip
+
+  API additions:
+  \begin{itemize}
+  \item \lstinline{rrocfft_specop_set_fields(rocfft_specop, size_t, size_t)}
+  \end{itemize}
+
+  \bigskip
+
+  Applications:
+  \begin{itemize}
+  \item Given input in Fourier space, compute the gradient in physical space
+  \item Improved version for Poisson solve
+  \item Improved verion for PDE solvers
+  \end{itemize}
+
+
+  Optional:
+  \begin{itemize}
+  \item Shared memory
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{API: Multi-valued Round-trip Ops}
+
+  FIXME
+
+  Optional:
+  \begin{itemize}
+  \item Multiple read/mid/write ops with vector of inputs/outputs
+  \item Specify rocfft precision for each internal FFT
+  \item Specify that some fields are constant
+  \end{itemize}
+    
+\end{frame}
+  
+\begin{frame}
+  \frametitle{API: Convolution Ops}
+
+  FIXME
+  
+\end{frame}
+  
+\begin{frame}
+  \frametitle{API: Brick Decomposition}
+
+  FIXME
+
+  Optional:
+  \begin{itemize}
+  \item per-brick streams
+  \item Arbitrary batch dimensions
+  \end{itemize}
+  
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: Sparsity}
+
+  FIXME
+
+  Optional: per-brick streams
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: Single-node Multi-gpu}
+
+  FIXME
+ 
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: MPI Decomposition}
+
+  FIXME
+
+  Optional:
+  \begin{itemize}
+  \item Lossy compression for communication, perhaps per field
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{API: SHMEM Decomposition}
+
+  FIXME
+  
+\end{frame}
+
 \begin{frame}
   \frametitle{Multi-GPU, sparsity API proposal}
-
+  
   \begin{itemize}
   \item A new \texttt{rocfft_field} struct is added
   \item Fields can optionally specify:
@@ -625,7 +789,16 @@ basicstyle=\ttfamily\small,
     communication.
   \end{itemize}
 
-  \end{frame}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{API, Streams}
+
+  FIXME: per-device or per-brick streams?  No one does this, but it
+  would be lit!
+  
+\end{frame}
 
 \begin{frame}[fragile]
   \frametitle{Spectral op example: binary convolution}
