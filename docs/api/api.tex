@@ -595,7 +595,7 @@ basicstyle=\ttfamily\small,
   \item \lstinline{rocfft_specop_set_op(rocfft_specop, char*)}
   \end{itemize}
   
-  \bigskip
+  \smallskip
   
   Applications:
   \begin{itemize}
@@ -604,10 +604,13 @@ basicstyle=\ttfamily\small,
   \item Better performance than callbacks
   \end{itemize}
 
+  \smallskip
+  
   Optional:
   \begin{itemize}
   \item FIXME: how do we specify a different type as input?
   \item Set user-provided \lstinline{void*} user buffer.
+  \item Shared memory: \lstinline{rocfft_specop_set_shared_size(rocfft_specop op, size_t bytes)}
   \end{itemize}
   
 \end{frame}
@@ -625,7 +628,12 @@ basicstyle=\ttfamily\small,
 
   API additions:
   \begin{itemize}
-  \item \lstinline{rrocfft_specop_set_fields(rocfft_specop, size_t, size_t)}
+  \item \lstinline{rrocfft_specop_set_fields(rocfft_specop op, size_t nin, size_t nout)}
+  \item \lstinline{rocfft_specop_set_fields(rocfft_specop specop,
+                                                     size_t nin,
+                                                     size_t* ins,
+                                                     size_t nout,
+                                                     size_t* outs)}
   \end{itemize}
 
   \bigskip
@@ -633,16 +641,9 @@ basicstyle=\ttfamily\small,
   Applications:
   \begin{itemize}
   \item Given input in Fourier space, compute the gradient in physical space
-  \item Improved version for Poisson solve
-  \item Improved verion for PDE solvers
+  \item Improved version for Poisson/PDE solve
   \end{itemize}
 
-
-  Optional:
-  \begin{itemize}
-  \item Shared memory
-  \end{itemize}
-  
 \end{frame}
 
 
