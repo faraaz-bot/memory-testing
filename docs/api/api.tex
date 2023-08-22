@@ -221,7 +221,7 @@ basicstyle=\ttfamily\small,
     \end{itemize}
   \item API proposal objectives
   \item Feature implementation DAG
-  \item Optimization plan
+  \item API Rollout and Examples
   \end{itemize}
   
 \end{frame}
@@ -572,15 +572,11 @@ basicstyle=\ttfamily\small,
                                       rocfft_field)}
   \end{itemize}
 
-  More stuff: FIXME
-  \begin{itemize}
-  \item Per-field precision
-  \end{itemize}
   
 \end{frame}
 
 \begin{frame}
-  \frametitle{API: One-Way Ops}
+  \frametitle{API: Single-valued One-Way Ops}
   
   Prerequisites:
   \begin{itemize}
@@ -595,20 +591,19 @@ basicstyle=\ttfamily\small,
   \item \lstinline{rocfft_specop_set_op(rocfft_specop, char*)}
   \end{itemize}
   
-  \smallskip
+  %% \smallskip
   
-  Applications:
-  \begin{itemize}
-  \item Digital Signal Processing
-  \item Basic interface for general spectral ops
-  \item Better performance than callbacks
-  \end{itemize}
+  %% Applications:
+  %% \begin{itemize}
+  %% \item Digital Signal Processing
+  %% \item Basic interface for general spectral ops
+  %% \item Better performance than callbacks
+  %% \end{itemize}
 
   \smallskip
   
   Optional:
   \begin{itemize}
-  \item FIXME: how do we specify a different type as input?
   \item Set user-provided \lstinline{void*} user buffer.
   \item Shared memory: \lstinline{rocfft_specop_set_shared_size(rocfft_specop op, size_t bytes)}
   \end{itemize}
@@ -628,20 +623,26 @@ basicstyle=\ttfamily\small,
 
   API additions:
   \begin{itemize}
+    \item Allow add in/out field to be called additively
+    \item One of:
+    \begin{itemize}
   \item \lstinline{rrocfft_specop_set_fields(rocfft_specop op, size_t nin, size_t nout)}
   \item \lstinline{rocfft_specop_set_fields(rocfft_specop specop,
                                                      size_t nin,
                                                      size_t* ins,
                                                      size_t nout,
                                                      size_t* outs)}
+    \end{itemize}
   \end{itemize}
 
   \bigskip
 
-  Applications:
+  %% \item Given input in Fourier space, compute the gradient in physical space
+  %% \item Improved version for Poisson/PDE solve
+    
+  Optional:
   \begin{itemize}
-  \item Given input in Fourier space, compute the gradient in physical space
-  \item Improved version for Poisson/PDE solve
+  \item \lstinline{rocfft_field_set_precision(rocfft_field field, rocfft_precision precisions, bool isconst)}
   \end{itemize}
 
 \end{frame}
@@ -650,7 +651,16 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{API: Multi-valued Round-trip Ops}
 
-  FIXME
+  API additions:
+  \begin{itemize}
+  \item Extend \lstinline{rocfft_transform_type} to add
+    \lstinline{roundtrip} variants
+  \item
+    \lstinline{rocfft_plan_description_set_midop(rocfft_plan_description
+      des, rocfft_specop op)}
+  \end{itemize}
+
+  \medskip
 
   Optional:
   \begin{itemize}
@@ -664,7 +674,20 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{API: Convolution Ops}
 
-  FIXME
+  Prerequisites:
+  \begin{itemize}
+  \item Multi-valued round-trip ops
+  \end{itemize}
+
+  \medskip
+  
+  API additions:
+  \begin{itemize}
+  \item \lstinline{rocfft_specop_set_conv_params(rocfft_specop specop,
+                                                          size_t conv_order,
+                                                          conv_enum_type conv_type)}
+  \end{itemize}
+   
   
 \end{frame}
   
