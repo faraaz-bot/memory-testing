@@ -687,18 +687,43 @@ basicstyle=\ttfamily\small,
                                                           size_t conv_order,
                                                           conv_enum_type conv_type)}
   \end{itemize}
-   
+
+  \medskip
+
+  Convolutions can take different-length inputs, so some work needs to
+  be done to deal with the possible options here.
+  
   
 \end{frame}
   
-\begin{frame}
+\begin{frame}[fragile]
   \frametitle{API: Brick Decomposition}
 
-  FIXME
+  Prerequisites:
+  \begin{itemize}
+  \item Fields struct
+  \end{itemize}
+
+  \medskip
+  
+  API addition:
+  \begin{lstlisting}
+rocfft_field_add_brick(rocfft_field field,
+                      size_t* brick_start,
+                      size_t* brick_stop,
+                      size_t* brick_stride,
+                      size_t dim,
+                      int           deviceID,
+                      int           reserved,
+                      rocfft_brick_type           brick_type);
+enum rocfft_brick_type {rocfft_brick_normal, }          
+  \end{lstlisting}
+
+  \medskip
 
   Optional:
   \begin{itemize}
-  \item per-brick streams
+  \item Per-brick streams
   \item Arbitrary batch dimensions
   \end{itemize}
   
@@ -708,121 +733,75 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{API: Sparsity}
 
-  FIXME
+  Prerequisites:
+  \begin{itemize}
+  \item Brick Decomposition
+  \end{itemize}
+
+  \bigskip
+  
+  API addition:
+  \begin{itemize}
+  \item \lstinline{enum rocfft_brick_type \{rocfft_brick_normal, rocfft_brick_zero\}}
+  \end{itemize}
+
 
   Optional: per-brick streams
   
 \end{frame}
 
-\begin{frame}
+\begin{frame}[fragile]
   \frametitle{API: Single-node Multi-gpu}
+  
+  Prerequisites:
+  \begin{itemize}
+  \item Brick Decomposition
+  \end{itemize}
 
-  FIXME
+  \medskip
+
+
+  API addition:
+  \begin{lstlisting}
+rocfft_plan_description_set_devices(rocfft_plan_description desc,
+                                   void*                   devices,
+                                   size_t number_of_devices);
+  \end{lstlisting}
+
+  \medskip
+  
  
 \end{frame}
 
-\begin{frame}
-  \frametitle{API: MPI Decomposition}
+\begin{frame}[fragile]
+  \frametitle{API: Distributed Computation}
 
-  FIXME
+  Prerequisites:
+  \begin{itemize}
+  \item Brick Decomposition
+  \end{itemize}
+
+  \medskip
+  
+  API addition:
+  \begin{lstlisting}
+enum rocfft_comm_type { rocfft_comm_mpi, }
+rocfft_plan_description_set_comm(rocfft_plan_description description,
+                                const enum_type_for_mpi_or_schmem comm_type,
+                                void* comm_handle);
+  \end{lstlisting}
+  
+  \medskip
+  
 
   Optional:
   \begin{itemize}
-  \item Lossy compression for communication, perhaps per field
+  \item Compression for communication, perhaps per field
+  \item SHMEM decomposition: \lstinline{rocfft_comm_shmem}
   \end{itemize}
   
 \end{frame}
 
-\begin{frame}
-  \frametitle{API: SHMEM Decomposition}
-
-  FIXME
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposal}
-  
-  \begin{itemize}
-  \item A new \texttt{rocfft_field} struct is added
-  \item Fields can optionally specify:
-    \begin{itemize}
-    \item Precision/type information
-    \item Brick decomposition information
-    \end{itemize}
-  \item Multiple fields can be added to a \texttt{rocfft_plan_description}
-  \item Descriptors are (optionally) passed to a \texttt{rocfft_plan}
-  \item Plans are executed, performing the FFT
-  \end{itemize}
-
-     
-\end{frame}
-
-\begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposal}
-
-  For spectral ops, fields are used to
-  \begin{itemize}
-  \item Set the number of inputs and outputs for the op
-  \item Set which particular fields are touched by the op
-  \item Set the per-field precision and data type
-  \end{itemize}
-  
-  If no fields are present, execution defaults to a single input and a
-  single output.
-
-  \bigskip
-
-  For multi-GPU and sparsity, fields are used to:
-  \begin{itemize}
-  \item coordinate the data decomposition
-    \begin{itemize}
-    \item Bricks are added to a field
-    \item Each brick has a device ID, a rank, and a sparsity/compression value.
-    \end{itemize}
-  \end{itemize}
-  
-  
-\end{frame}
-
-
-
-\begin{frame}
-  \frametitle{Multi-GPU, sparsity API proposal}
-
-  \medskip
-  If fields are specified, then \texttt{rocfft_execute} takes fields
-  passed as \texttt{void **}.
-  \begin{itemize}
-  \item Fields also store (user-specified) GPU buffer pointers.
-  \end{itemize}
-  Alternatively, we just let the user specify the array of
-  (rank-local) pointers in the execution function.
-  
-
-  \bigskip
-
-  Internally, all data is a \texttt{rocfft_precision}; our kernels
-  handle only specific data types.
-
-  \medskip
-  For internal computation, we can
-  \begin{itemize}
-  \item specify the per-transform precision (for multi-field spectral ops)
-  \item allow for lossy data compression / type change for multi-GPU
-    communication.
-  \end{itemize}
-
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{API, Streams}
-
-  FIXME: per-device or per-brick streams?  No one does this, but it
-  would be lit!
-  
-\end{frame}
 
 \begin{frame}[fragile]
   \frametitle{Spectral op example: binary convolution}
@@ -830,7 +809,7 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item Add two \texttt{field}s as infields to the plan description.
 
-  \item Create a spectral op with RTC string \lstinline{out0 = in0 * in1;}
+  \item Create a spectral op with RTC string ``\lstinline{out0 = in0 * in1;}''
     \begin{itemize}
     \item Set the convolution parameters for the spectral op ($2^{\text{nd}}$ order, non-centered convolution)
     \end{itemize}
@@ -884,21 +863,22 @@ out3 = in0 * I * ky;
   
 \end{frame}
 
-\begin{frame}[fragile]
-  \frametitle{Spectral op example: autocorrelation for detecting periodicity}
+%% \begin{frame}[fragile]
+%%   \frametitle{Spectral op example: autocorrelation for detecting periodicity}
 
-  TODO
+%%   TODO
 
-  The idea here is that we have an autocorrelation and then have no
-  outfield, and use the void* to atomicSwap (or something) the
-  previous max value.  This requires that if the user adds an in/out
-  field, then they are required toadd an out/in field as well (or they
-  get this case).
+%%   The idea here is that we have an autocorrelation and then have no
+%%   outfield, and use the void* to atomicSwap (or something) the
+%%   previous max value.  This requires that if the user adds an in/out
+%%   field, then they are required toadd an out/in field as well (or they
+%%   get this case).
   
-\end{frame}
+%% \end{frame}
   
 \begin{frame}[fragile]
-  \frametitle{Spectral op example: per-batch 1D complex-to-real phase shift-and-scale}
+  \frametitle{Spectral op example: per-batch 1D complex-to-real phase
+    shift-and-scale}
   \begin{itemize}
   \item Readop with string
     \begin{lstlisting}
@@ -919,12 +899,14 @@ out3 = in0 * I * ky;
 \begin{frame}
   \frametitle{Special cases}
 
-  It may be worth having special cases for certain functions, eg convolution, Poisson solve.
+  It may be worth having special cases for certain functions, eg
+  convolution, Poisson solve.
 
   \medskip
 
   \begin{itemize}
-  \item Binary convolution can also be possibly optimized (eg Winograd, matrix cores, etc).
+  \item Binary convolution can also be possibly optimized (eg
+    Winograd, matrix cores, etc).
   \item Easier for users to get at common use cases.
   \item Heavier API: more to test, more to document, more to write.
   \end{itemize}
@@ -940,10 +922,8 @@ out3 = in0 * I * ky;
   \medskip
   
   \begin{itemize}
-  \item Multi-transform specops can have different precisions per transform
   \item Multi-value spectral ops can have a field-dependency list.
   \item Multi-GPU transforms can have lossy compression for communication.
-  \item Different fields can have different lengths
   \item Convolution outputs can have different lengths than inputs.
   \item Cooperation with CPU and FPGA groups at AMD.
   \end{itemize}
