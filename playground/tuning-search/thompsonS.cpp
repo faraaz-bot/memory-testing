@@ -1,12 +1,13 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <algorithm>
+#include "beta_distribution.hpp"
 
 // compile: gcc thompsonS.cpp -lm -lstdc++ -o thompsonS.o
 // run: ./thompsonS.o num-samples
 // example: ./thompsonS.o 100
 
-std::vector<int> counts;
 std::vector<double> success; // alpha = success + 1
 std::vector<double> failure; // beta = failure + 1
 
@@ -49,8 +50,8 @@ int choose_button()
     // sample beta distribution of each button
     for(int i = 0; i < num_buttons; ++i)
     {
-        std::gamma_distribution<double> gamma(success[i], failure[i]);
-        theta[i] = gamma(generator);
+        sftrabbit::beta_distribution<double> beta(success[i], failure[i]);
+        theta[i] = beta(generator);
     }
 
     // choose the button with largest theta value
@@ -73,7 +74,7 @@ int choose_button()
 void experiment(int test_counter, int button_id, double outcome)
 {
     double ratio = outcome / max_outcome;
-    bool good = ratio >= 0.94;
+    bool good = ratio >= 0.9;
 
     if(good)
         success[button_id]++;
@@ -114,20 +115,19 @@ int main(int argc, char* argv[])
     if(argc >= 2)
         N = std::stoi(argv[1]);
 
-    counts = std::vector<int>(N, 0);
     success = std::vector<double>(N, 1);
     failure = std::vector<double>(N, 1);
 
     std::vector<normal_dist_machine> buttons(num_buttons);
-    buttons[0] = normal_dist_machine(80.0, 12.0);
-    buttons[1] = normal_dist_machine(50.0, 24.0);
-    buttons[2] = normal_dist_machine(83.0, 6.0);
-    buttons[3] = normal_dist_machine(70.0, 20.0);
-    buttons[4] = normal_dist_machine(60.0, 6.0);
+    buttons[0] = normal_dist_machine(85.0, 6.0);
+    buttons[1] = normal_dist_machine(94.0, 5.0);
+    buttons[2] = normal_dist_machine(18.0, 3.0);
+    buttons[3] = normal_dist_machine(50.0, 2.0);
+    buttons[4] = normal_dist_machine(35.0, 8.0);
 
     max_outcome = 0;
 
-    for(int i = 0; i < num_buttons; ++i)
+    for(int i = 0; i < num_buttons; i+=2)
     {
         int button_id = i;
         double outcome = buttons[i].sample();
