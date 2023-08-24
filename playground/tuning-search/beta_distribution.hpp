@@ -55,6 +55,12 @@ namespace sftrabbit {
         b_gamma = gamma_dist_type(param.b());
       }
 
+      void param(RealType a, RealType b)
+      {
+        a_gamma = gamma_dist_type(a);
+        b_gamma = gamma_dist_type(b);
+      }
+
       template <typename URNG>
       result_type operator()(URNG& engine)
       {

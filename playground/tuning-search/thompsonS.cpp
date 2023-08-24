@@ -115,15 +115,15 @@ int main(int argc, char* argv[])
     if(argc >= 2)
         N = std::stoi(argv[1]);
 
-    success = std::vector<double>(N, 1);
-    failure = std::vector<double>(N, 1);
+    success = std::vector<double>(num_buttons, 1);
+    failure = std::vector<double>(num_buttons, 1);
 
     std::vector<normal_dist_machine> buttons(num_buttons);
-    buttons[0] = normal_dist_machine(85.0, 6.0);
-    buttons[1] = normal_dist_machine(94.0, 5.0);
-    buttons[2] = normal_dist_machine(18.0, 3.0);
-    buttons[3] = normal_dist_machine(50.0, 2.0);
-    buttons[4] = normal_dist_machine(35.0, 8.0);
+    buttons[0] = normal_dist_machine(85.0, 11.0);
+    buttons[1] = normal_dist_machine(94.0, 10.0);
+    buttons[2] = normal_dist_machine(18.0, 8.0);
+    buttons[3] = normal_dist_machine(50.0, 7.0);
+    buttons[4] = normal_dist_machine(35.0, 13.0);
 
     max_outcome = 0;
 
@@ -146,6 +146,13 @@ int main(int argc, char* argv[])
         // current most probable result:
         int most_probable_button = find_most_probable_button();
         std::cout << "most_probable_button is: " << most_probable_button;
+    }
+
+    for(int j = 0; j < num_buttons; ++j)
+    {
+        auto posterior = success[j] / (success[j] + failure[j]);
+        std::cout << "Element " << j << ": success " << success[j] << ", failure " << failure[j]
+                  << ": posterior = " << posterior << "\n";
     }
 
     return 0;
