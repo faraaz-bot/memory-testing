@@ -72,6 +72,11 @@ public:
         return (double)(success_count) / (double)(success_count + failure_count);
     }
 
+    double get_mean()
+    {
+        return mean;
+    }
+
     template <typename URNG>
     double draw_beta_dist_sample(URNG& engine)
     {
@@ -178,14 +183,15 @@ void print_group_summary(std::vector<param_machine>& target_group)
 // update if the reward is success or not
 // success: outcome is within 10% of the current largest outcome
 template <typename URNG>
-void experiment(URNG& engine, int test_counter, int choosen_g1, int choosen_g2, int choosen_g3)
+double experiment(URNG& engine, int test_counter, int choosen_g1, int choosen_g2, int choosen_g3)
 {
     auto& testing_machine = machines[choosen_g1][choosen_g2][choosen_g3];
     double outcome = testing_machine.evaluate(engine);
 
     // if max_outcome is 0 (first time), we make the reward = success
     double ratio = (max_outcome == 0)? 1 : outcome / max_outcome;
-    bool good = ratio >= 0.9;
+    double thres = 0.5 * std::min(((double)test_counter / 300), 1.0) + 0.5;
+    bool good = (ratio >= thres);
 
     if(good)
         testing_machine.success();
@@ -198,9 +204,12 @@ void experiment(URNG& engine, int test_counter, int choosen_g1, int choosen_g2, 
 
     std::cout << "\ntest: " << test_counter
               << ", params [" << choosen_g1 << ", " << choosen_g2 << ", " << choosen_g3 << "]"
-              << ": outcome is " << outcome << ", max outcome is " << max_outcome << ", "
+              << ": outcome is " << outcome << ", max outcome is " << max_outcome
+              << ", threshold is " << thres << ", "
               << (good ? "success" : "failure")
               << ", posterior is [" << post0 << ", " << post1 << ", " << post2 << "]";
+
+    return outcome;
 }
 
 int main(int argc, char* argv[])
@@ -278,12 +287,12 @@ int main(int argc, char* argv[])
     for(int i = 0; i < N; ++i)
     {
         // thompson sampling to choose trial button
-        int next_id_g1 = choose_next_sample_id(generator, param0);
-        int next_id_g2 = choose_next_sample_id(generator, param1);
-        int next_id_g3 = choose_next_sample_id(generator, param2);
+        int next_id_g0 = choose_next_sample_id(generator, param0);
+        int next_id_g1 = choose_next_sample_id(generator, param1);
+        int next_id_g2 = choose_next_sample_id(generator, param2);
 
         // evaluate the sample
-        experiment(generator, i, next_id_g1, next_id_g2, next_id_g3);
+        experiment(generator, i, next_id_g0, next_id_g1, next_id_g2);
 
         // update the posterior: optimization should be [1,7,3]
         best_selections[0] = find_most_probable_machines(param0);
@@ -295,6 +304,10 @@ int main(int argc, char* argv[])
         << best_selections[1] << ","
         << best_selections[2] << "]";
     }
+
+    auto final_picked_outcome = param0[best_selections[0]].get_mean() * param1[best_selections[1]].get_mean() * param2[best_selections[2]].get_mean();
+    auto optimal = 94.0 * 94.0 * 84.0;
+    std::cout << "\n(seleted-best/real-answer) = " << final_picked_outcome << "/" << optimal << " = " << (final_picked_outcome / optimal) << "\n";
 
     print_group_summary(param0);
     print_group_summary(param1);

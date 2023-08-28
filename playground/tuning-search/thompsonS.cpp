@@ -85,9 +85,9 @@ void experiment(int test_counter, int button_id, double outcome)
         max_outcome = outcome;
 
     auto prob = success[button_id] / (success[button_id] + failure[button_id]);
-    std::cout << "\ntest " << test_counter << "\t button " << button_id
-              << ": outcome is " << outcome << "\t " << (good ? "success" : "failure")
-              << "\t posterior prob is " << prob << "\t";
+    std::cout << "\ntest " << test_counter << ", button " << button_id
+              << ": outcome is " << outcome << ", " << (good ? "success" : "failure")
+              << ", posterior prob is " << prob;
 }
 
 
@@ -145,14 +145,14 @@ int main(int argc, char* argv[])
 
         // current most probable result:
         int most_probable_button = find_most_probable_button();
-        std::cout << "most_probable_button is: " << most_probable_button;
+        std::cout << ", current most probable button is: " << most_probable_button;
     }
 
     for(int j = 0; j < num_buttons; ++j)
     {
         auto posterior = success[j] / (success[j] + failure[j]);
-        std::cout << "Element " << j << ": success " << success[j] << ", failure " << failure[j]
-                  << ": posterior = " << posterior << "\n";
+        std::cout << "\nElement " << j << ": success " << success[j] << ", failure " << failure[j]
+                  << ": posterior = " << posterior;
     }
 
     return 0;
