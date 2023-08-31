@@ -3,12 +3,14 @@
 #include <random>
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include "beta_distribution.hpp"
 
 // compile: gcc thompsonS_multi.cpp -lm -lstdc++ -o thompsonS_multi.o
 // run: ./thompsonS_multi.o num-samples
 // example: ./thompsonS_multi.o 100
 
+double epsilon = 0.02;
 double max_outcome;
 const int num_groups = 3;
 
@@ -17,6 +19,8 @@ const int num_elem_g1 = 15;
 const int num_elem_g2 = 10;
 const std::vector<int> num_elem_in_group = {num_elem_g0, num_elem_g1, num_elem_g2};
 
+const int MAX_INT = std::numeric_limits<int>::max();
+
 class param_machine
 {
 
@@ -24,7 +28,7 @@ private:
     double mean;
     double deviation;
     std::normal_distribution<double> dist;
-    sftrabbit::beta_distribution<double> beta_dist;
+    beta_distribution<double> beta_dist;
 
     ///
     int success_count = 1;
@@ -46,7 +50,6 @@ public:
         return dist(engine);
     }
 
-    ///
     void inc_success()
     {
         ++success_count;
@@ -127,10 +130,33 @@ public:
 
 Machine machines[num_elem_g0][num_elem_g1][num_elem_g2];
 
+// randomly pick a value from [begin, last], but exclude the one "excluded" (if not -1)
+size_t pick_random(size_t begin, size_t last, int excluded = -1)
+{
+    // if we have a valid exclude value, then we reduce the range by 1
+    // and advance the picked value if it >= excluded
+    if(excluded <= last && excluded >= begin)
+        --last;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distr(begin, last); // define the range
+
+    size_t picked = distr(gen);
+    if(excluded <= last && excluded >= begin)
+    {
+        // advance the picked by 1 since we want to shift the later part
+        if(picked >= excluded)
+            ++picked;
+    }
+
+    return picked;
+}
+
 // thompson sampling
 // choose the button with largest theta (samling beta_dist) value
 template <typename URNG>
-int choose_next_sample_id(URNG& engine, std::vector<param_machine>& target_group)
+int choose_next_sample_id(URNG& engine, std::vector<param_machine>& target_group, double random_v)
 {
     int num_candidates = target_group.size();
     int choosen = 0;
@@ -145,9 +171,23 @@ int choose_next_sample_id(URNG& engine, std::vector<param_machine>& target_group
         }
     }
 
-    return choosen;
+    if(random_v >= epsilon)
+    {
+        return choosen;
+    }
+    else
+    {
+        // return a random index (except the choosen)
+        auto picked = pick_random(0, num_candidates - 1, choosen);
+        std::cout << "\nRandom value is " << random_v << " < eplison, return a random picked "
+                  << picked;
+
+        return picked;
+    }
 }
 
+// get the most probable one giving the max value
+// with the current largest posterior (highest probability)
 int find_most_probable_machines(std::vector<param_machine>& target_group)
 {
     int num_candidates = target_group.size();
@@ -190,7 +230,7 @@ double experiment(URNG& engine, int test_counter, int choosen_g1, int choosen_g2
 
     // if max_outcome is 0 (first time), we make the reward = success
     double ratio = (max_outcome == 0)? 1 : outcome / max_outcome;
-    double thres = 0.5 * std::min(((double)test_counter / 300), 1.0) + 0.5;
+    double thres = 0.3 * std::min(((double)test_counter / 300), 1.0) + 0.6;
     bool good = (ratio >= thres);
 
     if(good)
@@ -217,10 +257,15 @@ int main(int argc, char* argv[])
     int N = 50;
     if(argc >= 2)
         N = std::stoi(argv[1]);
+    if(argc >= 3)
+        epsilon = std::stod(argv[2]);
+
+    std::cout << "EPSILON = " << epsilon << std::endl;
 
     // obtain a seed from the system clock:
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-    std::mt19937 generator(seed);  // mt19937 is a standard mersenne_twister_engine
+    std::mt19937 generator(seed);  // generator to draw beta distribution
+    std::mt19937 def_random_gen(seed); // generator for randomly pick
 
     // best is 1
     std::vector<param_machine> param0(num_elem_in_group[0]);
@@ -286,10 +331,12 @@ int main(int argc, char* argv[])
     // test N times
     for(int i = 0; i < N; ++i)
     {
+        double random_prob = (double)def_random_gen() / (double)MAX_INT;
+
         // thompson sampling to choose trial button
-        int next_id_g0 = choose_next_sample_id(generator, param0);
-        int next_id_g1 = choose_next_sample_id(generator, param1);
-        int next_id_g2 = choose_next_sample_id(generator, param2);
+        int next_id_g0 = choose_next_sample_id(generator, param0, random_prob);
+        int next_id_g1 = choose_next_sample_id(generator, param1, random_prob);
+        int next_id_g2 = choose_next_sample_id(generator, param2, random_prob);
 
         // evaluate the sample
         experiment(generator, i, next_id_g0, next_id_g1, next_id_g2);

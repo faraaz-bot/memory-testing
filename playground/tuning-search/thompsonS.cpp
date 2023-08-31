@@ -50,7 +50,7 @@ int choose_button()
     // sample beta distribution of each button
     for(int i = 0; i < num_buttons; ++i)
     {
-        sftrabbit::beta_distribution<double> beta(success[i], failure[i]);
+        beta_distribution<double> beta(success[i], failure[i]);
         theta[i] = beta(generator);
     }
 
