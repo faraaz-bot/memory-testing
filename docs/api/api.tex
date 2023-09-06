@@ -927,6 +927,67 @@ out3 = in0 * I * ky;
   
 \end{frame}
 
+\begin{frame}
+  \frametitle{hipFFT API changes}
+
+  The \texttt{cuFFT} api is divided into four files:
+  \begin{itemize}
+  \item \texttt{cufft.h}
+  \item \texttt{cufftXt.h}
+  \item \texttt{cudalibxt.h}
+  \item \texttt{cufftMp.h}
+  \end{itemize}
+  and the \texttt{hipFFT} api will have to mirror this structure.
+  
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{cuFFT: single-node multi-gpu}
+
+  \begin{itemize}
+  \item Select devices with \lstinline{cufftXtSetGPUs()}
+  \item \href{https://docs.nvidia.com/cuda/cufft/index.html#multiple-gpu-data-organization}{online documentation}
+  \item \href{https://github.com/NVIDIA/CUDALibrarySamples/tree/master/cuFFT}{cuFFT samples}
+  \end{itemize}
+
+  \medskip
+  
+  \begin{itemize}
+  \item No call-backs
+  \item 1D always has shuffled output.
+    \begin{itemize}
+    \item Set the shuffled layout in the struct \lstinline{cufftXt1dFactors} with \lstinline{cufftXtQueryPlan} using the enum \lstinline{CUFFT_QUERY_1D_FACTORS}
+    \item complex: 
+    \item real/complex: shuffled output, must be even.
+    \end{itemize}
+  \item 2D/3D
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{cuFFT: multi-node multi-gpu}
+  \href{https://docs.nvidia.com/hpc-sdk/cufftmp/usage/api_usage.html#usage-with-custom-slabs-and-pencils-data-decompositions}{brick decomp}
+
+  \medskip
+
+  \begin{itemize}
+  \item \lstinline{cufftMpAttachComm}
+  \item Set data distribution: one of:
+    \begin{itemize}
+    \item \lstinline{cufftXtSetSubformatDefault}, which sets forward and inverse formats according to the \lstinline{cufftXtSubFormat} \href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftXtSubFormat}{enum} (slab or box).
+    \item \lstinline{cufftXtSetDistribution} (rank-local)
+    \end{itemize}
+  \item \lstinline{cufftMakePlan3d} (or others?)
+  \item allocate a \lstinline{cudaLibXtDesc} using
+    \lstinline{cufftXtMalloc}, which takes the plan.
+  \item \lstinline{cufftXtExecDescriptor} to execute
+  \end{itemize}
+
+  TODO: what about the reshape api?
+  
+\end{frame}
+
 \end{document}
 
 
