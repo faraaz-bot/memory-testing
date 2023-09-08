@@ -971,30 +971,6 @@ out3 = in0 * I * ky;
 \end{frame}
     
 \begin{frame}[fragile]
-  \frametitle{cuFFT: single-node multi-gpu}
-
-  \begin{center}Use\end{center}
-
-    \bigskip
-
-    \begin{itemize}
-    \item Create a plan (\lstinline{cufftHandle}) with \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
-    \item Associate GPUs to the plan with \lstinline{cufftXtSetGPUs()}
-    \item Create \lstinline{cudaLibXtDesc} with \lstinline{cufftXtMalloc}, using the plan
-    \item Populate buffers with \lstinline{cufftXtMemcpy}
-    \item Execute with \lstinline{cufftXtExecDescriptor}/\lstinline{C2C}/\lstinline{R2C}/\lstinline{C2R}/\lstinline{Z2Z}/\lstinline{D2Z}/\lstinline{Z2D}
-    \end{itemize}
-
-    \bigskip
-
-    NB: \lstinline{cufftPlan1d}/\lstinline{2d}/\lstinline{3d} seems to
-    be disallowed in the multi-gpu setting.
-    
-    \begin{center}TODO: how to add all the new APIs here?\end{center}
-      
-\end{frame}
-
-\begin{frame}[fragile]
   \frametitle{cuFFT: multi-node multi-gpu}
 
   \begin{center}Features\end{center}
@@ -1022,6 +998,32 @@ out3 = in0 * I * ky;
   
 \end{frame}
 
+
+\begin{frame}[fragile]
+  \frametitle{cuFFT: single-node multi-gpu}
+
+  \begin{center}Use\end{center}
+
+    \bigskip
+
+    \begin{itemize}
+    \item Create a plan (\lstinline{cufftHandle}) with \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+    \item Associate GPUs to the plan with \lstinline{cufftXtSetGPUs()}
+    \item Create \lstinline{cudaLibXtDesc} with \lstinline{cufftXtMalloc}, using the plan
+    \item Populate buffers with \lstinline{cufftXtMemcpy}
+    \item Execute with \lstinline{cufftXtExecDescriptor}/\lstinline{C2C}/\lstinline{R2C}/\lstinline{C2R}/\lstinline{Z2Z}/\lstinline{D2Z}/\lstinline{Z2D}
+    \end{itemize}
+
+    \bigskip
+
+    NB: \lstinline{cufftPlan1d}/\lstinline{2d}/\lstinline{3d} seems to
+    be disallowed in the multi-gpu setting.
+    
+    \begin{center}TODO: how to add all the new APIs here?\end{center}
+      
+\end{frame}
+
+
 \begin{frame}[fragile]
   \frametitle{cuFFT: multi-node multi-gpu}
 
@@ -1031,16 +1033,24 @@ out3 = in0 * I * ky;
     \begin{itemize}
     \item Create plan with \lstinline{cufftCreate}
     \item Attache a communicator to the plan with \lstinline{cufftMpAttachComm}
-    \item  \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+    \item Slab:
       \begin{itemize}
-      \item allocate a \lstinline{cudaLibXtDesc} using
-        \lstinline{cufftXtMalloc}, which takes the plan.
-      \item Or bricks? \lstinline{cufftXtSetDistribution}
+      \item \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+      \item Allocate a \lstinline{cudaLibXtDesc} using
+        \lstinline{cufftXtMalloc}, which takes the plan, and specify \lstinline{CUFFT_XT_FORMAT_INPLACE}.
       \end{itemize}
+    \item Bricks:
+      \begin{itemize}
+      \item Add a brick with \lstinline{cufftXtSetDistribution}, which takes a plan.  Both input and output are specified.
+      \item \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+      \item Allocate a \lstinline{cudaLibXtDesc} using
+        \lstinline{cufftXtMalloc}, which takes the plan, and specify \lstinline{CUFFT_XT_FORMAT_DISTRIBUTED_INPUT}.
+      \end{itemize}
+    \item Execute with \lstinline{cufftXtExecDescriptor}
     \end{itemize}
 
     
-  
+    
 \end{frame}
 
 \end{document}
