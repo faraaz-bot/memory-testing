@@ -1772,6 +1772,9 @@ static __device__ typename callback_type<T>::store get_store_cb(void* ptr)
  * Copyright (C) 2016-2023 Advanced Micro Devices, Inc. All rights reserved.
  ******************************************************************************/
 
+#ifndef ROCFFT_RTC_BUTTERFLY_RAD8
+#define ROCFFT_RTC_BUTTERFLY_RAD8
+
 template <typename T>
 __device__ void FwdRad8B1(T* R0, T* R4, T* R2, T* R6, T* R1, T* R5, T* R3, T* R7)
 {
@@ -1855,9 +1858,14 @@ __device__ void InvRad8B1(T* R0, T* R4, T* R2, T* R6, T* R1, T* R5, T* R3, T* R7
     (*R6) = res;
 }
 
+#endif
+
 /*******************************************************************************
  * Copyright (C) 2016-2023 Advanced Micro Devices, Inc. All rights reserved.
  ******************************************************************************/
+
+#ifndef ROCFFT_RTC_BUTTERFLY_RAD16
+#define ROCFFT_RTC_BUTTERFLY_RAD16
 
 template <typename T>
 __device__ void FwdRad16B1(T* R0,
@@ -2081,6 +2089,7 @@ __device__ void InvRad16B1(T* R0,
     (*R13) = res;
 }
 
+#endif
 // Copyright (C) 2021 - 2022 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -2700,17 +2709,6 @@ __device__ void forward_length128_SBRR_device(scalar_type* R,
     R[7] = t;
     FwdRad8B1(R + 0, R + 1, R + 2, R + 3, R + 4, R + 5, R + 6, R + 7);
 }
-typedef rocfft_complex<float>    scalar_type;
-static const StrideBin           sb                  = SB_UNIT;
-static const EmbeddedType        ebtype              = EmbeddedType::Real2C_POST;
-static const SBRC_TYPE           sbrc_type           = SBRC_2D;
-static const SBRC_TRANSPOSE_TYPE transpose_type      = NONE;
-static const CallbackType        cbtype              = CallbackType::NONE;
-static const DirectRegType       drtype              = DirectRegType::TRY_ENABLE_IF_SUPPORT;
-static const bool                apply_large_twiddle = false;
-static const IntrinsicAccessType intrinsic_mode      = IntrinsicAccessType::DISABLE_BOTH;
-static const size_t              large_twiddle_base  = 8;
-static const size_t              large_twiddle_steps = 0;
 extern "C" __global__
     __launch_bounds__(256) void fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_unitstride_sbrr_R2C_dirReg(
         const scalar_type* __restrict__ twiddles,
@@ -2726,6 +2724,16 @@ extern "C" __global__
         void* __restrict__ store_cb_data,
         scalar_type* __restrict__ buf)
 {
+    static const StrideBin           sb                  = SB_UNIT;
+    static const EmbeddedType        ebtype              = EmbeddedType::Real2C_POST;
+    static const SBRC_TYPE           sbrc_type           = SBRC_2D;
+    static const SBRC_TRANSPOSE_TYPE transpose_type      = NONE;
+    static const CallbackType        cbtype              = CallbackType::NONE;
+    static const DirectRegType       drtype              = DirectRegType::TRY_ENABLE_IF_SUPPORT;
+    static const bool                apply_large_twiddle = false;
+    static const IntrinsicAccessType intrinsic_mode      = IntrinsicAccessType::DISABLE_BOTH;
+    static const size_t              large_twiddle_base  = 8;
+    static const size_t              large_twiddle_steps = 0;
     // this kernel:
     //   uses 16 threads per transform
     //   does 16 transforms per thread block

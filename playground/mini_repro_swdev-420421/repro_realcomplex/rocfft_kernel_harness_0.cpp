@@ -1,8 +1,9 @@
+#include <hip/hip_runtime.h>
+
 #include <fstream>
 #include <functional>
 #include <future>
 #include <hip/hip_runtime_api.h>
-#include <hip/hiprtc.h>
 #include <memory>
 #include <random>
 #include <string>
@@ -121,446 +122,6 @@ private:
 typedef gpubuf_t<> gpubuf;
 #endif
 
-// Copyright (C) 2021 - 2023 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-#ifndef ROCFFT_RTC_H
-#define ROCFFT_RTC_H
-
-struct DeviceCallIn;
-class TreeNode;
-struct GridParam;
-
-// Helper class that handles alignment of kernel arguments
-class RTCKernelArgs
-{
-public:
-    RTCKernelArgs() = default;
-    void append_ptr(const void* ptr)
-    {
-        append(&ptr, sizeof(void*));
-    }
-    void append_size_t(size_t s)
-    {
-        append(&s, sizeof(size_t));
-    }
-    void append_unsigned_int(unsigned int i)
-    {
-        append(&i, sizeof(unsigned int));
-    }
-    void append_int(int i)
-    {
-        append(&i, sizeof(int));
-    }
-    void append_double(double d)
-    {
-        append(&d, sizeof(double));
-    }
-    void append_float(float f)
-    {
-        append(&f, sizeof(float));
-    }
-    void append_half(_Float16 f)
-    {
-        append(&f, sizeof(_Float16));
-    }
-    template <typename T>
-    void append_struct(const T& data)
-    {
-        append(&data, sizeof(T), 8);
-    }
-
-    size_t size_bytes() const
-    {
-        return buf.size();
-    }
-    void* data()
-    {
-        return buf.data();
-    }
-
-private:
-    void append(const void* src, size_t nbytes, size_t align = 0)
-    {
-        // values need to be aligned to their width (i.e. 8-byte values
-        // need 8-byte alignment, 4-byte needs 4-byte alignment)
-        if(align == 0)
-            align = nbytes;
-
-        size_t oldsize = buf.size();
-        size_t padding = oldsize % align ? align - (oldsize % align) : 0;
-        buf.resize(oldsize + padding + nbytes);
-        std::copy_n(static_cast<const char*>(src), nbytes, buf.begin() + oldsize + padding);
-    }
-
-    std::vector<char> buf;
-};
-
-// Base class for a runtime compiled kernel.  Subclassed for
-// different kernel types that each have their own details about how
-// to be launched.
-struct RTCKernel
-{
-    // try to compile kernel for node, and attach compiled kernel to
-    // node if successful.  returns nullptr if there is no matching
-    // supported scheme + problem size.  throws runtime_error on
-    // error.
-    static std::shared_future<std::unique_ptr<RTCKernel>>
-        runtime_compile(const TreeNode&    node,
-                        const std::string& gpu_arch,
-                        std::string&       kernel_name,
-                        bool               enable_callbacks = false);
-
-    // take already-compiled code object and prepare to launch the
-    // named kernel
-    RTCKernel(const std::string&       kernel_name,
-              const std::vector<char>& code,
-              dim3                     gridDim  = {},
-              dim3                     blockDim = {});
-
-    virtual ~RTCKernel()
-    {
-        kernel = nullptr;
-        (void)hipModuleUnload(module);
-        module = nullptr;
-    }
-
-    // disallow copies, since we expect this to be managed by smart ptr
-    RTCKernel(const RTCKernel&) = delete;
-    RTCKernel(RTCKernel&&)      = delete;
-
-    void operator=(const RTCKernel&) = delete;
-
-    // normal launch from within rocFFT execution plan
-    void launch(DeviceCallIn& data);
-    // direct launch with kernel args
-    void launch(RTCKernelArgs& kargs,
-                dim3           gridDim,
-                dim3           blockDim,
-                unsigned int   lds_bytes,
-                hipStream_t    stream = nullptr);
-
-    // normal launch from within rocFFT execution plan
-    bool get_occupancy(dim3 blockDim, unsigned int lds_bytes, int& occupancy);
-
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-    // Subclasses implement this - each kernel type has different
-    // parameters
-    virtual RTCKernelArgs get_launch_args(DeviceCallIn& data) = 0;
-#endif
-
-    // function to construct the correct RTCKernel object, given a kernel name and its compiled code
-    using rtckernel_construct_t = std::function<std::unique_ptr<RTCKernel>(
-        const std::string&, const std::vector<char>&, dim3, dim3)>;
-
-    // grid parameters for this kernel.  may be set by runtime
-    // compilation, if compilation of this kernel type knows how to.
-    // Otherwise, TreeNode::SetupGPAndFnPtr_internal will do it
-    // later.
-    dim3 gridDim;
-    dim3 blockDim;
-
-protected:
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-    struct RTCGenerator
-    {
-        kernel_name_gen_t     generate_name;
-        kernel_src_gen_t      generate_src;
-        rtckernel_construct_t construct_rtckernel;
-
-        virtual bool valid() const
-        {
-            return generate_name && generate_src && construct_rtckernel;
-        }
-        // generator is the correct type, but kernel is already compiled
-        virtual bool is_pre_compiled() const
-        {
-            return false;
-        }
-
-        // if known at compile time, the grid parameters of the kernel
-        // to launch with
-        dim3 gridDim;
-        dim3 blockDim;
-    };
-#endif
-
-    hipModule_t   module = nullptr;
-    hipFunction_t kernel = nullptr;
-};
-
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-
-// helper functions to construct pieces of RTC kernel names
-static const char* rtc_array_type_name(rocfft_array_type type)
-{
-    // hermitian is the same as complex in terms of generated code,
-    // so give them the same names in kernels
-    switch(type)
-    {
-    case rocfft_array_type_complex_interleaved:
-    case rocfft_array_type_hermitian_interleaved:
-        return "_CI";
-    case rocfft_array_type_complex_planar:
-    case rocfft_array_type_hermitian_planar:
-        return "_CP";
-    case rocfft_array_type_real:
-        return "_R";
-    default:
-        return "_UN";
-    }
-}
-
-static const char* rtc_precision_name(rocfft_precision precision)
-{
-    switch(precision)
-    {
-    case rocfft_precision_single:
-        return "_sp";
-    case rocfft_precision_double:
-        return "_dp";
-    case rocfft_precision_half:
-        return "_half";
-    }
-}
-
-static const char* rtc_precision_type_decl(rocfft_precision precision)
-{
-    switch(precision)
-    {
-    case rocfft_precision_single:
-        return "typedef rocfft_complex<float> scalar_type;\n";
-    case rocfft_precision_double:
-        return "typedef rocfft_complex<double> scalar_type;\n";
-    case rocfft_precision_half:
-        return "typedef rocfft_complex<_Float16> scalar_type;\n";
-    }
-}
-
-static const char* rtc_cbtype_name(CallbackType cbtype)
-{
-    switch(cbtype)
-    {
-    case CallbackType::NONE:
-        return "";
-    case CallbackType::USER_LOAD_STORE:
-        return "_CB";
-    case CallbackType::USER_LOAD_STORE_R2C:
-        return "_CBr2c";
-    case CallbackType::USER_LOAD_STORE_C2R:
-        return "_CBc2r";
-    }
-}
-
-// realDataAsComplex is true if we're treating real data as complex
-// (in an even-length real-complex FFT)
-static const std::string rtc_const_cbtype_decl(CallbackType cbtype)
-{
-    switch(cbtype)
-    {
-    case CallbackType::NONE:
-        return "static const CallbackType cbtype = CallbackType::NONE;\n";
-    case CallbackType::USER_LOAD_STORE:
-        return "static const CallbackType cbtype = CallbackType::USER_LOAD_STORE;\n";
-    case CallbackType::USER_LOAD_STORE_R2C:
-        return "static const CallbackType cbtype = CallbackType::USER_LOAD_STORE_R2C;\n";
-    case CallbackType::USER_LOAD_STORE_C2R:
-        return "static const CallbackType cbtype = CallbackType::USER_LOAD_STORE_C2R;\n";
-    }
-}
-#endif
-
-#endif
-
-// Copyright (C) 2021 - 2023 Advanced Micro Devices, Inc. All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-RTCKernel::RTCKernel(const std::string&       kernel_name,
-                     const std::vector<char>& code,
-                     dim3                     gridDim,
-                     dim3                     blockDim)
-    : gridDim(gridDim)
-    , blockDim(blockDim)
-{
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-    // if we're only compiling, no need to actually load the code objects
-    if(rocfft_getenv("ROCFFT_INTERNAL_COMPILE_ONLY") == "1")
-        return;
-#endif
-    if(hipModuleLoadData(&module, code.data()) != hipSuccess)
-        throw std::runtime_error("failed to load module for " + kernel_name);
-
-    if(hipModuleGetFunction(&kernel, module, kernel_name.c_str()) != hipSuccess)
-        throw std::runtime_error("failed to get function " + kernel_name);
-}
-
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-void RTCKernel::launch(DeviceCallIn& data)
-{
-    RTCKernelArgs kargs = get_launch_args(data);
-
-    const auto& gp = data.gridParam;
-
-    launch(kargs,
-           {gp.b_x, gp.b_y, gp.b_z},
-           {gp.wgs_x, gp.wgs_y, gp.wgs_z},
-           gp.lds_bytes,
-           data.rocfft_stream);
-}
-#endif
-
-void RTCKernel::launch(
-    RTCKernelArgs& kargs, dim3 gridDim, dim3 blockDim, unsigned int lds_bytes, hipStream_t stream)
-{
-    auto  size     = kargs.size_bytes();
-    void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER,
-                      kargs.data(),
-                      HIP_LAUNCH_PARAM_BUFFER_SIZE,
-                      &size,
-                      HIP_LAUNCH_PARAM_END};
-
-#ifndef ROCFFT_DEBUG_GENERATE_KERNEL_HARNESS
-    if(LOG_PLAN_ENABLED())
-    {
-        int        max_blocks_per_sm;
-        hipError_t ret = hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
-            &max_blocks_per_sm, kernel, blockDim.x * blockDim.y * blockDim.z, lds_bytes);
-        rocfft_ostream* kernelplan_stream = LogSingleton::GetInstance().GetPlanOS();
-        if(ret == hipSuccess)
-            *kernelplan_stream << "Kernel occupancy: " << max_blocks_per_sm << std::endl;
-        else
-            *kernelplan_stream << "Can not retrieve occupancy info." << std::endl;
-    }
-#endif
-
-    if(hipModuleLaunchKernel(kernel,
-                             gridDim.x,
-                             gridDim.y,
-                             gridDim.z,
-                             blockDim.x,
-                             blockDim.y,
-                             blockDim.z,
-                             lds_bytes,
-                             stream,
-                             nullptr,
-                             config)
-       != hipSuccess)
-        throw std::runtime_error("hipModuleLaunchKernel failure");
-}
-
-bool RTCKernel::get_occupancy(dim3 blockDim, unsigned int lds_bytes, int& occupancy)
-{
-    hipError_t ret = hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
-        &occupancy, kernel, blockDim.x * blockDim.y * blockDim.z, lds_bytes);
-
-    return ret == hipSuccess;
-}
-
-std::shared_future<std::unique_ptr<RTCKernel>>
-    RTCKernel::runtime_compile(const TreeNode&    node,
-                               const std::string& gpu_arch,
-                               std::string&       kernel_name,
-                               bool               enable_callbacks)
-{
-
-#ifdef ROCFFT_RUNTIME_COMPILE
-
-    int deviceId = 0;
-    if(hipGetDevice(&deviceId) != hipSuccess)
-    {
-        throw std::runtime_error("failed to get device");
-    }
-
-    RTCGenerator generator;
-    // try each type of generator until one is valid
-    generator = RTCKernelStockham::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelTranspose::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelRealComplex::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelRealComplexEven::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelRealComplexEvenTranspose::generate_from_node(
-            node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelBluesteinSingle::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(!generator.valid())
-        generator = RTCKernelBluesteinMulti::generate_from_node(node, gpu_arch, enable_callbacks);
-    if(generator.valid())
-    {
-        kernel_name = generator.generate_name();
-
-        auto compile = [=]() {
-            if(hipSetDevice(deviceId) != hipSuccess)
-            {
-                throw std::runtime_error("failed to set device");
-            }
-            try
-            {
-                std::vector<char> code = RTCCache::cached_compile(
-                    kernel_name, gpu_arch, generator.generate_src, generator_sum());
-                return generator.construct_rtckernel(
-                    kernel_name, code, generator.gridDim, generator.blockDim);
-            }
-            catch(std::exception& e)
-            {
-                if(LOG_RTC_ENABLED())
-                    (*LogSingleton::GetInstance().GetRTCOS()) << e.what() << std::endl;
-                throw;
-            }
-        };
-
-        // compile to code object
-        return std::async(std::launch::async, compile);
-    }
-    // a pre-compiled rtc-stockham-kernel goes here
-    else if(generator.is_pre_compiled())
-    {
-        kernel_name = generator.generate_name();
-    }
-#endif
-    // runtime compilation is not enabled or no kernel found, return
-    // null RTCKernel
-    std::promise<std::unique_ptr<RTCKernel>> p;
-    p.set_value(nullptr);
-    return p.get_future();
-}
-
 // Copyright (C) 2023 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -658,44 +219,6 @@ gpubuf_t<Treal> random_real_device(unsigned int count)
         }
     }
     return host_vec_to_dev(hostBuf);
-}
-
-// compile a function using hipRTC
-std::unique_ptr<RTCKernel> compile(const std::string& name, const std::string& src)
-{
-    hiprtcProgram prog;
-    if(hiprtcCreateProgram(&prog, src.c_str(), "rtc.cu", 0, nullptr, nullptr) != HIPRTC_SUCCESS)
-    {
-        throw std::runtime_error("unable to create program");
-    }
-    std::vector<const char*> options;
-    options.push_back("-O3");
-
-    auto compileResult = hiprtcCompileProgram(prog, options.size(), options.data());
-    if(compileResult != HIPRTC_SUCCESS)
-    {
-        size_t logSize = 0;
-        hiprtcGetProgramLogSize(prog, &logSize);
-
-        if(logSize)
-        {
-            std::vector<char> log(logSize, '\0');
-            if(hiprtcGetProgramLog(prog, log.data()) == HIPRTC_SUCCESS)
-                throw std::runtime_error(log.data());
-        }
-        throw std::runtime_error("compile failed without log");
-    }
-
-    size_t codeSize;
-    if(hiprtcGetCodeSize(prog, &codeSize) != HIPRTC_SUCCESS)
-        throw std::runtime_error("failed to get code size");
-
-    std::vector<char> code(codeSize);
-    if(hiprtcGetCode(prog, code.data()) != HIPRTC_SUCCESS)
-        throw std::runtime_error("failed to get code");
-    hiprtcDestroyProgram(&prog);
-
-    return std::make_unique<RTCKernel>(name, code);
 }
 
 // Copyright (C) 2021 - 2023 Advanced Micro Devices, Inc. All rights reserved.
@@ -1109,60 +632,67 @@ void                  init_kernel()
     lds_bytes2   = 16384;
 }
 
-void launch_kernel0(std::unique_ptr<RTCKernel>& rtckernel)
+#include "fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_unitstride_sbrr_R2C_dirReg.h"
+#include "fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_sp_ip_CI_sbcc_dirReg.h"
+#include "fft_rtc_fwd_len256_factors_8_4_8_wgs_256_tpt_32_sp_ip_CI_sbcc_dirReg.h"
+
+void launch_kernel0()
 {
-    RTCKernelArgs kargs;
-    kargs.append_ptr(twiddles176.data());
-    kargs.append_size_t(dim0);
-    kargs.append_ptr(lengths0.data());
-    kargs.append_ptr(stride0.data());
-    kargs.append_size_t(nbatch0);
-    kargs.append_unsigned_int(lds_padding0);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(0);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(buf.data());
-    rtckernel->launch(kargs, gridDim0, blockDim0, lds_bytes0);
+    fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_unitstride_sbrr_R2C_dirReg<<<
+        gridDim0,
+        blockDim0,
+        lds_bytes0>>>(twiddles176.data(),
+                      dim0,
+                      lengths0.data(),
+                      stride0.data(),
+                      nbatch0,
+                      lds_padding0,
+                      nullptr,
+                      nullptr,
+                      0,
+                      nullptr,
+                      nullptr,
+                      buf.data());
 }
 
-void launch_kernel1(std::unique_ptr<RTCKernel>& rtckernel)
+void launch_kernel1()
 {
-    RTCKernelArgs kargs;
-    kargs.append_ptr(twiddles248.data());
-    kargs.append_ptr(nullptr);
-    kargs.append_size_t(dim1);
-    kargs.append_ptr(lengths1.data());
-    kargs.append_ptr(stride1.data());
-    kargs.append_size_t(nbatch1);
-    kargs.append_unsigned_int(lds_padding1);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(0);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(buf.data());
-    rtckernel->launch(kargs, gridDim1, blockDim1, lds_bytes1);
+    fft_rtc_fwd_len256_factors_8_4_8_wgs_256_tpt_32_sp_ip_CI_sbcc_dirReg<<<gridDim1,
+                                                                           blockDim1,
+                                                                           lds_bytes1>>>(
+        twiddles248.data(),
+        nullptr,
+        dim1,
+        lengths1.data(),
+        stride1.data(),
+        nbatch1,
+        lds_padding1,
+        nullptr,
+        nullptr,
+        0,
+        nullptr,
+        nullptr,
+        buf.data());
 }
 
-void launch_kernel2(std::unique_ptr<RTCKernel>& rtckernel)
+void launch_kernel2()
 {
-    RTCKernelArgs kargs;
-    kargs.append_ptr(twiddles112.data());
-    kargs.append_ptr(nullptr);
-    kargs.append_size_t(dim2);
-    kargs.append_ptr(lengths2.data());
-    kargs.append_ptr(stride2.data());
-    kargs.append_size_t(nbatch2);
-    kargs.append_unsigned_int(lds_padding2);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(0);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(nullptr);
-    kargs.append_ptr(buf.data());
-    rtckernel->launch(kargs, gridDim2, blockDim2, lds_bytes2);
+    fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_sp_ip_CI_sbcc_dirReg<<<gridDim2,
+                                                                          blockDim2,
+                                                                          lds_bytes2>>>(
+        twiddles112.data(),
+        nullptr,
+        dim2,
+        lengths2.data(),
+        stride2.data(),
+        nbatch2,
+        lds_padding2,
+        nullptr,
+        nullptr,
+        0,
+        nullptr,
+        nullptr,
+        buf.data());
 }
 
 void check_diff(const std::vector<scalar_type>& buf0,
@@ -1204,49 +734,6 @@ void check_diff(const std::vector<scalar_type>& buf0,
 
 int main()
 {
-    // open kernel source file and read it to a string
-    std::ifstream kernel_file0;
-    std::string   kernel_src0;
-    kernel_file0.open("fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_unitstride_"
-                      "sbrr_R2C_dirReg.h");
-    if(!kernel_file0.is_open())
-    {
-        throw std::runtime_error("fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_"
-                                 "unitstride_sbrr_R2C_dirReg.h not found in current directory");
-    }
-    std::getline(kernel_file0, kernel_src0, static_cast<char>(0));
-
-    std::ifstream kernel_file1;
-    std::string   kernel_src1;
-    kernel_file1.open("fft_rtc_fwd_len256_factors_8_4_8_wgs_256_tpt_32_sp_ip_CI_sbcc_dirReg.h");
-    if(!kernel_file1.is_open())
-    {
-        throw std::runtime_error("fft_rtc_fwd_len256_factors_8_4_8_wgs_256_tpt_32_sp_ip_CI_sbcc_"
-                                 "dirReg.h not found in current directory");
-    }
-    std::getline(kernel_file1, kernel_src1, static_cast<char>(0));
-
-    std::ifstream kernel_file2;
-    std::string   kernel_src2;
-    kernel_file2.open("fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_sp_ip_CI_sbcc_dirReg.h");
-    if(!kernel_file2.is_open())
-    {
-        throw std::runtime_error("fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_sp_ip_CI_sbcc_"
-                                 "dirReg.h not found in current directory");
-    }
-
-    std::getline(kernel_file2, kernel_src2, static_cast<char>(0));
-
-    // compile the kernel
-    std::unique_ptr<RTCKernel> rtc_kernel0
-        = compile("fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_halfLds_sp_ip_CI_unitstride_sbrr_"
-                  "R2C_dirReg",
-                  kernel_src0);
-    std::unique_ptr<RTCKernel> rtc_kernel1 = compile(
-        "fft_rtc_fwd_len256_factors_8_4_8_wgs_256_tpt_32_sp_ip_CI_sbcc_dirReg", kernel_src1);
-    std::unique_ptr<RTCKernel> rtc_kernel2 = compile(
-        "fft_rtc_fwd_len128_factors_16_8_wgs_256_tpt_16_sp_ip_CI_sbcc_dirReg", kernel_src2);
-
     // initialize arguments, grid
     init_kernel();
     unsigned int num_trials = 100;
@@ -1264,9 +751,9 @@ int main()
             throw std::runtime_error("initial hipMemcpy failed");
 
         // launch the kernels that make up the FFT
-        launch_kernel0(rtc_kernel0);
-        launch_kernel1(rtc_kernel1);
-        launch_kernel2(rtc_kernel2);
+        launch_kernel0();
+        launch_kernel1();
+        launch_kernel2();
 
         // copy results back to host for comparison
         if(hipMemcpy(hostbuf.data(), buf.data(), BUF_BYTES, hipMemcpyDeviceToHost) != hipSuccess)
