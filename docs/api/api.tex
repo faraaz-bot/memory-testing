@@ -979,12 +979,16 @@ out3 = in0 * I * ky;
 
     \begin{itemize}
     \item Create a plan (\lstinline{cufftHandle}) with \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+    \item Associate GPUs to the plan with \lstinline{cufftXtSetGPUs()}
     \item Create \lstinline{cudaLibXtDesc} with \lstinline{cufftXtMalloc}, using the plan
     \item Populate buffers with \lstinline{cufftXtMemcpy}
     \item Execute with \lstinline{cufftXtExecDescriptor}/\lstinline{C2C}/\lstinline{R2C}/\lstinline{C2R}/\lstinline{Z2Z}/\lstinline{D2Z}/\lstinline{Z2D}
     \end{itemize}
 
     \bigskip
+
+    NB: \lstinline{cufftPlan1d}/\lstinline{2d}/\lstinline{3d} seems to
+    be disallowed in the multi-gpu setting.
     
     \begin{center}TODO: how to add all the new APIs here?\end{center}
       
@@ -1026,7 +1030,7 @@ out3 = in0 * I * ky;
 
     \begin{itemize}
     \item Create plan with \lstinline{cufftCreate}
-    \item Attache a communicator with \lstinline{cufftMpAttachComm}
+    \item Attache a communicator to the plan with \lstinline{cufftMpAttachComm}
     \item  \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
       \begin{itemize}
       \item allocate a \lstinline{cudaLibXtDesc} using
