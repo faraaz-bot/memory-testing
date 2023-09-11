@@ -1007,8 +1007,9 @@ out3 = in0 * I * ky;
     \bigskip
 
     \begin{itemize}
-    \item Create a plan (\lstinline{cufftHandle}) with \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
+    \item call \lstinline{cufftCreate} to get a plan.
     \item Associate GPUs to the plan with \lstinline{cufftXtSetGPUs()}
+    \item Call \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
     \item Create \lstinline{cudaLibXtDesc} with \lstinline{cufftXtMalloc}, using the plan
     \item Populate buffers with \lstinline{cufftXtMemcpy}
     \item Execute with \lstinline{cufftXtExecDescriptor}/\lstinline{C2C}/\lstinline{R2C}/\lstinline{C2R}/\lstinline{Z2Z}/\lstinline{D2Z}/\lstinline{Z2D}
