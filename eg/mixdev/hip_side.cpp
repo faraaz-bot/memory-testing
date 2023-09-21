@@ -6,12 +6,11 @@
 
 std::vector<std::vector<std::complex<double>>> hip_data(const int Nx,
                                                         const int Ny,
+                                                        std::vector<int> &gpus,
                                                         std::vector<std::complex<double>> & input)
 {
     std::cout << "cufftXt version\n";    
 
-    // GPUs to use
-    std::vector<int> gpus = {0, 0};
 
     hipLibXtDesc* desc; // input descriptor
 
@@ -52,8 +51,9 @@ std::vector<std::vector<std::complex<double>>> hip_data(const int Nx,
         throw std::runtime_error("hipfftXtExecDescriptor failed.");
 
 
-    std::vector<std::vector<std::complex<double>>> outs(gpus.size());
-    for(int idx = 0; idx < outs.size(); ++idx) {
+    // Put the gathered data in the last vector.  Yeah, it's a hack.
+    std::vector<std::vector<std::complex<double>>> outs(gpus.size() + 1);
+    for(int idx = 0; idx < gpus.size(); ++idx) {
         const size_t bufsize = desc->descriptor->size[idx];
         std::cout << "idx: " << idx << " size: " << bufsize << "\n";
         const size_t bufcount = bufsize / sizeof(std::complex<double>);
@@ -71,6 +71,12 @@ std::vector<std::vector<std::complex<double>>> hip_data(const int Nx,
         }
     }
     
+
+    outs[outs.size() - 1].resize(Nx * Ny);
+    hipfft_rt = hipfftXtMemcpy(plan,
+                               reinterpret_cast<void*>(outs[outs.size() - 1].data()),
+                               reinterpret_cast<void*>(desc),
+                               HIPFFT_COPY_DEVICE_TO_HOST);
     
     // FIXME: free things
     
