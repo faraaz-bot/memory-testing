@@ -209,7 +209,7 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item Use cases
   \item Comparable implementations
-  \item API propsal
+  \item API proposal
     \begin{itemize}
     \item Spectral Ops
     \item Multi-GPU
@@ -230,10 +230,10 @@ basicstyle=\ttfamily\small,
 
   Multi-gpu FFTs are used for simulations:
   \begin{itemize}
-  \item Molecular Dynamcs (MD)
+  \item Molecular Dynamics (MD)
     \begin{itemize}
     \item eg: NAMD, Gromacs, LAMMPS
-    \item Ewald sum for electostatic interacions
+    \item Ewald sum for electrostatic interactions
     \item Smaller portion of total runtime ($\approx 15-20\%$)
     \item Synchronization point; everyone is waiting for the FFT
     \end{itemize}
@@ -363,10 +363,10 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item People use the Fourier transform to enable other operations
   \item We can provide an interface to fuse these operations
-  \item cufftDx provides somewhat analygous functionality
+  \item cufftDx provides somewhat analogous functionality
     \begin{itemize}
     \item limited functionality
-    \item dificult to use
+    \item difficult to use
     \end{itemize}
   \end{itemize}
 
@@ -382,7 +382,7 @@ basicstyle=\ttfamily\small,
   \begin{itemize}
   \item Many applications seem to have a block-level sparsity
   \item We can use the brick-decomposition to mark a region as all-zero
-  \item We can leverage lossless and lossey compression in the API
+  \item We can leverage lossless and lossy compression in the API
   \end{itemize}
 
   \medskip
@@ -445,7 +445,7 @@ basicstyle=\ttfamily\small,
   \item We already have prototypes with a 20\% speedup
   \item Further improvements:
     \begin{itemize}
-    \item efficient buffer packing should be worht $\approx{}30\%$
+    \item efficient buffer packing should be worth $\approx{}30\%$
     \item Recursive transpose should be effective at scale
     \item rocSHMEM should offer further improvements
     \end{itemize}
@@ -464,9 +464,9 @@ basicstyle=\ttfamily\small,
   \item cuFFT has better performance than rocFFT
   \item rocFFT performance is steadily improving
     \begin{itemize}
-    \item 13$x$ improvement for targetted cases (baseline: ROCm 4.0)
+    \item 13$x$ improvement for targeted cases (baseline: ROCm 4.0)
     \end{itemize}
-  \item \emph{MI200 offered no perfomance uplift for rocFFT}
+  \item \emph{MI200 offered no performance uplift for rocFFT}
   \item MI300 looks better
   \end{itemize}
 
