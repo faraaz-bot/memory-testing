@@ -281,65 +281,258 @@ basicstyle=\ttfamily\small,
 \begin{frame}
   \frametitle{API proposal}
 
-  single/multi-process multi-gpu
-  
-  
-  FIXME
+  Multi-GPU transforms will require a rocFFT API change
 
+  \medskip
+
+  This should be compatible with other new features:
+  \begin{itemize}
+  \item Single-process multi-gpu
+  \item Multi-process multi-gpu
+  \item Fused operations (spectral ops)
+  \item Block-level sparse data
+  \end{itemize}
+
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{API proposal}
+
+  \begin{center}
+    \includegraphics[width=0.9\textwidth]{implementdag.pdf}
+  \end{center}
+  
 \end{frame}
 
 \begin{frame}
   \frametitle{Current Status}
 
+  \begin{itemize}
+  \item We have an API design for rocFFT
+  \item We are developing and API design for hipFFT
+  \item Single-process multi-gpu started
+    \begin{itemize}
+    \item Functional implementation: ROCm 6.0
+    \item Complex-complex support; no real/complex support
+    \item Limited test coverage
+    \item cuFFTXt behaviour needs to be reverse-engineered
+    \item TODO: performance, real/complex, improve testing
+    \end{itemize}
+  \end{itemize}
+  
 \end{frame}
 
 \begin{frame}
   \frametitle{Opportunities}
 
-  Spectral ops
-
-  Improved algorithms
-  convolutions
-  recursive transpose
-
-    
-  rocSHMEM
+  \begin{itemize}
+  \item Unified rocFFT interface
+  \item Spectral Operations
+  \item Sparsity and compression
+  \item Algorithmic Performance Increases
+  \item rocSHMEM cooperation and development
+  \end{itemize}
   
+\end{frame}
   
-  FIXME
+\begin{frame}
+  \frametitle{Opportunities}
+
+  \begin{center}
+    Opportunity: Unified rocFFT interface
+  \end{center}
+  \begin{itemize}
+  \item cuFFT has very different single/multi-proc interfaces
+  \item rocFFT will have a unified interface
+    \begin{itemize}
+    \item Multiple devices per rank
+    \item Same data decomposition for single/multi proc
+    \end{itemize}
+  \end{itemize}
+
+  
+\end{frame}
+  
+\begin{frame}
+  \frametitle{Opportunities}
+
+  \begin{center}
+    Opportunity: Spectral ops
+  \end{center}
+  \begin{itemize}
+  \item People use the Fourier transform to enable other operations
+  \item We can provide an interface to fuse these operations
+  \item cufftDx provides somewhat analygous functionality
+    \begin{itemize}
+    \item limited functionality
+    \item dificult to use
+    \end{itemize}
+  \end{itemize}
+
+ 
+\end{frame}
+  
+\begin{frame}
+  \frametitle{Opportunities}
+  
+  \begin{center}
+    Opportunity: Sparsity and compression
+  \end{center}
+  \begin{itemize}
+  \item Many applications seem to have a block-level sparsity
+  \item We can use the brick-decomposition to mark a region as all-zero
+  \item We can leverage lossless and lossey compression in the API
+  \end{itemize}
+
+  \medskip
+  \begin{center}
+    Opportunity: Algorithmic Performance Increases
+  \end{center}
+  \begin{itemize}
+  \item Recursive transpose for highly decimated multi-proc FFTs
+  \item Implicitly dealiased convolutions
+  \item Partial-pass in off-direction may allow better communication
+  \end{itemize}
+
+  \medskip
+  \begin{center}
+    Opportunity: rocSHMEM development
+  \end{center}
+  \begin{itemize}
+  \item Working with the rocSHMEM team to create a business case
+  \end{itemize}
 
 \end{frame}
 
 \begin{frame}
   \frametitle{Risks}
 
-  How to preview this to the world?
-  
-  If it isn't performant, it's not worthwhile
-
-  Single-gpu speed is an issue
-
-  MI200 has not been kind to rocFFT
-
-  No productized rocSHMEM
-  
-  FIXME
+  \begin{itemize}
+  \item Preview and release procedure
+  \item Performance requirements
+  \item Single-gpu performance
+  \item rocSHMEM not productized
+  \item OneAPI
+  \end{itemize}
 
 \end{frame}
 
 \begin{frame}
+  \frametitle{Risks}
+
+  \begin{center}
+    Preview and release procedure
+  \end{center}
+  \begin{itemize}
+  \item cuFFTMp had an early-access release
+  \item We just push stuff to github
+  \item It will take time to get everything working well
+  \item What is the end-user experience during development?
+  \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Risks}
+
+  \begin{center}
+    Risk: Performance requirements
+  \end{center}
+  \begin{itemize}
+  \item If we don't get competitive performance, we lose
+  \item heFFTe speed is a minimal baseline
+  \item We already have prototypes with a 20\% speedup
+  \item Further improvements:
+    \begin{itemize}
+    \item efficient buffer packing should be worht $\approx{}30\%$
+    \item Recursive transpose should be effective at scale
+    \item rocSHMEM should offer further improvements
+    \end{itemize}
+  \item It is hard to scale up to 37,888 MI250Xs
+  \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Risks}
+
+  \begin{center}
+    Risk: Single-gpu performance
+  \end{center}
+  \begin{itemize}
+  \item cuFFT has better performance than rocFFT
+  \item rocFFT performance is steadily improving
+    \begin{itemize}
+    \item 13$x$ improvement for targetted cases (baseline: ROCm 4.0)
+    \end{itemize}
+  \item \emph{MI200 offered no perfomance uplift for rocFFT}
+  \item MI300 looks better
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Risks}
+
+  \begin{center}
+    Risk: rocSHMEM not productized
+  \end{center}
+  \begin{itemize}
+  \item cuFFTMp uses nvSHMEM; we would like to use rocSHMEM
+  \item work needs to be done to bring rocSHMEM to a full release
+  \end{itemize}
+
+  \medskip
+
+  \begin{center}
+    Risk: OneAPI
+  \end{center}
+  \begin{itemize}
+  \item OneAPI covers CPU and GPU
+  \item AMD has separate FFT libraries for GPU, CPU, and FPGA
+  \item Users do not want to have to rewrite their code all of the time
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
   \frametitle{Plan}
 
-  6.0: where we are
+  \begin{itemize}
+  \item 6.0: feature-complete
+    \begin{itemize}
+    \item Single-proc complex-complex functional
+    \end{itemize}
+  \item 6.1
+    \begin{itemize}
+    \item Single-proc real/complex functional
+    \item Improve test coverage for single-proc
+    \item Improve performance for single-proc
+    \end{itemize}
+  \item 6.2
+    \begin{itemize}
+    \item Multi-proc functional
+    \end{itemize}
+  \item 6.3
+    \begin{itemize}
+    \item Improve test coverage for multi-proc
+    \item Improve performance for multi-proc
+    \item Begin work on spectral ops
+    \end{itemize}
+  \end{itemize}
 
-  6.1: improve perf and test infra
+  \medskip
 
-  6.2: MPI functional
+  We may be able to offer NDA'd prototypes before releases to help
+  with tenders.
 
-  6.3: MPI perf starting
+  \medskip
+
+  We are looking for feedback on the API and priorities.
   
-  FIXME
-
 \end{frame}
 
 \end{document}
