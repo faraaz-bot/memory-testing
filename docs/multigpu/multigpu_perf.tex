@@ -111,6 +111,18 @@ for better communication patterns.
 
 \url{https://ontrack-internal.amd.com/browse/SWDEV-281944}
 
+\section{2D FFTs}
+
+A 2D complex FFT of sizee $N\times{}N$ over $P$ processors with 1D
+sub-transforms comprised of a single kernel. Using a row-major format,
+the data decomposition for device $p$ is
+\begin{dmath}
+  (i,j) \in \left\{0,\dots,N-1 \right\}
+  \times \left\{p\frac{N}{P},\dots{},(p+1)\frac{N}{P}-1\right\}
+\end{dmath}
+
+% TODO: ref 2dc2c.asy
+
 \section{Data Decompositions}
 \label{section_data_decomp}
 
