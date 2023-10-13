@@ -12,6 +12,8 @@ real w = 1.0  + (P-1) * dw;
 real ypos = 0.0;
 real xpos = 0.0;
 
+real dp = 1.0 / N;
+
 
 for(int i = 0; i < P; ++i) {
   real y0 = i * dw + i * w / P;
@@ -20,6 +22,21 @@ for(int i = 0; i < P; ++i) {
   label("GPU"+(string)i, (0, y0 + 0.5 * w / P), W);
   
   draw((0, y0) -- (1, y0) -- (1, y1) -- (0, y1) -- cycle);
+
+  for(int yidx = 0; yidx < N # P; ++yidx) {
+    real yval = y0  + (yidx + 0.75) * dp;
+    draw((xpos + 0.5*dp, yval) -- (xpos + (N -0.5)*dp, yval)) ;
+    if(yidx != 0) {
+      draw((xpos + 0.5*dp, yval) -- (xpos + (N -0.5)*dp, yval - 0.5*dp));
+    }
+    
+    for(int xidx = 0; xidx < N; ++xidx) {
+      pair p = (xpos + (xidx + 0.5) * dp, yval);
+      dot(p);
+    }
+  }
+
+  
 }
 
 
@@ -45,6 +62,23 @@ for(int i = 0; i < P; ++i) {
     real x0 = j / P + xpos;
     draw((x0, y0) -- (x0, y1), dashed);
   }
+
+  for(int yidx = 0; yidx < N # P; ++yidx) {
+    real yval = y0  + (yidx + 0.75) * dp;
+    for(int j = 0; j < P; ++j) {
+      draw((xpos + j * 1/P + 0.5*dp, yval) -- (xpos + j * 1/P + ((N#P)  -0.5)*dp, yval)) ;
+      if(yidx != 0) {
+	draw((xpos + j * 1/P + 0.5*dp, yval) -- (xpos + j * 1/P + ((N#P) -0.5)*dp, yval - 0.5*dp));
+      }
+
+      for(int xidx = 0; xidx < N # P; ++xidx) {
+	real dp = 1.0 / N;
+	pair p = (xpos + j * 1/P + (xidx + 0.5) * dp, yval);
+	dot(p);
+      }
+    }
+  }
+
 }
 
 xpos += w + dskip;
@@ -62,8 +96,8 @@ for(int i = 0; i < P; ++i) {
     pair p0 = (x0, y0);
     //dot(p0);
 
-    real x1 = xpos + (j + 0.5) / P;
-    real y1 = ypos +  i * dw + (i + 0.5 ) * w / P;
+    real y1 = ypos + (j + 0.5) / P;
+    real x1 = xpos +  i * dw + (i + 0.5 ) * w / P;
     pair p1 = (x1, y1);
     //dot(p1);
 
@@ -86,9 +120,26 @@ for(int i = 0; i < P; ++i) {
   //draw((xpos, y0) -- (xpos + 1, y0) -- (xpos + 1, y1) -- (xpos, y1) -- cycle);
 
   for(int j = 1; j < P; ++j) {
-    real x0 = j / P + xpos; // FIXME: dashed in wrong direction
-    draw((x0, y0) -- (x0, y1), dashed);
+    real y0 = j / P + ypos;
+    draw((x0, y0) -- (x1, y0), dashed);
   }
+
+  for(int xidx = 0; xidx < N # P; ++xidx) {
+    real xval = x0 + (0.75 + xidx)*dp;
+    for(int j = 0; j < N # P; ++j) {
+      real yval = ypos + j * 1/P + 0.5*dp;
+      draw((xval, yval) -- (xval, yval +(N#P - 1)*dp));
+      if(xidx != 0) {
+	draw((xval - 0.5*dp, yval) -- (xval, yval + dp * (-1 + N#P)));
+      }
+
+      for(int yidx = 0; yidx < N # P; ++yidx) {
+	pair p = (xval, y0 + j * 1/P +  (yidx + 0.5) * dp);
+	dot(p);
+      }
+    }
+  }
+
 }
 
 // for(int i = 0; i < P; ++i) {
@@ -112,8 +163,9 @@ for(int i = 0; i < P; ++i) {
   pair p0 = (x0, y0);
   //dot(p0);
   pair p1 = (x0, y1);
-  dot(p1);
+  //dot(p1);
 
+  
   draw("$\mathcal{F}_y$", p0--p1,EndArrow);
 }
 
@@ -140,7 +192,23 @@ for(int i = 0; i < P; ++i) {
   real x1 = x0 + w / P;
 
   
-  //label("GPU"+(string)i, (xpos, y0 + 0.5 * w / P), W);
+  label("GPU"+(string)i, (x0  + 0.5 * w / P, ypos), S);
 
   draw((x0, y0) -- (x0, y1) -- (x1, y1) -- (x1, y0) -- cycle);
+
+  
+  for(int xidx = 0; xidx < N # P; ++xidx) {
+    real xval = x0 + (xidx + 0.75) * dp;
+    
+    draw((xval, y0 + 0.5*dp) -- (xval, y0 + (N-0.5)*dp));
+    if(xidx != 0) {
+      draw((xval - 0.5*dp, y0 + 0.5*dp) -- (xval, y0 + (N-0.5)*dp));
+    }
+    
+    for(int yidx = 0; yidx < N; ++yidx) {
+      pair p = (xval, y0  + (yidx + 0.5) * dp);
+      dot(p);
+    }
+  }
+
 }
