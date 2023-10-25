@@ -24,6 +24,8 @@ block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-5dy));
 block fields = roundrectangle(Label("Fields"), (0,-2dy));
 block brickdata = roundrectangle(Label("Brick decomposition"), (0,-3dy));
 
+block multiprec = roundrectangle(Label("Multi precision/dimension"), (xsparse,-3dy));
+
 block singlenode = roundrectangle(Label("Single-node multi-gpu"), (-0.8dx,-4dy));
 block multinode = roundrectangle(Label("Multi-node MPI"), (0,-5dy));
 block multinodeschmem = roundrectangle(Label("Multi-node SHMEM"), (dx,-6dy));
@@ -50,6 +52,7 @@ draw(singlenode);
 draw(multinode);
 draw(multinodeschmem);
 
+draw(multiprec);
 draw(sparse);
 
 
@@ -73,6 +76,8 @@ add(new void(picture pic, transform t) {
     draw(pic, brickdata.position(-1.3, t)--singlenode.top(t), Arrow);
     draw(pic, brickdata.bottom(t)--multinode.top(t), Arrow);
     draw(pic, brickdata.position(-1.7, t)--multinodeschmem.top(t), Arrow);
+
+    draw(pic, fields.bottomright(t)--multiprec.topleft(t), Arrow);
     
     draw(pic, brickdata.bottomright(t)--sparse.top(t), Arrow);
   });

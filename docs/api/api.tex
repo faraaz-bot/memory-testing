@@ -52,7 +52,13 @@
 
 \section{Introduction}
 
-FIXME \texttt{rocFFT}.
+FIXME
+
+\noindent
+\texttt{rocFFT}.
+
+\noindent
+\texttt{hipFFT}: obligatory XKCD: \url{https://xkcd.com/927/}
 
 \section{DAG}
 
@@ -77,20 +83,30 @@ Status:
 \item Implimented in ROCm 6.0
 \end{itemize}
 
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
 \noindent
-rocFFT API additions:
-\begin{lstlisting}
+rocFFT API change:
+\begin{itemize}
+\item
+  \begin{lstlisting}
 typedef struct rocfft_field_t* rocfft_field;
 rocfft_status rocfft_field_create(rocfft_field* field);
 rocfft_status rocfft_field_destroy(rocfft_field field);
-rocfft_status rocfft_plan_description_add_infield(rocfft_plan_description description,
-                                                 rocfft_field            field);
-rocfft_status rocfft_plan_description_add_infield(rocfft_plan_description description,
-                                                 rocfft_field            field);
-
-rocfft_status
-    rocfft_plan_description_add_outfield(rocfft_plan_description description, rocfft_field field);
-\end{lstlisting}
+  \end{lstlisting}
+  \begin{lstlisting}
+rocfft_status rocfft_plan_description_add_infield(
+                  rocfft_plan_description description,
+                  rocfft_field            field);
+rocfft_status rocfft_plan_description_add_outfield(
+                  rocfft_plan_description description,
+                  rocfft_field field);
+  \end{lstlisting}
+\item The field-adding functions can be called once per plan.
+\end{itemize}
 
 hipFFT API additions:
 \begin{lstlisting}
@@ -154,18 +170,24 @@ Optional:
 \begin{itemize}
 \item Specify a specific list of GPUs to use:
 \begin{lstlisting}
-rocfft_status rocfft_plan_description_set_devices( rocfft_plan_description description,
-                                                   void *devices,
-                                                   size_t number_of_devices);
+rocfft_status rocfft_plan_description_set_devices(rocfft_plan_description description,
+                                                  void *devices,
+                                                  size_t number_of_devices);
 \end{lstlisting}
 \end{itemize}
 
 
 \noindent
-rocFFT API additions: implied by brick-device association.
+rocFFT API additions:
+\begin{itemize}
+\item implied by brick-device association.
+\end{itemize}
 
 \noindent
 hipFFT API additions:
+\begin{itemize}
+\item implied by brick-device association.
+\end{itemize}
 \begin{lstlisting}
 FIXME
 \end{lstlisting}
@@ -187,12 +209,18 @@ Status:
 \noindent
 Optional:
 \begin{itemize}
-\item FIXME
+\item
+  adsf
+  \begin{lstlisting}
+rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description description,
+                                                      size_t numprecision,
+                                                      rocfft_precision* precisions);
+  \end{lstlisting}
 \end{itemize}
 
 
 \noindent
-rocFFT API additions: implied by brick-device association.
+rocFFT API changes:
 \begin{lstlisting}
 typedef enum rocfft_comm_type_t {
 } rocfft_comm_type;
@@ -225,7 +253,7 @@ Status:
 \noindent
 Optional:
 \begin{itemize}
-\item FIXME
+\item None
 \end{itemize}
 
 
@@ -260,7 +288,7 @@ Status:
 \noindent
 Optional:
 \begin{itemize}
-\item FIXME
+\item None
 \end{itemize}
 
 
@@ -300,13 +328,13 @@ Optional:
 
 
 \noindent
-rocFFT API additions:
-\begin{lstlisting}
-  FIXME
-\end{lstlisting}
+rocFFT API changes:
+\begin{itemize}
+\item Behaviour change: Non-specified bricks are treated as zero.
+\end{itemize} 
 
 \noindent
-hipFFT API additions:
+hipFFT API changes:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
@@ -314,12 +342,12 @@ hipFFT API additions:
 \newpage
 \subsection{Spectral Ops}
 
-\newpage
 \subsubsection{One-Way Scalar Spectral Ops}
+\label{sss1wayspecops}
 
 Dependencies:
 \begin{itemize}
-\item Bricks (see \ref{ssbricks})
+\item None
 \end{itemize}
 
 \noindent
@@ -331,14 +359,25 @@ Status:
 \noindent
 Optional:
 \begin{itemize}
-\item FIXME
+\item Shared data size:
+  \lstinline{rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);}
+
 \end{itemize}
 
 
 \noindent
 rocFFT API additions:
 \begin{lstlisting}
-  FIXME
+typedef struct rocfft_specop_t* rocfft_specop;
+rocfft_status rocfft_specop_create(rocfft_specop* specop);
+rocfft_status rocfft_specop_destroy(rocfft_specop specop);
+rocfft_status rocfft_specop_set_op(rocfft_specop specop, char* opstring);
+rocfft_status rocfft_plan_description_set_readop(
+                                  rocfft_plan_description description,
+                                  const rocfft_specop specop);
+rocfft_status rocfft_plan_description_set_writeop(
+                                  rocfft_plan_description description,
+                                  const rocfft_specop specop);
 \end{lstlisting}
 
 \noindent
@@ -351,7 +390,7 @@ hipFFT API additions:
 
 Dependencies:
 \begin{itemize}
-\item Bricks (see \ref{ssbricks})
+\item One-way spectral ops (\ref{sss1wayspecops}), fields (\ref{ssfields})
 \end{itemize}
 
 \noindent
@@ -363,15 +402,43 @@ Status:
 \noindent
 Optional:
 \begin{itemize}
-\item FIXME
+\item Assume all fields are used:
+  \begin{lstlisting}
+rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
+  \end{lstlisting}
+\item
+  \begin{lstlisting}
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                     field_type_enum data_types);
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                      size_t data_size);
+    \end{lstlisting}
 \end{itemize}
 
 
 \noindent
 rocFFT API additions:
+\begin{itemize}
+\item The add-field functions can be called multiple times without error.
+\end{itemize}
 \begin{lstlisting}
+rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
+                                       size_t ninputs,
+                                       size_t* input_list,
+                                       size_t outputs,
+                                       size_t* output_list);
   FIXME
 \end{lstlisting}
+
+\noindent
+Alternatives:
+\begin{itemize}
+\item Assume all fields are used:
+  \begin{lstlisting}
+rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
+  \end{lstlisting}
+\end{itemize}
+
 
 \noindent
 hipFFT API additions:
@@ -396,13 +463,28 @@ Status:
 Optional:
 \begin{itemize}
 \item FIXME
+  \begin{lstlisting}
+rocfft_status rocfft_desc_set_precision_roundtrip(
+                   rocfft_plan_description description,
+                   size_t numprecision_in,
+                   rocfft_precision* precision_in,
+                   size_t numprecision_out,
+                   rocfft_precision* precision_out);
+    \end{lstlisting}
 \end{itemize}
 
 
 \noindent
 rocFFT API additions:
 \begin{lstlisting}
-  FIXME
+rocfft_transform_type_complex_forward_roundtrip,
+    rocfft_transform_type_complex_inverse_roundtrip,
+    rocfft_transform_type_real_forward_roundtrip,
+    rocfft_transform_type_real_inverse_roundtrip,
+    FIXME
+rocfft_status rocfft_plan_description_set_midop(
+               rocfft_plan_description description,
+               const rocfft_specop specop);
 \end{lstlisting}
 
 \noindent
@@ -434,7 +516,9 @@ Optional:
 \noindent
 rocFFT API additions:
 \begin{lstlisting}
-  FIXME
+rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
+                                            size_t conv_order,
+                                             conv_enum_type conv_type);
 \end{lstlisting}
 
 \noindent
@@ -444,3 +528,34 @@ hipFFT API additions:
 \end{lstlisting}
 
 \end{document}
+
+\newpage
+\subsection{Multi-precision and multi-resolution}
+
+\noindent
+Dependencies:
+\begin{itemize}
+\item None
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped
+\end{itemize}
+
+\begin{lstlisting}
+rocfft_status rocfft_field_set_type(rocfft_field field, char* data_type);
+ROCFFT_EXPORT rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   field_type_enum data_types);
+ROCFFT_EXPORT rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   size_t data_size);
+rocfft_status rocfft_field_set_properties(rocfft_field field,
+                                          rocfft_precision precisions,
+                                          bool isconst);
+rocfft_status rocfft_field_dims(rocfft_field field,
+                                size_t* dims,
+                                size_t dim,
+                                field_type_enum field_type);
+
+\end{lstlisting}
