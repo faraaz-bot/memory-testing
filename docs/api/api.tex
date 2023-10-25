@@ -1,1075 +1,446 @@
-\documentclass[10pt,aspectratio=169]{beamer}
-%\documentclass[12pt,aspectratio=169]{beamer}
-
-%\mode<presentation>
-
-\usepackage{natbib}
-\usepackage{bibentry}
-\bibliographystyle{plain}
+\documentclass[12pt]{article}
+\usepackage{hyperref}
 
 \usepackage{graphicx}
-\usepackage{breqn}
-\usepackage{bm}
-\usepackage{color}
-\usepackage{tabularx}
-
-\usepackage{listings}
-\lstset{language=C++}
 
 \usepackage{mathtools}
 \DeclarePairedDelimiter\ceil{\lceil}{\rceil}
 \DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
 
-\usepackage{animate}
+\usepackage{xcolor}
 
-\definecolor{radeonruby}{rgb}{0.87, 0, 0.19}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
 
 
 \usepackage{listings}
-
-
-
-%\usepackage[utf8]{inputenc}
-\definecolor{bluekeywords}{rgb}{0.63, 0.79, 0.95}
-\definecolor{greencomments}{rgb}{0,0.5,0}
-\definecolor{redstrings}{rgb}{0.64,0.08,0.08}
-\definecolor{xmlcomments}{rgb}{0.5,0.5,0.5}
-\definecolor{types}{rgb}{0.17,0.57,0.68}
 \lstset{language=C++,
-captionpos=b,
-%numbers=left,
-%numberstyle=\tiny,
-frame=single,
-showspaces=false,
-showtabs=false,
-breaklines=true,
-showstringspaces=false,
-breakatwhitespace=true,
-escapeinside={(*@}{@*)},
-commentstyle=\color{greencomments},
-morekeywords={partial, var, value, get, set},
-keywordstyle=\color{bluekeywords},
-stringstyle=\color{redstrings},
-basicstyle=\ttfamily\small,
+  basicstyle=\fontsize{8}{13}\ttfamily,
+  keywordstyle=\color{blue}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  commentstyle=\color{green}\ttfamily,
+  morecomment=[l][\color{magenta}]{\#}
 }
 
-\usepackage[yyyymmdd]{datetime}
-\renewcommand{\dateseparator}{--}
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
 
-%\usepackage[inline]{asymptote}
-\usepackage{asymptote}
-\def\asylatexdir{}
-\def\asydir{}
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
 
-\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
 
-\def\clap#1{\hbox to 0pt{\hss#1\hss}}
-\def\mathllap{\mathpalette\mathllapinternal}
-\def\mathrlap{\mathpalette\mathrlapinternal}
-\def\mathclap{\mathpalette\mathclapinternal}
-\def\mathllapinternal#1#2{\llap{$\mathsurround=0pt#1{#2}$}}
-\def\mathrlapinternal#1#2{\rlap{$\mathsurround=0pt#1{#2}$}}
-\def\mathclapinternal#1#2{\clap{$\mathsurround=0pt#1{#2}$}}
 
-\def\p{\pause}
+\title{API design for rocFFT/hipFFT}
+\author{The rocFFT Team}
 
-\def\({\left(}
-\def\){\right)}
-\def\[{\left[}
-\def\]{\right]}
+
 
 \def\no#1{\nobreak{#1}} % stop equation breaking in dmath
 
-\begin{asydef}
-  // Global Asymptote definitions can be put here.
-  import three;
-  usepackage("bm");
-  texpreamble("\def\V#1{\bm{#1}}");
-  // One can globally override the default toolbar settings here:
-  // settings.toolbar=true;
-\end{asydef}
-
-%\useinnertheme{rectangles} %specifies itemize points to be rectangles
-\useoutertheme{default}
-
-\definecolor{darkgreen}{RGB}{0, 100, 0}
-\definecolor{brightpurple}{RGB}{160,32,240}
-
-% fg specifies foreground color
-% bg specifies background color
-% the notation color!x!white mixes the color with 1-x amount of white
-%\setbeamercolor{frametitle}{fg=darkgreen!90!black, bg=darkgreen!10!white}
-\setbeamercolor{normal text}{fg=white,bg=black}
-% defines color of structure elements, e.g., color of text in the
-% outline, block titles many more definitions possible. Each element
-% predefined by the theme can be overwritten individually
-
-\setbeamerfont{author}{size=\small,series=\bfseries,parent=structure}
-
-\setbeamercolor{background canvas}{bg=white}
-%% \usebackgroundtemplate
-%% {
-%%   \includegraphics[width=\paperwidth,height=\paperheight]{gpu_background_black.png}
-%% }
-\pgfdeclareimage[width=\paperwidth]{mybackground}{title.png}
-\setbeamertemplate{title page}{
-  \begin{picture}(0,0)
-    \put(-30,-163){%
-      \pgfuseimage{mybackground}
-    }
-    \put(250,-70){%
-      \begin{minipage}[b][45mm][t]{226mm}
-        \usebeamerfont{title}{\inserttitle\par}
-        \ifx\insertsubtitle\@empty%
-        \else%
-        {\vskip0.25em%
-        \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}%
-        \fi%
-        \vskip1cm%              
-        \usebeamerfont{author}{\insertauthor\par}
-        \usebeamerfont{date}\url{malcolm.roberts@amd.com}\par
-        \usebeamerfont{date}\insertdate
-      \end{minipage}
-    }
-  \end{picture}
-}
-
-%------------------------------------------------------------------------
-%------------------------------------------------------------------------
-
-
-
-\def\thetitle{Data-centric API proposal for rocFFT}
-\def\thesubtitle{Spectral Ops, Multi-GPU, and Sparsity}
-\def\theauthor{rocFFT group}
-\def\theauthorinstitute{AMD}
-
-\def\presdate{\today}
-
-\hypersetup{
-  pdftitle=\thetitle{} \thesubtitle{},
-  pdfauthor=\theauthor{}
-}
-
-\title{\thetitle{}}
-\subtitle{\thesubtitle{}}
-\author{\theauthor{}}
-\institute{\theauthorinstitute}
-\date{\presdate}
-
-\setbeamertemplate{frametitle}[default][center]
-%\setbeamertemplate{footline}[frame number]
-\setbeamertemplate{navigation symbols}{} 
-
 \begin{document}
-
-\nobibliography{../refs.bib}
-
-\setbeamertemplate{headline}{}
-%\setbeamertemplate{footline}{}
-
-{
-  \setbeamercolor{background canvas}{bg=black}
-  \setbeamercolor{normal text}{fg=white,bg=black}
-  \setbeamercolor{frametitle}{fg=white}
-  \setbeamercolor{title}{fg=white}
-  \setbeamercolor{alerted text}{fg=white}
-  \setbeamercolor{structure}{fg=white}
-  \usebeamercolor[fg]{normal text}
-  \begin{frame}
-    \titlepage
-  \end{frame}
-}
-
-
-\setbeamercolor{normal text}{fg=black,bg=white}
-\usebeamercolor[fg]{normal text}
-
-\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
-\setbeamertemplate{footline}{
-   \leavevmode%
-   \hbox{%
-     \begin{beamercolorbox}[wd=\paperwidth,ht=1ex,dp=1.125ex]{author in head/foot}%
-  \begin{tabularx}{\paperwidth}{lR}
-    \hfill\insertframenumber/\inserttotalframenumber\hfill\phantom{.}%
-    & %
-    \includegraphics[width=0.05\textwidth]{../talks/siampp20/footerlogo} \textcolor{black}{Together We Advance\begin{animateinline}[autoplay,loop]{1}{\_}\newframe\end{animateinline}}%
-    \\%
-  \end{tabularx}%
-  \end{beamercolorbox}%
-  }%
-}
-
-
-
-
-\begin{frame}
-  \frametitle{\thetitle{}}
-
-  \begin{center}
-    \thesubtitle{}
-  \end{center}
-
-  \bigskip
-
-  \begin{itemize}
-  \item API themes
-    \begin{itemize}
-    \item Spectral Ops
-    \item Multi-GPU
-    \item Sparsity
-    \end{itemize}
-  \item API proposal objectives
-  \item Feature implementation DAG
-  \item API Rollout and Examples
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Spectral Ops}
-
-  \begin{center}
-    Spectral ops are about \emph{data flow}.
-  \end{center}
-    
-  \medskip
-  
-  Two categories:
-  \begin{itemize}
-  \item One-way
-    \begin{itemize}
-      \item $
-    \text{input}
-    \rightarrow \text{read op}
-    \rightarrow \mathcal{F}
-    \rightarrow \text{write op}
-    \rightarrow \text{output}
-    $
-  \item examples: shift, window, filter, scale
-    \end{itemize}
-
-  \item round-trip\\
-    \begin{itemize}
-    \item$
-      \text{input}
-      \rightarrow \text{read op}
-      \rightarrow \mathcal{F}
-      \rightarrow \text{mid op}
-      \rightarrow \mathcal{F}^{-1}
-      \rightarrow \text{write op}
-      \rightarrow \text{output}
-      $
-      \item examples: Poisson solve, convolution, correlation
-    \end{itemize}
-  \end{itemize}
-
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Spectral Ops: One-way Examples}
-
-  \begin{itemize}
-  \item Window filter
-    \begin{itemize}
-    \item Input: real 1D array.
-    \item Read-op: $f_{i_x} \rightarrow H(i_x) f_{i_x}$
-    \item $H$ is a Hamming window, Hann windows, Blackman windows, \dots
-    \item Use case: DSP
-    \end{itemize}
-
-  \item Phase-shift-and-scale
-    \begin{itemize}
-    \item Input: multiple 1D complex arrays of length $N$
-    \item Each 1D array is shifted by phase $\theta(b)$ and scaled by $\lambda(b)$
-    \item Read op: $X_{i_x,b} \rightarrow \omega_N^{i_x \theta(b)} \lambda(b)X_{i_x,b}$
-    \item Use case: radio astronomy.
-    \end{itemize}
-  %% \item $y$ derivative of a 2D Hermitian array
-  %%   \begin{itemize}
-  %%   \item Read op: $X_{i_x, i_Y,b} \rightarrow \frac{2 \pi}{L_y} i_y  X_{i_x,b}$
-  %%   \end{itemize}
-  \item $x$ derivative of a 2D Hermitian array
-    \begin{itemize}
-    \item Define $$k_x= \frac{2 \pi}{L_x}\begin{cases}i_x &\text{ if } i_x < N_x / 2\\ N_x -i_x &\text{otherwise}\end{cases} $$
-    \item Read op: $X_{i_x, i_Y,b} \rightarrow i k_x  X_{i_x,b}$
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Spectral Ops: Round-Trip Examples}
-
-  \begin{itemize}
-
-   \item Poisson solve
-    \begin{itemize}
-    \item Round-trip, input: Real array (2D, $N_x\times{}N_y$)
-    \item Output: find $f$ such that $\nabla^2{f} = \phi$
-    \item Mid op: $x_{i_x, i_y} \rightarrow \frac{-x_{i_x, i_y} }{ k_x^2 + k_y^2}$
-    \item Maybe a constant scale as well
-    \item Use case: molecular dynamics
-    \end{itemize}
-  \item Phase-shift dealiased convolution for Navier--Stokes
-    \begin{itemize}
-    \item Input: Three Hermitian 3D arrays, cubic
-    \item Read op:
-      \begin{itemize}
-      \item Read-op:
-        $u
-          \rightarrow \(u, \omega = \nabla \times u\)
-          \rightarrow \(u, \omega, \tilde{u}, \tilde{\omega}\)
-          $
-        \item $\tilde{u}$ is $u$ with a $\(1/2, 1/2, 1/2\)$ phase shift.
-      \end{itemize}
-    \item Mid-op: two copies of 
-      \begin{dmath}
-        \(f_0, f_1, f_2, f_3, f_4, f_5\)
-        \rightarrow
-        \(
-        f_4 f_2 - f_5 f_1,
-        f_5 f_1 - f_3 f_2,
-        f_3 f_1 - f_4 f_0
-        \)
-      \end{dmath}
-    \item write-op: combine-and-zero
-      \begin{itemize}
-      \item $\(f_0, f_1, f_2, f_3, f_4, f_5\)
-        \rightarrow
-        \(f_0 + f_1, f_2 + f_3, f_4 + f_5 \)$
-      \item All values with $\left|k\right| > N$ set to zero.
-      \end{itemize}
-    \item Use-case: GESTS (they also add a passive scalar field).
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Spectral Ops: convolution examples}
-
-  These examples need zero-padding to dealias convolutions.
-  
-  \begin{itemize}
-
-  \item Source term for vorticity Navier--Stokes 2D
-    \begin{itemize}
-      \item Input: 2D Hermitian array
-      \item Read-op: $\omega \rightarrow
-        \(
-        ik_x\omega,
-        \frac{ik_x}{k_x^2 + k_y^2}\omega,
-        ik_y\omega,
-        \frac{ik_y}{k_x^2 + k_y^2}\omega
-        \)$
-      \item mid-op: $\(f_0, f_1, f_2, f_3\) \rightarrow \( f_3 f_0 - f_2 f_0 \)$
-    \end{itemize}
-  \item Convolution for ML
-    \begin{itemize}
-    \item Mid-op: $\(f,g\)\rightarrow fg$
-    \item $f$ is a constant filter: only transform once, keep data for later mid-ops.
-    \end{itemize}
-  \item Dealiased autocorrelation
-    \begin{itemize}
-    \item mid-op: input multiplied by its complex conjugate: $f \rightarrow \bar{f}f$
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Spectral Ops: ops}
-
-  \medskip
-  Operations are:
-  \begin{itemize}
-  \item local: depend on index and batch number
-    \begin{itemize}
-    \item Option: allow for a user-supplied buffer
-    \item Option: allow access to shared memory
-      \end{itemize}
-  \item can have many inputs and outputs
-    \begin{itemize}
-    \item Option: ops may only touch a subset of inputs/outputs
-    \item Option: inputs/outputs can have different types
-    \item Option: inputs/outputs can have different lengths
-    \item Option: some inputs may be constant over executions
-    \end{itemize}
-  \item Have user-supplied constants (RTC'd in)
-  \item Multiplicative mid-ops may require dealiasing (eg conv)
-  \end{itemize}
-
-  \bigskip
-
-  There are lots of possible operations, and combinations thereof.
-
-
-\end{frame}
-  
-
-\begin{frame}
-  \frametitle{Multi-GPU}
-
-  \begin{center}
-    Multi-GPU is about \emph{data distribution}.
-  \end{center}
-
-  \medskip
-
-  \begin{itemize}
-  \item Single-node and multi-node.
-    \begin{itemize}
-    \item single-node doesn't need a communicator
-    \item multi-node needs a communicator
-    \end{itemize}
-  \item Brick decomposition
-    \begin{itemize}
-    \item pencil and slab are just degenerate cases
-    \end{itemize}
-  \item MPI and rocSHMEM back-ends
-  \item Decomposition should also work with the normal interface
-    \begin{itemize}
-    \item This allows for sparsity in the single-GPU case.
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Sparsity}
-
-  \begin{center}
-    Sparsity is about \emph{data properties}.
-  \end{center}
-
-  
-  Given the brick decomposition in the multi-GPU section, we can mark
-  bricks as containing only zero data.
-
-  \medskip
-
-  \begin{itemize}
-  \item Bricks can be marked as sparse, ie all zero.
-  \item Or we can add compression!  Perhaps lossy!
-  \item Separate sparsity for inputs and output.
-  \item Brick-based sparsity design
-    \begin{itemize}
-    \item spectral data seem to have coarser sparsity patterns
-    \item csr or coordinate list doesn't seem relevant
-    \end{itemize}
-  \end{itemize}
-      
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Spectral ops API proposal}
-
-  Callbacks are absurdly slow in ROCm.
-  \begin{itemize}
-  \item NVIDIA has moved to JIT to improve callback performance (\href{https://www.nvidia.com/en-us/on-demand/session/gtcfall21-a31155/?playlistId=playList-ead11304-9931-4e91-9d5a-fb0e1ef27014}{link})
-  \item We ca make use of RTC to do this in rocFFT.
-  \end{itemize}
-
-  \bigskip
-  
-  Spectral ops API proposal:
-  \begin{itemize}
-  \item RTC-based general API
-  \item rocFFT generates a function signature
-  \item The user provides the body of the function
-  \item Similar complexity to callbacks, but better ROCm perf
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Implementation objectives}
-
-  \begin{itemize}
-  \item hipFFT support:
-    \begin{itemize}
-    \item rocFFT: full performance and functionality
-    \item cuFFT: either
-      \begin{itemize}
-      \item functional (no performance target), or
-      \item not implemented
-      \end{itemize}
-    \end{itemize}
-  \end{itemize}
-
-  \medskip
-  
-  \begin{itemize}
-  \item Staged release
-    \begin{itemize}
-    \item allows for prioritization
-    \item reduces risk - we can use feedback
-    \item Need to liase with users
-    \item We would like to make public branches
-    \end{itemize}
-  \end{itemize}
-  
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{Comparable APIs}
-
-  Spectral ops:
-  \begin{itemize}
-  \item \texttt{cuFFTDx}: allows users to call \texttt{cuFFT} from
-    their kernels
-  \item \texttt{vkFFT}: Convolution matrix, symmetry, fused kernels
-  \item \texttt{OneAPI}: Some c2c convolutions for ML
-  \item \texttt{FFTW++}: pointer-based spectral ops for convolutions
-  \item \texttt{safari}: binary convolution with normalized spec op for ML
-  \end{itemize}
-
-  \medskip
-
-  Multi-GPU:
-  \begin{itemize}
-  \item \texttt{cuFFTXt}: single-node, only slab decomposition
-  \item \texttt{cuFFTMp}: brick decomposition
-  \item \texttt{heFFTe}: brick decomposition
-  \item \texttt{FFTW++}: pencil decomposition
-  \item \texttt{SpFFT}: also sparsity
-  \end{itemize}
-    
-\end{frame}
-
-\begin{frame}
-  \frametitle{Implementation DAG}
-
-  \begin{center}
-    \includegraphics[width=0.9\textwidth]{implementdag.pdf}
-  \end{center}
-
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{API: field}
-
-  Prerequisites:
-  \begin{itemize}
-  \item None
-  \end{itemize}
-
-  \bigskip
-  
-  API additions:
-  \begin{itemize}
-  \item \texttt{rocfft_field} struct (w.\ create/destroy)
-  \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
-                                      rocfft_field)}
-  \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
-                                      rocfft_field)}
-  \end{itemize}
-
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{API: Single-valued One-Way Ops}
-  
-  Prerequisites:
-  \begin{itemize}
-  \item None
-  \end{itemize}
-
-  \bigskip
-
-  API additions:
-  \begin{itemize}
-  \item \texttt{rocfft_specop} struct (w.\ create/destroy)
-  \item \lstinline{rocfft_specop_set_op(rocfft_specop, char*)}
-  \end{itemize}
-  
-  %% \smallskip
-  
-  %% Applications:
-  %% \begin{itemize}
-  %% \item Digital Signal Processing
-  %% \item Basic interface for general spectral ops
-  %% \item Better performance than callbacks
-  %% \end{itemize}
-
-  \smallskip
-  
-  Optional:
-  \begin{itemize}
-  \item Set user-provided \lstinline{void*} user buffer.
-  \item Shared memory: \lstinline{rocfft_specop_set_shared_size(rocfft_specop op, size_t bytes)}
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{API: Multi-valued one-Way Ops}
-  
-  Prerequisites:
-  \begin{itemize}
-  \item One-was single-valued spectral ops
-  \item \texttt{rocfft_field} struct
-  \end{itemize}
-  
-  \bigskip
-
-  API additions:
-  \begin{itemize}
-    \item Allow add in/out field to be called additively
-    \item One of:
-    \begin{itemize}
-  \item \lstinline{rrocfft_specop_set_fields(rocfft_specop op, size_t nin, size_t nout)}
-  \item \lstinline{rocfft_specop_set_fields(rocfft_specop specop,
-                                                     size_t nin,
-                                                     size_t* ins,
-                                                     size_t nout,
-                                                     size_t* outs)}
-    \end{itemize}
-  \end{itemize}
-
-  \bigskip
-
-  %% \item Given input in Fourier space, compute the gradient in physical space
-  %% \item Improved version for Poisson/PDE solve
-    
-  Optional:
-  \begin{itemize}
-  \item \lstinline{rocfft_field_set_precision(rocfft_field field, rocfft_precision precisions, bool isconst)}
-  \item Adding variable names to fields?
-  \item Multiple read/mid/write ops with vector of inputs/outputs
-  \end{itemize}
-
-\end{frame}
-
-
-\begin{frame}
-  \frametitle{API: Multi-valued Round-trip Ops}
-
-  API additions:
-  \begin{itemize}
-  \item Extend \lstinline{rocfft_transform_type} to add
-    \lstinline{roundtrip} variants
-  \item
-    \lstinline{rocfft_plan_description_set_midop(rocfft_plan_description
-      des, rocfft_specop op)}
-  \end{itemize}
-
-  \medskip
-
-    
-\end{frame}
-  
-\begin{frame}
-  \frametitle{API: Convolution Ops}
-
-  Prerequisites:
-  \begin{itemize}
-  \item Multi-valued round-trip ops
-  \end{itemize}
-
-  \medskip
-  
-  API additions:
-  \begin{itemize}
-  \item \lstinline{rocfft_specop_set_conv_params(rocfft_specop specop,
-                                                          size_t conv_order,
-                                                          conv_enum_type conv_type)}
-  \end{itemize}
-
-  \medskip
-
-  Convolutions can take different-length inputs, so some work needs to
-  be done to deal with the possible options here.
-  
-  
-\end{frame}
-  
-\begin{frame}[fragile]
-  \frametitle{API: Brick Decomposition}
-
-  Prerequisites:
-  \begin{itemize}
-  \item Fields struct
-  \end{itemize}
-
-  \medskip
-  
-  API addition:
-  \begin{lstlisting}
-rocfft_field_add_brick(rocfft_field field,
-                      size_t* brick_start,
-                      size_t* brick_stop,
-                      size_t* brick_stride,
-                      size_t dim,
-                      int           deviceID,
-                      int           reserved,
-                      rocfft_brick_type           brick_type);
-enum rocfft_brick_type {rocfft_brick_normal, }          
-  \end{lstlisting}
-
-  \medskip
-
-  Optional:
-  \begin{itemize}
-  \item Per-brick streams
-  \item Arbitrary batch dimensions
-  \end{itemize}
-  
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{API: Sparsity}
-
-  Prerequisites:
-  \begin{itemize}
-  \item Brick Decomposition
-  \end{itemize}
-
-  \bigskip
-  
-  API addition:
-  \begin{itemize}
-  \item \lstinline{enum rocfft_brick_type \{rocfft_brick_normal, rocfft_brick_zero\}}
-  \end{itemize}
-
-
-  Alternative:
-  \begin{itemize}
-  \item if the user doesn't specify a brick, then 
-  \end{itemize}
-
-  
-  Optional:
-  \begin{itemize}
-  \item per-brick streams
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}[fragile]
-  \frametitle{API: Single-node Multi-gpu}
-  
-  Prerequisites:
-  \begin{itemize}
-  \item Brick Decomposition
-  \end{itemize}
-
-  \medskip
-
-
-  API addition:
-  \begin{lstlisting}
-rocfft_plan_description_set_devices(rocfft_plan_description desc,
-                                   void*                   devices,
-                                   size_t number_of_devices);
-  \end{lstlisting}
-
-  \medskip
-  
- 
-\end{frame}
-
-\begin{frame}[fragile]
-  \frametitle{API: Distributed Computation}
-
-  Prerequisites:
-  \begin{itemize}
-  \item Brick Decomposition
-  \end{itemize}
-
-  \medskip
-  
-  API addition:
-  \begin{lstlisting}
-enum rocfft_comm_type { rocfft_comm_mpi, }
-rocfft_plan_description_set_comm(rocfft_plan_description description,
-                                const enum_type_for_mpi_or_schmem comm_type,
-                                void* comm_handle);
-  \end{lstlisting}
-  
-  \medskip
-  
-
-  Optional:
-  \begin{itemize}
-  \item Compression for communication, perhaps per field
-  \item SHMEM decomposition: \lstinline{rocfft_comm_shmem}
-  \end{itemize}
-  
-\end{frame}
-
-
-\begin{frame}[fragile]
-  \frametitle{Spectral op example: binary convolution}
-
-  \begin{itemize}
-  \item Add two \texttt{field}s as infields to the plan description.
-
-  \item Create a spectral op with RTC string ``\lstinline{out0 = in0 * in1;}''
-    \begin{itemize}
-    \item Set the convolution parameters for the spectral op ($2^{\text{nd}}$ order, non-centered convolution)
-    \end{itemize}
-  \item Add the spectral op as a mid-op to the plan description.
-  \item Generate a plan using the description
-    \begin{itemize}
-    \item Type is \texttt{rocfft_transform_type_real_forward_roundtrip}
-    \end{itemize}
-  \item \texttt{rocFFT} generates midop function signature:
-    \lstinline{ __device__ void(double &out0, const double in0, const double in1);}
-  \end{itemize}
-  
-\end{frame}
-
-
-\begin{frame}[fragile]
-  \frametitle{Spectral op example: 2D Navier--Stokes vorticity formulation}
-
-  \begin{itemize}
-  \item Create a spectral op \lstinline{readop} with RTC string:
-    \begin{lstlisting}
-if(posx == 0 && posy == 0) {
-  out0 = out1 = out2 = out3 = 0.0;
-  return;
-}
-const double Lx = 2.0, Ly = 2.0; // Physical constants
-const double kx = 2 * pi * (posx < Nx/2 ? posx : Nx - posx) / Lx;
-const double ky = 2 * pi * posy / Ly;
-const double denom = 1.0 / (kx * kx + ky * ky)
-const hipComplexDouble I(0,1);
-out0 = in0 * I * ky * denom;
-out1 = in0 * I * kx;
-out2 = in0 * I * kx * denom;
-out3 = in0 * I * ky;
-    \end{lstlisting}
-  \item Add \lstinline{readop} to the \lstinline{description}.
-  \end{itemize}
-
-\end{frame}
-  
-\begin{frame}[fragile]
-  \frametitle{Spectral op example: 2D Navier--Stokes vorticity formulation}
-  \begin{itemize}
-  \item Specify that readop takes input field 0 and output fields $0,1,2,3$.
-  \item Create a midop which takes fields  $0,1,2,3$ and produces field 0.
-  \item Midop rtc string is \lstinline{out0 = in0 * in1 - in2 * in3}.
-  \item Type is \texttt{rocfft_transform_type_real_inverse_roundtrip}
-  \item Specify convolution order 2, type is centered.
-  \item \texttt{rocFFT} creates 4 internal fields, and we execute with the normal GPU bufs.
-  \end{itemize}
-  
-\end{frame}
-
-%% \begin{frame}[fragile]
-%%   \frametitle{Spectral op example: autocorrelation for detecting periodicity}
-
-%%   TODO
-
-%%   The idea here is that we have an autocorrelation and then have no
-%%   outfield, and use the void* to atomicSwap (or something) the
-%%   previous max value.  This requires that if the user adds an in/out
-%%   field, then they are required toadd an out/in field as well (or they
-%%   get this case).
-  
-%% \end{frame}
-  
-\begin{frame}[fragile]
-  \frametitle{Spectral op example: per-batch 1D complex-to-real phase
-    shift-and-scale}
-  \begin{itemize}
-  \item Readop with string
-    \begin{lstlisting}
-      out0 = in1 * s(posb0) * exp(2 * pi * i * f(posb0);
-    \end{lstlisting}
-  \item \lstinline{posb0} is the batch index.
-  \item \texttt{rocFFT} creates the function signature
-    \begin{lstlisting}
-      __device__ void(double &out0, const double in0, size_t posx, size_t posb0, void* args);
-    \end{lstlisting}
-  \item Transform type is \texttt{rocfft_transform_type_real_inverse}
-  \item Allocate a 1D batch of 1D (Hermitian-symmetric) complex arrays.
-  \item Execute with the GPU buffer pointers.
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Special cases}
-
-  It may be worth having special cases for certain functions, eg
-  convolution, Poisson solve.
-
-  \medskip
-
-  \begin{itemize}
-  \item Binary convolution can also be possibly optimized (eg
-    Winograd, matrix cores, etc).
-  \item Easier for users to get at common use cases.
-  \item Heavier API: more to test, more to document, more to write.
-  \end{itemize}
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{Optional Additions}
-
-  Besides the basic API design shown above, we have more optional
-  functionality that we can add:
-
-  \medskip
-  
-  \begin{itemize}
-  \item Multi-value spectral ops can have a field-dependency list.
-  \item Multi-GPU transforms can have lossy compression for communication.
-  \item Convolution outputs can have different lengths than inputs.
-  \item Cooperation with CPU and FPGA groups at AMD.
-  \end{itemize}
-  
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{hipFFT API changes}
-
-  The \texttt{cuFFT} api is divided into four files:
-  \begin{itemize}
-  \item \texttt{cufft.h}
-  \item \texttt{cufftXt.h}
-  \item \texttt{cudalibxt.h}
-  \item \texttt{cufftMp.h}
-  \end{itemize}
-  and the \texttt{hipFFT} api will have to mirror this structure.
-  
-\end{frame}
-
-\begin{frame}[fragile]
-  \frametitle{cuFFT: single-node multi-gpu}
-
-  \begin{center}Features\end{center}
-  
-  \begin{itemize}
-  \item Select devices with \lstinline{cufftXtSetGPUs()}
-  \item \href{https://docs.nvidia.com/cuda/cufft/index.html#multiple-gpu-data-organization}{online documentation}, \href{https://github.com/NVIDIA/CUDALibrarySamples/tree/master/cuFFT}{cuFFT samples}
-  \end{itemize}
-
-  \medskip
-  
-  \begin{itemize}
-  \item No call-backs
-  \item 1D always has shuffled output, must be divisible
-    \begin{itemize}
-    \item Set the shuffled layout in the struct \lstinline{cufftXt1dFactors} with \lstinline{cufftXtQueryPlan} using the enum \lstinline{CUFFT_QUERY_1D_FACTORS}
-    \item complex: 
-    \item real/complex: shuffled output, must be even.
-    \end{itemize}
-  \item 2D/3D: slab decomposition
-    \begin{itemize}
-    \item complex/complex: No Bluestein
-    \item real/complex: even-length rc-dimension, must be in-place, no callback
-    \end{itemize}
-  \end{itemize}
-    
-\end{frame}
-    
-\begin{frame}[fragile]
-  \frametitle{cuFFT: multi-node multi-gpu}
-
-  \begin{center}Features\end{center}
-    
-  \href{https://docs.nvidia.com/hpc-sdk/cufftmp/index.html}{cufftMp documentation}
-  \href{https://github.com/NVIDIA/CUDALibrarySamples/tree/master/cuFFTMp}{cuFFTMp samples}
-
-  
-  
-  \medskip
-
-  \begin{itemize}
-  \item Set data distribution: one of:
-    \begin{itemize}
-    \item \lstinline{cufftXtSetSubformatDefault}, which sets forward and inverse formats according to the \lstinline{cufftXtSubFormat} \href{https://docs.nvidia.com/hpc-sdk/cufftmp/api/index.html#c.cufftXtSubFormat}{enum} (slab or box).
-    \item \lstinline{cufftXtSetDistribution} (rank-local)
-    \end{itemize}
-  \item \lstinline{cufftMakePlan3d} (or others?)
-  \item allocate a \lstinline{cudaLibXtDesc} using
-    \lstinline{cufftXtMalloc}, which takes the plan.
-  \item \lstinline{cufftXtExecDescriptor} to execute
-  \end{itemize}
-
-  TODO: what about the reshape api?
-  
-\end{frame}
-
-
-\begin{frame}[fragile]
-  \frametitle{cuFFT: single-node multi-gpu}
-
-  \begin{center}Use\end{center}
-
-    \bigskip
-
-    \begin{itemize}
-    \item call \lstinline{cufftCreate} to get a plan.
-    \item Associate GPUs to the plan with \lstinline{cufftXtSetGPUs()}
-    \item Call \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
-    \item Create \lstinline{cudaLibXtDesc} with \lstinline{cufftXtMalloc}, using the plan
-    \item Populate buffers with \lstinline{cufftXtMemcpy}
-    \item Execute with \lstinline{cufftXtExecDescriptor}/\lstinline{C2C}/\lstinline{R2C}/\lstinline{C2R}/\lstinline{Z2Z}/\lstinline{D2Z}/\lstinline{Z2D}
-    \end{itemize}
-
-    \bigskip
-
-    NB: \lstinline{cufftPlan1d}/\lstinline{2d}/\lstinline{3d} seems to
-    be disallowed in the multi-gpu setting.
-    
-    \begin{center}TODO: how to add all the new APIs here?\end{center}
-      
-\end{frame}
-
-
-\begin{frame}[fragile]
-  \frametitle{cuFFT: multi-node multi-gpu}
-
-  \begin{center}Use\end{center}
-
-
-    \begin{itemize}
-    \item Create plan with \lstinline{cufftCreate}
-    \item Attache a communicator to the plan with \lstinline{cufftMpAttachComm}
-    \item Slab:
-      \begin{itemize}
-      \item \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
-      \item Allocate a \lstinline{cudaLibXtDesc} using
-        \lstinline{cufftXtMalloc}, which takes the plan, and specify \lstinline{CUFFT_XT_FORMAT_INPLACE}.
-      \end{itemize}
-    \item Bricks:
-      \begin{itemize}
-      \item Add a brick with \lstinline{cufftXtSetDistribution}, which takes a plan.  Both input and output are specified.
-      \item \lstinline{cufftMakePlan1d}/\lstinline{2d}/\lstinline{3d}/\lstinline{Many}/\lstinline{Many64}\dots{}
-      \item Allocate a \lstinline{cudaLibXtDesc} using
-        \lstinline{cufftXtMalloc}, which takes the plan, and specify \lstinline{CUFFT_XT_FORMAT_DISTRIBUTED_INPUT}.
-      \end{itemize}
-    \item Execute with \lstinline{cufftXtExecDescriptor}
-    \end{itemize}
-
-    
-    
-\end{frame}
+\maketitle
+
+\section{Introduction}
+
+FIXME \texttt{rocFFT}.
+
+\section{DAG}
+
+
+\begin{center}
+  \includegraphics[width=0.9\textwidth]{implementdag.pdf}
+\end{center}
+
+\newpage
+\subsection{Fields}
+\label{ssfields}
+
+\noindent
+Dependencies:
+\begin{itemize}
+\item None
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Implimented in ROCm 6.0
+\end{itemize}
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+typedef struct rocfft_field_t* rocfft_field;
+rocfft_status rocfft_field_create(rocfft_field* field);
+rocfft_status rocfft_field_destroy(rocfft_field field);
+rocfft_status rocfft_plan_description_add_infield(rocfft_plan_description description,
+                                                 rocfft_field            field);
+rocfft_status rocfft_plan_description_add_infield(rocfft_plan_description description,
+                                                 rocfft_field            field);
+
+rocfft_status
+    rocfft_plan_description_add_outfield(rocfft_plan_description description, rocfft_field field);
+\end{lstlisting}
+
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Bricks}
+\label{ssbricks}
+
+Dependencies:
+\begin{itemize}
+\item Field (see \ref{ssfields})
+\end{itemize}
+
+Status:
+\begin{itemize}
+\item Experimental implementation in ROCm 6.0
+\end{itemize}
+
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+typedef struct rocfft_brick_t* rocfft_brick;
+rocfft_status rocfft_brick_create(rocfft_brick* brick,
+                                  const size_t* field_lower,
+                                  const size_t* field_upper,
+                                  const size_t* brick_stride,
+                                  size_t        dim,
+                                  int           deviceID);
+rocfft_status rocfft_brick_destroy(rocfft_brick brick);
+rocfft_status rocfft_field_add_brick(rocfft_field field, rocfft_brick brick);
+\end{lstlisting}
+
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Single-Process Multi-GPU}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Experimental implementation in ROCm 6.0
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item Specify a specific list of GPUs to use:
+\begin{lstlisting}
+rocfft_status rocfft_plan_description_set_devices( rocfft_plan_description description,
+                                                   void *devices,
+                                                   size_t number_of_devices);
+\end{lstlisting}
+\end{itemize}
+
+
+\noindent
+rocFFT API additions: implied by brick-device association.
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsubsection{Multi-Process Multi-GPU}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Scoped for development starting in 6.1
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions: implied by brick-device association.
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+} rocfft_comm_type;
+rocfft_status rocfft_plan_description_set_comm(
+    rocfft_plan_description description,
+    const enum_type_for_mpi_or_schmem comm_type,
+    void* comm_handle);
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsubsection{Multi-Process Multi-GPU with MPI}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Scoped for development starting in 6.1
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+  rocfft_comm_mpi = 0,
+} rocfft_comm_type;
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsubsection{Multi-Process Multi-GPU with rocSHMEM}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.   Working on performance model for BU justification.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+    rocfft_comm_shmem = 1,
+} rocfft_comm_type;
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Sparse Data}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Spectral Ops}
+
+\newpage
+\subsubsection{One-Way Scalar Spectral Ops}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+\newpage
+\subsubsection{One-Way Multi-valued Spectral Ops}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+\newpage
+\subsubsection{Round Trip Multi Spectral Ops Without Padding}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+\newpage
+\subsection{Round Trip Multi Spectral Ops With Padding}
+
+Dependencies:
+\begin{itemize}
+\item Bricks (see \ref{ssbricks})
+\end{itemize}
+
+\noindent
+Status:
+\begin{itemize}
+\item Unscoped.
+\end{itemize}
+
+\noindent
+Optional:
+\begin{itemize}
+\item FIXME
+\end{itemize}
+
+
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
 
 \end{document}
-
-
-% LocalWords:  bg fg frametitle footline lR Hann Blackman DSP Navier
-% LocalWords:  dealiased GESTS dealias vorticity ik autocorrelation
-% LocalWords:  dealiasing ie conv eg Bluestein MPI rocSHMEM lossy csr
-% LocalWords:  hipfft cufft ROCm JIT RTC rocFFT APIs rocfft struct Lx
-% LocalWords:  FFT cuFFTDx cuFFT vkFFT OneAPI FFTW cuFFTXt cuFFTMp Ly
-% LocalWords:  heFFTe SpFFT roundtrip midop const posx args readop kx
-% LocalWords:  Nx ky denom rtc bufs posb Winograd specops precisions
