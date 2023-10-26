@@ -81,6 +81,7 @@ FIXME
   \end{tabular}
 \end{center}
 
+\subsubsection{rocFFT API change}
 
 \noindent
 rocFFT API change:
@@ -102,10 +103,15 @@ rocfft_status rocfft_plan_description_add_outfield(
 \item The field-adding functions can be called once per plan.
 \end{itemize}
 
-hipFFT API additions:
+\subsubsection{hipFFT API change for cuFFT parity}
+
+No changes.
+
+\subsubsection{hipFFT API change for rocFFT parity}
 \begin{lstlisting}
-FIXME
+  FIXME
 \end{lstlisting}
+
 
 \newpage
 \subsection{Bricks}
@@ -123,7 +129,7 @@ FIXME
 \end{center}
 
 
-\noindent
+\subsubsection{rocFFT API change}
 rocFFT API additions:
 \begin{lstlisting}
 typedef struct rocfft_brick_t* rocfft_brick;
@@ -137,7 +143,7 @@ rocfft_status rocfft_brick_destroy(rocfft_brick brick);
 rocfft_status rocfft_field_add_brick(rocfft_field field, rocfft_brick brick);
 \end{lstlisting}
 
-hipFFT API additions:
+\subsubsection{hipFFT API }
 \begin{lstlisting}
 FIXME
 \end{lstlisting}
@@ -157,8 +163,7 @@ FIXME
 \end{center}
 
 
-\noindent
-rocFFT API change:
+\subsubsection{rocFFT API change}
 \begin{itemize}
 \item implied by brick-device association.
 \end{itemize}
@@ -168,13 +173,74 @@ rocfft_status rocfft_plan_description_set_devices(rocfft_plan_description descri
                                                   void *devices,
                                                   size_t number_of_devices);
 \end{lstlisting}
+Also note that the decomposition dimension has be lower than the
+transform dimension.
+
+\subsubsection{hipFFT API change for cuFFT parity}
+\texttt{hipfftXt.h}
+\begin{lstlisting}
+hipfftResult hipfftXtSetGPUs(hipfftHandle plan, int count, int* gpus);
+typedef enum hipfftXtSubFormat_t
+{
+    HIPFFT_XT_FORMAT_INPUT             = 0x00,
+    HIPFFT_XT_FORMAT_OUTPUT            = 0x01,
+    HIPFFT_XT_FORMAT_INPLACE           = 0x02,
+    HIPFFT_XT_FORMAT_INPLACE_SHUFFLED  = 0x03,
+    HIPFFT_XT_FORMAT_1D_INPUT_SHUFFLED = 0x04,
+    HIPFFT_FORMAT_UNDEFINED            = 0x05
+} hipfftXtSubFormat;
+hipfftResult hipfftXtMalloc(hipfftHandle      plan,
+                            hipLibXtDesc**    desc,
+                            hipfftXtSubFormat format)
+hipfftResult hipfftXtMemcpy(hipfftHandle     plan,
+                            void*            dest,
+                            void*            src,
+                            hipfftXtCopyType type);
+hipfftResult hipfftXtFree(hipLibXtDesc* desc);
+// C2C, R2C, ...
+hipfftResult hipfftXtExecDescriptorC2C(hipfftHandle  plan,
+                                       hipLibXtDesc* input,
+                                       hipLibXtDesc* output,
+                                       int           direction)
+                            
+\end{lstlisting}
+
+\texttt{hipfftlibxt.h}
+\begin{lstlisting}
+typedef struct hipXtDesc_t
+{
+    int version;
+    int nGPUs;
+    int GPUs[MAX_HIP_DESCRIPTOR_GPUS];
+    void* data[MAX_HIP_DESCRIPTOR_GPUS];
+    size_t size[MAX_HIP_DESCRIPTOR_GPUS];
+    void* hipXtState;
+} hipXtDesc;
+typedef enum hiplibFormat_t
+{
+    HIPLIB_FORMAT_HIPFFT    = 0x0,
+    HIPLIB_FORMAT_UNDEFINED = 0x1
+} hiplibFormat;
+typedef struct hipLibXtDesc_t
+{
+    int version;
+    hipXtDesc* descriptor;
+    hiplibFormat library;
+    int subFormat;
+    void* libDescriptor;
+} hipLibXtDesc;
+typedef enum hipfftXtCopyType_t
+{
+    HIPFFT_COPY_HOST_TO_DEVICE   = 0x00,
+    HIPFFT_COPY_DEVICE_TO_HOST   = 0x01,
+    HIPFFT_COPY_DEVICE_TO_DEVICE = 0x02,
+    HIPFFT_COPY_UNDEFINED        = 0x03
+} hipfftXtCopyType;
+\end{lstlisting}
 
 
-\noindent
-hipFFT API additions:
-\begin{itemize}
-\item implied by brick-device association.
-\end{itemize}
+\subsubsection{hipFFT API change for rocFFT parity}
+We would have to add bricks.
 \begin{lstlisting}
 FIXME
 \end{lstlisting}
@@ -188,14 +254,13 @@ FIXME
     \hline
     Dependencies & Status & Options \\
     \hline
-    Bricks (\ref{ssbricks}) & Scoped for development starting in 6.1  & None \\
+    Bricks (\ref{ssbricks}) & Scoped for development starting in 6.2  & None \\
     \hline
   \end{tabular}
 \end{center}
 
 
-\noindent
-rocFFT API changes:
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 typedef enum rocfft_comm_type_t {
 } rocfft_comm_type;
@@ -205,6 +270,7 @@ rocfft_status rocfft_plan_description_set_comm(
     void* comm_handle);
 \end{lstlisting}
 
+\subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
@@ -212,27 +278,27 @@ FIXME
 \end{lstlisting}
 
 \newpage
-\subsubsection{Multi-Process Multi-GPU with MPI}
+\subsection{Multi-Process Multi-GPU with MPI}
 
 \begin{center}
   \begin{tabular}{|l|l|l|}
     \hline
     Dependencies & Status & Options \\
     \hline
-    Multi-proc (\ref{ssmpmgpu}) & Scoped for development starting in 6.1    & None \\
+    Multi-proc (\ref{ssmpmgpu}) & Scoped for development starting in 6.2    & None \\
     \hline
   \end{tabular}
 \end{center}
 
 
-\noindent
-rocFFT API additions:
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 typedef enum rocfft_comm_type_t {
   rocfft_comm_mpi = 0,
 } rocfft_comm_type;
 \end{lstlisting}
 
+\subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
@@ -240,7 +306,7 @@ FIXME
 \end{lstlisting}
 
 \newpage
-\subsubsection{Multi-Process Multi-GPU with rocSHMEM}
+\subsection{Multi-Process Multi-GPU with rocSHMEM}
 
 \begin{center}
   \begin{tabular}{|l|p{4cm}|l|}
@@ -252,6 +318,7 @@ FIXME
   \end{tabular}
 \end{center}
 
+\subsubsection{rocFFT API change}
 \noindent
 rocFFT API additions:
 \begin{lstlisting}
@@ -260,6 +327,7 @@ typedef enum rocfft_comm_type_t {
 } rocfft_comm_type;
 \end{lstlisting}
 
+\subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
@@ -280,22 +348,21 @@ FIXME
   \end{tabular}
 \end{center}
 
-\noindent
-rocFFT API changes:
+\subsubsection{rocFFT API change}
 \begin{itemize}
 \item Behaviour change: Non-specified bricks are treated as zero.
 \end{itemize} 
 
+\subsubsection{hipFFT API change}
 \noindent
 hipFFT API changes:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
 
-\newpage
-\subsection{Spectral Ops}
 
-\subsubsection{One-Way Scalar Spectral Ops}
+\newpage
+\subsection{One-Way Scalar Spectral Ops}
 \label{sss1wayspecops}
 
 \begin{center}
@@ -309,8 +376,7 @@ hipFFT API changes:
 \end{center}
 \noindent
 
-\noindent
-rocFFT API additions:
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 typedef struct rocfft_specop_t* rocfft_specop;
 rocfft_status rocfft_specop_create(rocfft_specop* specop);
@@ -329,6 +395,7 @@ rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);
 \end{lstlisting}
 
 
+\subsubsection{hipFFT API change}
 
 \noindent
 hipFFT API additions:
@@ -337,7 +404,7 @@ hipFFT API additions:
 \end{lstlisting}
 
 \newpage
-\subsubsection{One-Way Multi-valued Spectral Ops}
+\subsection{One-Way Multi-valued Spectral Ops}
 \label{ssvecspecops}
 
 \begin{center}
@@ -351,8 +418,7 @@ hipFFT API additions:
 \end{center}
 \noindent
 
-\noindent
-rocFFT API additions:
+\subsubsection{rocFFT API change}
 \begin{itemize}
 \item The add-field functions can be called multiple times without error.
 \end{itemize}
@@ -383,7 +449,7 @@ rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, si
   \end{lstlisting}
 \end{itemize}
 
-\noindent
+\subsubsection{hipFFT API change}
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
@@ -391,7 +457,7 @@ hipFFT API additions:
 
 
 \newpage
-\subsubsection{Round Trip Multi Spectral Ops Without Padding}
+\subsection{Round Trip Multi Spectral Ops Without Padding}
 \label{ssroundspecops}
 
 
@@ -407,8 +473,7 @@ hipFFT API additions:
 \noindent
 
 
-\noindent
-rocFFT API additions:
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 rocfft_transform_type_complex_forward_roundtrip,
     rocfft_transform_type_complex_inverse_roundtrip,
@@ -431,8 +496,7 @@ rocfft_status rocfft_desc_set_precision_roundtrip(
 
 
 
-
-\noindent
+\subsubsection{hipFFT API }
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
@@ -454,15 +518,14 @@ hipFFT API additions:
 \noindent
 
 
-\noindent
-rocFFT API additions:
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
                                             size_t conv_order,
                                              conv_enum_type conv_type);
 \end{lstlisting}
 
-\noindent
+\subsubsection{hipFFT API }
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
@@ -483,6 +546,7 @@ hipFFT API additions:
   \end{tabular}
 \end{center}
 
+\subsubsection{rocFFT API change}
 \begin{lstlisting}
 rocfft_status rocfft_field_set_type(rocfft_field field, char* data_type);
 ROCFFT_EXPORT rocfft_status rocfft_specop_set_types(rocfft_specop specop,
@@ -501,5 +565,8 @@ rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description de
                                                       size_t numprecision,
                                                       rocfft_precision* precisions);
 \end{lstlisting}
+
+\subsubsection{hipFFT API }
+FIXME
 
 \end{document}
