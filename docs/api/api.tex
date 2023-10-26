@@ -71,22 +71,16 @@ FIXME
 \subsection{Fields}
 \label{ssfields}
 
-\noindent
-Dependencies:
-\begin{itemize}
-\item None
-\end{itemize}
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    None & Experimental implementation in ROCm 6.0  & None \\
+    \hline
+  \end{tabular}
+\end{center}
 
-\noindent
-Status:
-\begin{itemize}
-\item Implimented in ROCm 6.0
-\end{itemize}
-
-Optional:
-\begin{itemize}
-\item FIXME
-\end{itemize}
 
 \noindent
 rocFFT API change:
@@ -117,20 +111,17 @@ FIXME
 \subsection{Bricks}
 \label{ssbricks}
 
-Dependencies:
-\begin{itemize}
-\item Field (see \ref{ssfields})
-\end{itemize}
 
-Status:
-\begin{itemize}
-\item Experimental implementation in ROCm 6.0
-\end{itemize}
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Field (\ref{ssfields}) & Experimental implementation in ROCm 6.0  & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
 
-Optional:
-\begin{itemize}
-\item FIXME
-\end{itemize}
 
 \noindent
 rocFFT API additions:
@@ -154,34 +145,30 @@ FIXME
 \newpage
 \subsection{Single-Process Multi-GPU}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Experimental implementation in ROCm 6.0 & Specifying the list of GPUs \\
+    \hline
+  \end{tabular}
+\end{center}
+
 
 \noindent
-Status:
+rocFFT API change:
 \begin{itemize}
-\item Experimental implementation in ROCm 6.0
+\item implied by brick-device association.
 \end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item Specify a specific list of GPUs to use:
+Optional rocFFT API change:
 \begin{lstlisting}
 rocfft_status rocfft_plan_description_set_devices(rocfft_plan_description description,
                                                   void *devices,
                                                   size_t number_of_devices);
 \end{lstlisting}
-\end{itemize}
 
-
-\noindent
-rocFFT API additions:
-\begin{itemize}
-\item implied by brick-device association.
-\end{itemize}
 
 \noindent
 hipFFT API additions:
@@ -194,29 +181,17 @@ FIXME
 
 \newpage
 \subsubsection{Multi-Process Multi-GPU}
+\label{ssmpmgpu}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
-
-\noindent
-Status:
-\begin{itemize}
-\item Scoped for development starting in 6.1
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item
-  adsf
-  \begin{lstlisting}
-rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description description,
-                                                      size_t numprecision,
-                                                      rocfft_precision* precisions);
-  \end{lstlisting}
-\end{itemize}
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Scoped for development starting in 6.1  & None \\
+    \hline
+  \end{tabular}
+\end{center}
 
 
 \noindent
@@ -239,22 +214,15 @@ FIXME
 \newpage
 \subsubsection{Multi-Process Multi-GPU with MPI}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
-
-\noindent
-Status:
-\begin{itemize}
-\item Scoped for development starting in 6.1
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item None
-\end{itemize}
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-proc (\ref{ssmpmgpu}) & Scoped for development starting in 6.1    & None \\
+    \hline
+  \end{tabular}
+\end{center}
 
 
 \noindent
@@ -274,23 +242,15 @@ FIXME
 \newpage
 \subsubsection{Multi-Process Multi-GPU with rocSHMEM}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
-
-\noindent
-Status:
-\begin{itemize}
-\item Unscoped.   Working on performance model for BU justification.
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item None
-\end{itemize}
-
+\begin{center}
+  \begin{tabular}{|l|p{4cm}|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-proc (\ref{ssmpmgpu}) & Unscoped.   Working on performance model for BU justification.    & None \\
+    \hline
+  \end{tabular}
+\end{center}
 
 \noindent
 rocFFT API additions:
@@ -309,23 +269,16 @@ FIXME
 \newpage
 \subsection{Sparse Data}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
 
-\noindent
-Status:
-\begin{itemize}
-\item Unscoped.
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item FIXME
-\end{itemize}
-
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Unscoped   & Explicitly specify zero-bricks \\
+    \hline
+  \end{tabular}
+\end{center}
 
 \noindent
 rocFFT API changes:
@@ -345,25 +298,16 @@ hipFFT API changes:
 \subsubsection{One-Way Scalar Spectral Ops}
 \label{sss1wayspecops}
 
-Dependencies:
-\begin{itemize}
-\item None
-\end{itemize}
-
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    None & Unscoped   & Shared data size \\
+    \hline
+  \end{tabular}
+\end{center}
 \noindent
-Status:
-\begin{itemize}
-\item Unscoped.
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item Shared data size:
-  \lstinline{rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);}
-
-\end{itemize}
-
 
 \noindent
 rocFFT API additions:
@@ -379,42 +323,33 @@ rocfft_status rocfft_plan_description_set_writeop(
                                   rocfft_plan_description description,
                                   const rocfft_specop specop);
 \end{lstlisting}
+API option:
+\begin{lstlisting}
+rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);
+\end{lstlisting}
+
+
 
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
+
 \newpage
 \subsubsection{One-Way Multi-valued Spectral Ops}
+\label{ssvecspecops}
 
-Dependencies:
-\begin{itemize}
-\item One-way spectral ops (\ref{sss1wayspecops}), fields (\ref{ssfields})
-\end{itemize}
-
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    One-way specops (~\ref{sss1wayspecops}) & Unscoped   & Fine-grained field specification \\
+    \hline
+  \end{tabular}
+\end{center}
 \noindent
-Status:
-\begin{itemize}
-\item Unscoped.
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item Assume all fields are used:
-  \begin{lstlisting}
-rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
-  \end{lstlisting}
-\item
-  \begin{lstlisting}
-rocfft_status rocfft_specop_set_types(rocfft_specop specop,
-                                     field_type_enum data_types);
-rocfft_status rocfft_specop_set_types(rocfft_specop specop,
-                                      size_t data_size);
-    \end{lstlisting}
-\end{itemize}
-
 
 \noindent
 rocFFT API additions:
@@ -429,49 +364,47 @@ rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
                                        size_t* output_list);
   FIXME
 \end{lstlisting}
-
-\noindent
-Alternatives:
+API options:
 \begin{itemize}
 \item Assume all fields are used:
   \begin{lstlisting}
 rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
   \end{lstlisting}
+\item
+  \begin{lstlisting}
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                     field_type_enum data_types);
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                      size_t data_size);
+  \end{lstlisting}
+\item
+  \begin{lstlisting}
+rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
+  \end{lstlisting}
 \end{itemize}
-
 
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
+
+
 \newpage
 \subsubsection{Round Trip Multi Spectral Ops Without Padding}
+\label{ssroundspecops}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
 
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-valued specops (~\ref{ssvecspecops}) & Unscoped   & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
 \noindent
-Status:
-\begin{itemize}
-\item Unscoped.
-\end{itemize}
-
-\noindent
-Optional:
-\begin{itemize}
-\item FIXME
-  \begin{lstlisting}
-rocfft_status rocfft_desc_set_precision_roundtrip(
-                   rocfft_plan_description description,
-                   size_t numprecision_in,
-                   rocfft_precision* precision_in,
-                   size_t numprecision_out,
-                   rocfft_precision* precision_out);
-    \end{lstlisting}
-\end{itemize}
 
 
 \noindent
@@ -486,6 +419,18 @@ rocfft_status rocfft_plan_description_set_midop(
                rocfft_plan_description description,
                const rocfft_specop specop);
 \end{lstlisting}
+Optional additions:
+\begin{lstlisting}
+rocfft_status rocfft_desc_set_precision_roundtrip(
+                   rocfft_plan_description description,
+                   size_t numprecision_in,
+                   rocfft_precision* precision_in,
+                   size_t numprecision_out,
+                   rocfft_precision* precision_out);
+\end{lstlisting}
+
+
+
 
 \noindent
 hipFFT API additions:
@@ -495,22 +440,18 @@ hipFFT API additions:
 \newpage
 \subsection{Round Trip Multi Spectral Ops With Padding}
 
-Dependencies:
-\begin{itemize}
-\item Bricks (see \ref{ssbricks})
-\end{itemize}
 
-\noindent
-Status:
-\begin{itemize}
-\item Unscoped.
-\end{itemize}
 
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-valued specops (~\ref{ssvecspecops}) & Unscoped   & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
 \noindent
-Optional:
-\begin{itemize}
-\item FIXME
-\end{itemize}
 
 
 \noindent
@@ -527,22 +468,20 @@ hipFFT API additions:
   FIXME
 \end{lstlisting}
 
-\end{document}
 
 \newpage
 \subsection{Multi-precision and multi-resolution}
 
-\noindent
-Dependencies:
-\begin{itemize}
-\item None
-\end{itemize}
 
-\noindent
-Status:
-\begin{itemize}
-\item Unscoped
-\end{itemize}
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Various (TODO) & Unscoped  & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
 
 \begin{lstlisting}
 rocfft_status rocfft_field_set_type(rocfft_field field, char* data_type);
@@ -558,4 +497,9 @@ rocfft_status rocfft_field_dims(rocfft_field field,
                                 size_t dim,
                                 field_type_enum field_type);
 
+rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description description,
+                                                      size_t numprecision,
+                                                      rocfft_precision* precisions);
 \end{lstlisting}
+
+\end{document}
