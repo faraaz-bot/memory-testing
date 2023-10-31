@@ -7,7 +7,7 @@
 \DeclarePairedDelimiter\ceil{\lceil}{\rceil}
 \DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
 
-\usepackage{xcolor}
+\usepackage[dvipsnames]{xcolor}
 
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -21,7 +21,7 @@
   basicstyle=\fontsize{8}{13}\ttfamily,
   keywordstyle=\color{blue}\ttfamily,
   stringstyle=\color{red}\ttfamily,
-  commentstyle=\color{green}\ttfamily,
+  commentstyle=\color{BrickRed}\ttfamily,
   morecomment=[l][\color{magenta}]{\#}
 }
 
@@ -162,6 +162,17 @@ FIXME
   \end{tabular}
 \end{center}
 
+Notes:
+\begin{itemize}
+\item We are not handling the shuffled case from cuFFTXt; it's silly
+  and no one uses it.  We could come up with some general equivalent
+  in arbitrary dimensions, but we'd have to see someone that would
+  actually use it.
+\end{itemize}
+
+   
+
+
 
 \subsubsection{rocFFT API change}
 \begin{itemize}
@@ -273,9 +284,35 @@ rocfft_status rocfft_plan_description_set_comm(
 \subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
+\texttt{cuFFTMp.h}
 \begin{lstlisting}
-FIXME
+typedef enum cufftMpCommType_t {
+    CUFFT_COMM_MPI = 0x00,
+    CUFFT_COMM_NONE = 0x01
+} cufftMpCommType;
+cufftResult cufftMpAttachComm(cufftHandle plan,
+                                       cufftMpCommType comm_type,
+                                       void *comm_handle);
 \end{lstlisting}
+\texttt{cufftXp.h}
+\begin{lstlisting}
+cufftResult cufftXtSetDistribution(cufftHandle plan, 
+                                   int rank, 
+                                   const long long int* lower_input,  
+                                   const long long int* upper_input,
+                                   const long long int* lower_output,
+                                   const long long int* upper_output,
+                                   const long long int* strides_input, 
+                                   const long long int* strides_output);
+typedef enum hipfftXtSubFormat_t
+{
+  // other enums...
+  CUFFT_XT_FORMAT_DISTRIBUTED_INPUT = 0x05,
+  CUFFT_XT_FORMAT_DISTRIBUTED_OUTPUT = 0x06,
+  CUFFT_FORMAT_UNDEFINED = 0x07
+} hipfftXtSubFormat;
+\end{lstlisting}
+
 
 \newpage
 \subsection{Multi-Process Multi-GPU with MPI}
@@ -292,7 +329,12 @@ FIXME
 
 
 Notes: we will have a huge problem with the MPI ABI.  CF:
-\url{https://www.youtube.com/watch?v=kNk9efs4m-c}
+\url{https://www.youtube.com/watch?v=kNk9efs4m-c}.  There are a few cuFFT
+features that seem unimportant:
+\begin{itemize}
+\item Reshape API: it seems that \texttt{cufftMpCreateReshape} isn't
+  used anywhere on github except in CUDA library samples.
+\end{itemize}
 
 \subsubsection{rocFFT API change}
 \begin{lstlisting}
