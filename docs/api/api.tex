@@ -187,6 +187,73 @@ rocfft_status rocfft_plan_description_set_devices(rocfft_plan_description descri
 Also note that the decomposition dimension has be lower than the
 transform dimension.
 
+\noindent
+\subsubsection{Sample application}
+\begin{lstlisting}
+// Transform parameters
+std::vector<size_t> length = {8, 8};
+std::vector<size_t> devices = {0, 1};
+std::vector<std::vector<size_t>> ilower = {{0,0},{0,4}};
+std::vector<std::vector<size_t>> iupper = {{4,8},{8,8}};
+std::vector<size_t> istride = {1,8};
+std::vector<std::vector<size_t>> olower = {{0,0},{4,0}};
+std::vector<std::vector<size_t>> oupper = {{8,4},{8,8}};
+std::vector<size_t> ostride = {8,1};
+
+// Set up field and for input:
+rocfft_field ifield = nullptr;
+rocfft_field_create(&ifield);
+std::vector<rocfft_brick> iwall(devices.size());
+for(int idx = 0; idx < devices.size(); ++idx) {
+  rocfft_brick_create(&iwall[idx],
+                      ilower[idx].data(), iupper[idx].data(),
+                      istride.data(),   istride.size();
+                      devices[idx]);
+  rocfft_field_add_brick(infield, iwall[idx]);
+  rocfft_brick_destroy(iwall[idx]);
+}
+
+// Set up field and bricks for output:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ofield);
+std::vector<rocfft_brick> owall(devices.size());
+for(int idx = 0; idx < devices.size(); ++idx) {
+  rocfft_brick_create(&owall[idx],
+                      olower[idx].data(), oupper[idx].data(),
+                      istride.data(),   ostride.size();
+                      devices[idx]);
+                      rocfft_field_add_brick(outfield, owall[idx]);
+  rocfft_brick_destroy(owall[idx]);
+}
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+// TODO: set data layout needed?
+rocfft_plan_description_add_infield(description, ifield);
+rocfft_plan_description_add_outfield(description, ofield);
+rocfft_plan gpu_plan = nullptr;
+rocfft_plan_create(&gpu_plan,
+                  rocfft_placement_notinplace,
+                  rocfft_transform_type_complex_forward,
+                  rocfft_precision_double,
+                  length.size(),
+                  length.data(),
+                  1,
+                  description);
+
+//Execution stage
+std::vector<void*> ibuf(devices.size());
+std::vector<void*> obuf(devices.size());
+const size_t bufsize = sizeof(std::complex<double> * 4 * 8);
+for(int idx = 0; idx < devices.size(); ++idx) {
+  hipmalloc(&ibuf[idx], bufsize);
+  hipmalloc(&obuf[idx], bufsize);
+}
+rocfft_execute(gpu_plan, (void**)ibuf.data(), (void**)obuf.data(), null);
+\end{lstlisting}
+
+
 \subsubsection{hipFFT API change for cuFFT parity}
 \texttt{hipfftXt.h}
 \begin{lstlisting}
@@ -291,17 +358,17 @@ features that seem unimportant:
 \subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
-\texttt{cuFFTMp.h}
+\texttt{hipFFTMp.h}
 \begin{lstlisting}
-typedef enum cufftMpCommType_t {
-    CUFFT_COMM_MPI = 0x00,
-    CUFFT_COMM_NONE = 0x01
-} cufftMpCommType;
-cufftResult cufftMpAttachComm(cufftHandle plan,
-                                       cufftMpCommType comm_type,
-                                       void *comm_handle);
+typedef enum hipfftMpCommType_t {
+    HIPUFFT_COMM_MPI = 0x00,
+    HIPFFT_COMM_NONE = 0x01
+} hipfftMpCommType;
+hipfftResult hipfftMpAttachComm(hipfftHandle plan,
+                                hipfftMpCommType comm_type,
+                                void *comm_handle);
 \end{lstlisting}
-\texttt{cufftXp.h}
+\texttt{cufftXt.h}
 \begin{lstlisting}
 cufftResult cufftXtSetDistribution(cufftHandle plan, 
                                    int rank, 
@@ -316,7 +383,7 @@ typedef enum hipfftXtSubFormat_t
   // other enums...
   CUFFT_XT_FORMAT_DISTRIBUTED_INPUT = 0x05,
   CUFFT_XT_FORMAT_DISTRIBUTED_OUTPUT = 0x06,
-  CUFFT_FORMAT_UNDEFINED = 0x07
+  CUFFT_FORMAT_UNDEFINED = 0x07 // NB: valued changed
 } hipfftXtSubFormat;
 \end{lstlisting}
 
@@ -343,6 +410,69 @@ Notes: we will have a huge problem with the MPI ABI.  CF:
 typedef enum rocfft_comm_type_t {
   rocfft_comm_mpi = 0,
 } rocfft_comm_type;
+\end{lstlisting}
+
+\subsubsection{Sample code}
+
+\begin{lstlisting}
+// Transform parameters
+std::vector<size_t> length = {8, 8};
+// MPI rank is assumed to be 2 for this sample, all on device 0.
+std::vector<std::vector<size_t>> ilower = {{0,0},{0,4}};
+std::vector<std::vector<size_t>> iupper = {{4,8},{8,8}};
+std::vector<size_t> istride = {1,8};
+std::vector<std::vector<size_t>> olower = {{0,0},{4,0}};
+std::vector<std::vector<size_t>> oupper = {{8,4},{8,8}};
+std::vector<size_t> ostride = {8,1};
+
+
+// Set up field and bricks for input:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ifield);
+rocfft_brick ibrick;
+rocfft_brick_create(&ibrick,
+                   ilower[mpirank].data(), iupper[mpirank].data(),
+                   istride.data(),   istride.size();
+                   0);
+rocfft_field_add_brick(outfield, obrick);
+rocfft_brick_destroy(obrick);
+
+// Set up field and bricks for output:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ofield);
+rocfft_brick obrick;
+rocfft_brick_create(&obrick,
+                   olower[mpirank].data(), oupper[mpirank].data(),
+                   ostride.data(),   ostride.size();
+                   0);
+rocfft_field_add_brick(outfield, obrick);
+rocfft_brick_destroy(obrick);
+
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+// TODO: set data layout needed?
+rocfft_plan_description_add_infield(description, ifield);
+rocfft_plan_description_add_outfield(description, ofield);
+rocfft_plan gpu_plan = nullptr;
+rocfft_plan_create(&gpu_plan,
+                  rocfft_placement_notinplace,
+                  rocfft_transform_type_complex_forward,
+                  rocfft_precision_double,
+                  length.size(),
+                  length.data(),
+                  1,
+                  description);
+
+//Execution stage
+void* ibuf;
+void* obuf;
+const size_t bufsize = sizeof(std::complex<double> * 4 * 8);
+hipmalloc(&ibuf, bufsize);
+hipmalloc(&obuf, bufsize);
+
+rocfft_execute(gpu_plan, ibuf, obuf, null);
 \end{lstlisting}
 
 \subsubsection{hipFFT API change}
