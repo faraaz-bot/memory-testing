@@ -281,6 +281,13 @@ rocfft_status rocfft_plan_description_set_comm(
     void* comm_handle);
 \end{lstlisting}
 
+ There are a few cuFFT
+features that seem unimportant:
+\begin{itemize}
+\item Reshape API: it seems that \texttt{cufftMpCreateReshape} isn't
+  used anywhere on github except in CUDA library samples.
+\end{itemize}
+
 \subsubsection{hipFFT API change}
 \noindent
 hipFFT API additions:
@@ -329,12 +336,7 @@ typedef enum hipfftXtSubFormat_t
 
 
 Notes: we will have a huge problem with the MPI ABI.  CF:
-\url{https://www.youtube.com/watch?v=kNk9efs4m-c}.  There are a few cuFFT
-features that seem unimportant:
-\begin{itemize}
-\item Reshape API: it seems that \texttt{cufftMpCreateReshape} isn't
-  used anywhere on github except in CUDA library samples.
-\end{itemize}
+\url{https://www.youtube.com/watch?v=kNk9efs4m-c}. 
 
 \subsubsection{rocFFT API change}
 \begin{lstlisting}
@@ -347,7 +349,9 @@ typedef enum rocfft_comm_type_t {
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
-FIXME
+typedef enum cufftMpCommType_t {
+  CUFFT_COMM_MPI = 0x00,
+} cufftMpCommType;
 \end{lstlisting}
 
 \newpage
@@ -376,7 +380,9 @@ typedef enum rocfft_comm_type_t {
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
-FIXME
+typedef enum cufftMpCommType_t {
+  CUFFT_COMM_NONE = 0x01
+} cufftMpCommType;
 \end{lstlisting}
 
 \newpage
@@ -398,12 +404,17 @@ FIXME
 \item Behaviour change: Non-specified bricks are treated as zero.
 \end{itemize} 
 
-\subsubsection{hipFFT API change}
+\subsubsection{hipFFT API change for cuFFT parity}
 \noindent
-hipFFT API changes:
+hipFFT API changes for cuFFT parity: None
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API changes for rocFFT parity: 
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
+
 
 
 \newpage
@@ -440,8 +451,11 @@ rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);
 \end{lstlisting}
 
 
-\subsubsection{hipFFT API change}
+\subsubsection{hipFFT API change for cuFFT parity}
 
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
 \noindent
 hipFFT API additions:
 \begin{lstlisting}
@@ -473,7 +487,6 @@ rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
                                        size_t* input_list,
                                        size_t outputs,
                                        size_t* output_list);
-  FIXME
 \end{lstlisting}
 API options:
 \begin{itemize}
@@ -494,12 +507,16 @@ rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, si
   \end{lstlisting}
 \end{itemize}
 
-\subsubsection{hipFFT API change}
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
-
 
 \newpage
 \subsection{Round Trip Multi Spectral Ops Without Padding}
@@ -540,12 +557,17 @@ rocfft_status rocfft_desc_set_precision_roundtrip(
 \end{lstlisting}
 
 
+\subsubsection{hipFFT API change for cuFFT parity}
 
-\subsubsection{hipFFT API }
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
 \end{lstlisting}
+
 \newpage
 \subsection{Round Trip Multi Spectral Ops With Padding}
 
@@ -570,7 +592,12 @@ rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
                                              conv_enum_type conv_type);
 \end{lstlisting}
 
-\subsubsection{hipFFT API }
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
 hipFFT API additions:
 \begin{lstlisting}
   FIXME
@@ -611,7 +638,15 @@ rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description de
                                                       rocfft_precision* precisions);
 \end{lstlisting}
 
-\subsubsection{hipFFT API }
-FIXME
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: FIXME.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
 
 \end{document}
