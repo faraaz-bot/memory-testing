@@ -568,13 +568,13 @@ basicstyle=\ttfamily\small,
   \item \texttt{rocfft_field} struct (w.\ create/destroy)
   \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
                                       rocfft_field)}
-  \item \lstinline{rocfft_desc_add_infield(rocfft_plan_description,
+  \item \lstinline{rocfft_desc_add_outfield(rocfft_plan_description,
                                       rocfft_field)}
   \end{itemize}
 
   
 \end{frame}
-
+ 
 \begin{frame}
   \frametitle{API: Single-valued One-Way Ops}
   
@@ -704,15 +704,16 @@ basicstyle=\ttfamily\small,
   
   API addition:
   \begin{lstlisting}
-rocfft_field_add_brick(rocfft_field field,
-                      size_t* brick_start,
-                      size_t* brick_stop,
-                      size_t* brick_stride,
-                      size_t dim,
-                      int           deviceID,
-                      int           reserved,
-                      rocfft_brick_type           brick_type);
-enum rocfft_brick_type {rocfft_brick_normal, }          
+
+typedef struct rocfft_brick_t* rocfft_brick;
+rocfft_status rocfft_brick_create(rocfft_brick* brick,
+                                  const size_t* field_lower,
+                                  const size_t* field_upper,
+                                  const size_t* brick_stride,
+                                  size_t        dim,
+                                  int           deviceID);
+rocfft_status rocfft_brick_destroy(rocfft_brick brick);
+rocfft_status rocfft_field_add_brick(rocfft_field field, rocfft_brick brick);
   \end{lstlisting}
 
   \medskip
@@ -738,21 +739,9 @@ enum rocfft_brick_type {rocfft_brick_normal, }
   
   API addition:
   \begin{itemize}
-  \item \lstinline{enum rocfft_brick_type \{rocfft_brick_normal, rocfft_brick_zero\}}
+  \item if the user doesn't specify a brick, then it's considered zero.
   \end{itemize}
 
-
-  Alternative:
-  \begin{itemize}
-  \item if the user doesn't specify a brick, then 
-  \end{itemize}
-
-  
-  Optional:
-  \begin{itemize}
-  \item per-brick streams
-  \end{itemize}
-  
 \end{frame}
 
 \begin{frame}[fragile]
@@ -766,7 +755,7 @@ enum rocfft_brick_type {rocfft_brick_normal, }
   \medskip
 
 
-  API addition:
+  Alternative:
   \begin{lstlisting}
 rocfft_plan_description_set_devices(rocfft_plan_description desc,
                                    void*                   devices,
@@ -809,6 +798,29 @@ rocfft_plan_description_set_comm(rocfft_plan_description description,
 
 
 \begin{frame}[fragile]
+  \frametitle{API: Multi-resolution / precision}
+
+  \begin{lstlisting}
+rocfft_status rocfft_field_set_type(rocfft_field field, char* data_type);
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   field_type_enum data_types);
+rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   size_t data_size);
+rocfft_status rocfft_field_set_properties(rocfft_field field,
+                 rocfft_precision precisions, bool isconst);
+rocfft_status rocfft_field_dims(rocfft_field field,
+                                size_t* dims,
+                                size_t dim,
+                                field_type_enum field_type);
+rocfft_status rocfft_desc_set_communication_precision(
+               rocfft_plan_description description,
+               size_t numprecision, rocfft_precision* precisions);
+\end{lstlisting}
+  
+\end{frame}
+
+
+\begin{frame}[fragile]
   \frametitle{Spectral op example: binary convolution}
 
   \begin{itemize}
@@ -836,13 +848,13 @@ rocfft_plan_description_set_comm(rocfft_plan_description description,
   \begin{itemize}
   \item Create a spectral op \lstinline{readop} with RTC string:
     \begin{lstlisting}
-if(posx == 0 && posy == 0) {
+if(pos0 == 0 && pos0 == 0) {
   out0 = out1 = out2 = out3 = 0.0;
   return;
 }
 const double Lx = 2.0, Ly = 2.0; // Physical constants
-const double kx = 2 * pi * (posx < Nx/2 ? posx : Nx - posx) / Lx;
-const double ky = 2 * pi * posy / Ly;
+const double kx = 2 * pi * (pos0 < N0/2 ? pos0 : N0 - pos0) / Lx;
+const double ky = 2 * pi * pos1 / L1;
 const double denom = 1.0 / (kx * kx + ky * ky)
 const hipComplexDouble I(0,1);
 out0 = in0 * I * ky * denom;

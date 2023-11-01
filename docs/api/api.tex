@@ -580,6 +580,31 @@ API option:
 rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);
 \end{lstlisting}
 
+\subsubsection{Sample application}
+
+Appply a Hann function to the input:
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8};
+
+// Set up a spectral operation on input:
+rocfft_specop readop;
+rocfft_specop_create(&specop);
+std::string readop_str ="
+const double twopi = 6.283185307179586;
+double factor = (1.0 / 8.0)* (0.5 + 0.5  * cos(twopi * idx0 / 8);
+out0 = factor * in0;
+";
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_readop(description, readop);
+
+// Execute as normal (buffer allocation not shown)
+rocfft_execute(gpu_plan, (void**)ibuf.data(), (void**)obuf.data(), null);
+\end{lstlisting}
+
 
 \subsubsection{hipFFT API change for cuFFT parity}
 
