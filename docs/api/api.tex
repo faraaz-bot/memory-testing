@@ -22,7 +22,8 @@
   keywordstyle=\color{blue}\ttfamily,
   stringstyle=\color{red}\ttfamily,
   commentstyle=\color{BrickRed}\ttfamily,
-  morecomment=[l][\color{magenta}]{\#}
+  morecomment=[l][\color{magenta}]{\#},
+  showstringspaces=false
 }
 
 \usepackage{breqn}
@@ -595,6 +596,7 @@ const double twopi = 6.283185307179586;
 double factor = (1.0 / 8.0)* (0.5 + 0.5  * cos(twopi * idx0 / 8);
 out0 = factor * in0;
 ";
+rocfft_specop_set_op(readop, readop_str.c_str());
 
 // Set up description and plan:
 rocfft_plan_description description = nullptr;
@@ -643,24 +645,52 @@ rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
                                        size_t outputs,
                                        size_t* output_list);
 \end{lstlisting}
-API options:
-\begin{itemize}
-\item Assume all fields are used:
-  \begin{lstlisting}
-rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
-  \end{lstlisting}
-\item
-  \begin{lstlisting}
-rocfft_status rocfft_specop_set_types(rocfft_specop specop,
-                                     field_type_enum data_types);
-rocfft_status rocfft_specop_set_types(rocfft_specop specop,
-                                      size_t data_size);
-  \end{lstlisting}
-\item
-  \begin{lstlisting}
-rocfft_status rocfft_specop_set_fields(rocfft_specop  specop, size_t ninputs, size_t outputs);}
-  \end{lstlisting}
-\end{itemize}
+API options: specify multiple ops and have each op work on a subset of
+inputs/outputs.  Or detect this by whether the op string uses
+\lstinline{outX}, etc?
+
+
+\subsubsection{Sample Application}
+
+Compute a gradient in Fourier space form a single input.
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8, 8};
+
+// Set up description and plan with one input and two outputs:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_field ifield = nullptr;
+rocfft_field_create(&ifield);
+rocfft_plan_description_add_outfield(description, ifield);
+// We can add the same field twice, or create two fields and add both.
+rocfft_plan_description_add_outfield(description, ifield);
+
+// Set up a spectral operation on output:
+rocfft_specop writeop;
+rocfft_specop_create(&writeop);
+std::string writeop_str = "
+const int N0 = 8;
+const double Lx = 2.0, Ly = 2.0; // Physical constants
+const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
+const double ky = 2 * pi * idx1 / L1;
+const hipComplexDouble I(0,1);
+out0 = in0 * I * kx * in0;
+out1 = in0 * I * ky * in0;
+";
+rocfft_specop_set_op(writeop, writeop_str.c_str());
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_writep(description, writeop);
+// FIXME: create plan, make r2c.
+
+// Execute
+std::vector<void *> obuf(2);
+void* ibuf; // We skip allocation and input generation.
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
+\end{lstlisting}
 
 \subsubsection{hipFFT API change for cuFFT parity}
 
@@ -668,10 +698,7 @@ hipFFT API additions: none.
 
 \subsubsection{hipFFT API change for rocFFT parity}
 \noindent
-hipFFT API additions:
-\begin{lstlisting}
-  FIXME
-\end{lstlisting}
+hipFFT API additions: FIXME
 
 \newpage
 \subsection{Round Trip Multi Spectral Ops Without Padding}
@@ -701,15 +728,10 @@ rocfft_status rocfft_plan_description_set_midop(
                rocfft_plan_description description,
                const rocfft_specop specop);
 \end{lstlisting}
-Optional additions:
-\begin{lstlisting}
-rocfft_status rocfft_desc_set_precision_roundtrip(
-                   rocfft_plan_description description,
-                   size_t numprecision_in,
-                   rocfft_precision* precision_in,
-                   size_t numprecision_out,
-                   rocfft_precision* precision_out);
-\end{lstlisting}
+
+\subsubsection{Sample Application}
+
+FIXME: Poisson solve
 
 
 \subsubsection{hipFFT API change for cuFFT parity}
@@ -792,6 +814,16 @@ rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description de
                                                       size_t numprecision,
                                                       rocfft_precision* precisions);
 \end{lstlisting}
+
+\begin{lstlisting}
+rocfft_status rocfft_desc_set_precision_roundtrip(
+                   rocfft_plan_description description,
+                   size_t numprecision_in,
+                   rocfft_precision* precision_in,
+                   size_t numprecision_out,
+                   rocfft_precision* precision_out);
+\end{lstlisting}
+
 
 \subsubsection{hipFFT API change for cuFFT parity}
 
