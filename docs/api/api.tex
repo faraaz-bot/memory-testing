@@ -181,9 +181,10 @@ Notes:
 \end{itemize}
 Optional rocFFT API change:
 \begin{lstlisting}
-rocfft_status rocfft_plan_description_set_devices(rocfft_plan_description description,
-                                                  void *devices,
-                                                  size_t number_of_devices);
+rocfft_status
+rocfft_plan_description_set_devices(rocfft_plan_description description,
+                                   void *devices,
+                                   size_t number_of_devices);
 \end{lstlisting}
 Also note that the decomposition dimension has be lower than the
 transform dimension.
@@ -593,7 +594,7 @@ rocfft_specop readop;
 rocfft_specop_create(&specop);
 std::string readop_str ="
 const double twopi = 6.283185307179586;
-double factor = (1.0 / 8.0)* (0.5 + 0.5  * cos(twopi * idx0 / 8);
+const double factor = (1.0 / 8.0)* (0.5 + 0.5  * cos(twopi * idx0 / 8);
 out0 = factor * in0;
 ";
 rocfft_specop_set_op(readop, readop_str.c_str());
@@ -729,9 +730,43 @@ rocfft_status rocfft_plan_description_set_midop(
                const rocfft_specop specop);
 \end{lstlisting}
 
+FIXME: how do we specify extra middle fields?
+
 \subsubsection{Sample Application}
 
-FIXME: Poisson solve
+Poisson solve
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8, 8};
+
+// Set up description and plan with one input and one output
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+
+// Set up a spectral operation on in the middle:
+rocfft_specop midop;
+rocfft_specop_create(&midop);
+std::string op_str = "
+const int N0 = 8;
+const double Lx = 2.0, Ly = 2.0; // Physical constants
+const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
+const double ky = 2 * pi * idx1 / L1;
+const douoble denom = (kx ==0 && ky ==0) ? 1.0 : 1.0 / (kx*kx +ky*ky);
+out0 = in0 * denom;
+";
+rocfft_specop_set_op(midop, op_str.c_str());
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_midop(description, midop);
+// FIXME: create plan, make r2c roundtrip.
+
+// Execute
+std::vector<void *> obuf(2);
+void* ibuf; // We skip allocation and input generation.
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
+\end{lstlisting}
 
 
 \subsubsection{hipFFT API change for cuFFT parity}
@@ -768,6 +803,12 @@ rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
                                             size_t conv_order,
                                              conv_enum_type conv_type);
 \end{lstlisting}
+
+FIXME: NB: convolution midops do not get the index information.
+
+\subsubsection{Sample application}
+
+FIXME: normal binary convolution.
 
 \subsubsection{hipFFT API change for cuFFT parity}
 
