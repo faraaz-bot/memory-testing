@@ -641,10 +641,8 @@ hipFFT API additions:
 \end{itemize}
 \begin{lstlisting}
 rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
-                                       size_t ninputs,
-                                       size_t* input_list,
-                                       size_t outputs,
-                                       size_t* output_list);
+                                      size_t ninputs,
+                                      size_t outputs);
 \end{lstlisting}
 API options: specify multiple ops and have each op work on a subset of
 inputs/outputs.  Or detect this by whether the op string uses
@@ -653,7 +651,10 @@ inputs/outputs.  Or detect this by whether the op string uses
 
 \subsubsection{Sample Application}
 
-Compute a gradient in Fourier space form a single input.
+Compute a gradient in Fourier space form a single input:
+\begin{equation}
+  u \in \mathbb{R}^2 \rightarrow \(ik_x \hat{u}, ik_y \hat{u}\).
+\end{equation}
 \begin{lstlisting}
 // Transform parameters:  
 std::vector<size_t> length = {8, 8};
@@ -668,9 +669,9 @@ rocfft_plan_description_add_outfield(description, ifield);
 rocfft_plan_description_add_outfield(description, ifield);
 
 // Set up a spectral operation on output:
-rocfft_specop writeop;
-rocfft_specop_create(&writeop);
-std::string writeop_str = "
+rocfft_specop op;
+rocfft_specop_create(&op);
+std::string op_str = "
 const int N0 = 8;
 const double Lx = 2.0, Ly = 2.0; // Physical constants
 const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
@@ -679,17 +680,27 @@ const hipComplexDouble I(0,1);
 out0 = in0 * I * kx * in0;
 out1 = in0 * I * ky * in0;
 ";
-rocfft_specop_set_op(writeop, writeop_str.c_str());
+rocfft_status rocfft_specop_set_fields(op, 1, 2);
+rocfft_specop_set_op(op, op_str.c_str());
 
 // Set up description and plan:
 rocfft_plan_description description = nullptr;
 rocfft_plan_description_create(&description);
-rocfft_plan_description_set_writep(description, writeop);
-// FIXME: create plan, make r2c.
+rocfft_plan_description_set_writep(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace,
+                   rocfft_transform_type_real_forward,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
+
 
 // Execute
 std::vector<void *> obuf(2);
-void* ibuf; // We skip allocation and input generation.
+void* ibuf; // We 
 rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
 \end{lstlisting}
 
@@ -730,11 +741,15 @@ rocfft_status rocfft_plan_description_set_midop(
                const rocfft_specop specop);
 \end{lstlisting}
 
-FIXME: how do we specify extra middle fields?
 
 \subsubsection{Sample Application}
 
-Poisson solve
+
+Poisson solve: given $\varphi\in\mathbb{R}^2$, find $u\in\mathbb{R}^2$ such
+that
+\begin{equation}
+  \nabla^2 u = \varphi.
+\end{equation}
 \begin{lstlisting}
 // Transform parameters:  
 std::vector<size_t> length = {8, 8};
@@ -744,27 +759,36 @@ rocfft_plan_description description = nullptr;
 rocfft_plan_description_create(&description);
 
 // Set up a spectral operation on in the middle:
-rocfft_specop midop;
-rocfft_specop_create(&midop);
+rocfft_specop op;
+rocfft_specop_create(&op);
 std::string op_str = "
 const int N0 = 8;
 const double Lx = 2.0, Ly = 2.0; // Physical constants
 const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
 const double ky = 2 * pi * idx1 / L1;
-const douoble denom = (kx ==0 && ky ==0) ? 1.0 : 1.0 / (kx*kx +ky*ky);
+const double denom = (kx == 0 && ky ==0 ) ? 1.0 : 1.0 / (kx*kx + ky*ky);
 out0 = in0 * denom;
 ";
-rocfft_specop_set_op(midop, op_str.c_str());
+rocfft_specop_set_op(op, op_str.c_str());
+rocfft_status rocfft_specop_set_fields(op, 1, 2);
 
 // Set up description and plan:
 rocfft_plan_description description = nullptr;
 rocfft_plan_description_create(&description);
-rocfft_plan_description_set_midop(description, midop);
-// FIXME: create plan, make r2c roundtrip.
+rocfft_plan_description_set_midop(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace, // or in-place
+                   rocfft_transform_type_real_forward_roundtrip,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
 
 // Execute
 std::vector<void *> obuf(2);
-void* ibuf; // We skip allocation and input generation.
+void* ibuf; // We skip allocation and input generation in this sample
 rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
 \end{lstlisting}
 
