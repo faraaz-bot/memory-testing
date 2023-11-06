@@ -754,10 +754,6 @@ that
 // Transform parameters:  
 std::vector<size_t> length = {8, 8};
 
-// Set up description and plan with one input and one output
-rocfft_plan_description description = nullptr;
-rocfft_plan_description_create(&description);
-
 // Set up a spectral operation on in the middle:
 rocfft_specop op;
 rocfft_specop_create(&op);
@@ -825,14 +821,65 @@ hipFFT API additions:
 \begin{lstlisting}
 rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
                                             size_t conv_order,
-                                             conv_enum_type conv_type);
-\end{lstlisting}
+                                            conv_enum_type conv_type);
+typedef enum rocfft_convolution_type_e
+{
+  rocfft_convolution_uncentered,
+  rocfft_convolution_centered,
+} rocfft_convolution_type;
 
-FIXME: NB: convolution midops do not get the index information.
+\end{lstlisting}
+Notes:
+\begin{enumerate}
+\item NB: convolution midops do not get the index information because
+  padding will mess with array dimensions.
+\item Normally real and non-Hermitian complex data has strictly
+  positive indices, so the padding is 1/2.  Hermitian-complex data, on
+  the other hand, typically has negative and positive indices, and one
+  can use 2/3 padding.  However, maybe the nonlinear Schroedinger
+  equation is just complex (I think?), and probably has negative
+  indices, so we would have to add the convolution type to sepecify
+  what's happening here.
+\end{enumerate}
 
 \subsubsection{Sample application}
 
-FIXME: normal binary convolution.
+Compute the convolution of the two real inputs $f$ and $g$.
+
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8};
+
+// Set up a spectral operation on in the middle:
+rocfft_specop op;
+rocfft_specop_create(&op);
+std::string op_str = "out0 = in0 * in1;";
+rocfft_specop_set_op(op, op_str.c_str());
+rocfft_status rocfft_specop_set_fields(op, 2, 1);
+// Since the transform is rocfft_transform_type_real_forward_roundtrip, a
+// second-order convolution implies 1/2 padding.
+rocfft_specop_set_conv_params(op, 2); 
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_midop(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace, // or in-place
+                   rocfft_transform_type_real_forward_roundtrip,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
+
+// Execute
+void* ibuf;
+void* obuf;
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf, null);
+\end{lstlisting}
+
 
 \subsubsection{hipFFT API change for cuFFT parity}
 
