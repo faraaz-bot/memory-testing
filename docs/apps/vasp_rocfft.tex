@@ -1,0 +1,176 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{VASP notes for rocFFT}
+\author{Malcolm Roberts, \texttt{malcolm.roberts@amd.com}}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+VASP, from a FFT library perspective, solves the nonlinear
+Schrodinger equations,
+\begin{dmath}
+  \label{nls}
+  i\partial_t\psi = -\frac{1}{2} \partial_x^2 \psi + \kappa \abs{\psi}^2\psi
+\end{dmath}
+using the pseudospectral method.  Equation~\eqref{nls} has a
+third-order nonlinearity, but also has other forms which may involve
+higher-order terms.  We note that $\psi$ is complex, and does not
+exhibit Hermitian symmetry.
+
+\section{The pseudospectral method and convolutions}
+
+The pseudospectral method uses a Fourier transform to linearize the
+spatial derivative, and transforms the nonlinear term into a
+convolution.  From my understanding, the wave numbers for $\psi$ are
+symmetric about the origin.  Let $\hat\psi$ denote the discrete
+Fourier transform of $\psi$.  Then,
+\begin{equation}
+  \hat\psi = \left\{\hat\psi_{\mathbf{k}} \right\},
+  \mathbf{k} = \(k_x, k_y, k_z\)
+\end{equation}
+where $k_x/k_0 \in \{-N_x +1, \dots, N_x -1\}$, and similarly for
+$k_y$ and $k_z$ (and we note that $k_0$ may have different values for
+different directions).  We refer to this type of data, where the
+indices are symmetric about the origin, as centred.
+
+The nonlinear term is mapped to a convolution:
+\begin{equation}
+  \abs{\psi}^2\psi
+  \xrightarrow[\mathcal{F}]{}
+  \widehat{\(\abs{\psi}^2\psi\)}_\ell
+  =
+  \sum_{a}\sum_{b}\sum_{c} \abs{\psi}_a \abs{\psi}_b \psi_c \delta_{\ell, a+b+c}.
+\end{equation}
+Direct computation of the convolution has complexity
+$\mathcal{O}(N^3)$ and relatively poor numerical accuracy; this can be
+improved by using an FFT-based method.  However, the resulting
+convolution has extra terms from aliasing.  In order to recover the
+original convolution, we need to remove these terms, ie dealias the
+FFT-based convolution.
+
+Phase-shift dealiasing and zero-padding are methods for dealiasing
+convolutions; we consider zero-padding here. For binary convolutions
+on 1D non-centred data, one must pad from length $N$ to length $2N-1$
+or more.  For centred data, one needs to pad from length $2N$ to
+length $3N$, which is referred to as $2/3$ padding.  Since the
+convolution from equation~\eqref{nls} is ternary, we must pad from
+length $2N$ to length $4N$ in order to fully dealias the convolution.
+
+rocFFT is exploring adding convolution operations (and other spectral
+operations, eg differentiation) to the rocFFT API.  In order to ensure
+that this is useful, we are trying to understand use cases and
+prototype API designs.
+
+Questions:
+\begin{itemize}
+\item Is there ever a NLS with quadratic nonlinearity?
+\item Is VASP (or other quantum simulators) always interested in
+  third-order nonlinearities?
+\item Do you use the rocFFT or hipFFT API for calling rocFFT?
+\end{itemize}
+
+\section{Problem sizes}
+
+From our last discussion, VASP uses very small FFTs; $32^3$ was
+mentioned.  This problem size actually fits in LDS/shared memory, so
+it's possible to compute this with a single global-memory round-trip.
+Currently, we compute this as a 2D kernel and a 1D kernel.  We may be
+able to compute this as a single kernel, which would reduce
+computation time and latency. We hope to eventually generate kernels
+for all problem sizes that fit in LDS, but knowing useful problem sizes
+would help prioritization.
+
+Questions:
+\begin{itemize}
+\item Besides $32^3$, what problem sizes are important?
+\end{itemize}
+
+\section{Sparsity and multi-gpu transforms}
+
+We are also scoping multi-gpu transforms, where we are hoping to add a
+brick-based decomposition.  The single-process multi-gpu functional
+implementation is scheduled for ROCm 6.0, and is available in the
+public github repository.  A feature that works here as well is to
+label certain bricks as sparse, ie as a region that is uniformly zero.
+The proposed rocFFT convolution routines would handle zero-padding
+internally, but other sparsity patterns can be handled by the
+brick-based API.  It was mentioned that, for VASP, the non-zero data
+is contained in the sphere inscribed in the cubic computational
+domain, which seems like a useful application for sparsity.
+
+
+Questions:
+\begin{itemize}
+\item What data decomposition can we expect from VASP?
+\item Is the inscribed sphere the general sparsity pattern?
+\end{itemize}
+
+\section{Memory management}
+
+rocFFT features an API for specifying work memory, which is specified
+at the execution stage
+(\lstinline{rocfft_execution_info_set_work_buffer}); this can help
+reduce memory footprint by allowing buffer-reuse.  This API isn't
+available in cuFFT, and not implemented in the hipFFT wrapper for the
+rocFFT back-end.  Also, rocFFT makes single-direction plans with a
+specific placement (ie in-place or out-of-place), so plans are more
+targeted, which means that we can look at fewer cases, which also
+helps reduce memory footprint.
+
+We are also looking at adding functionality to allow the user to
+prioritize minimizing memory footprint or minimizing execution time.
+
+Questions:
+\begin{itemize}
+\item How important would work buffer specification be for hipFFT?
+\item How high of a priority would optimizing for memory/time be for VASP?
+\end{itemize}
+
+\end{document}
+
+% LocalWords:  VASP FFT pseudospectral nls nonlinearity linearize ie
+% LocalWords:  dealias dealiasing rocFFT eg nonlinearities hipFFT LDS
+% LocalWords:  FFTs gpu ROCm github rocfft cuFFT
