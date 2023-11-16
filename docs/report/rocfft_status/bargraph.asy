@@ -8,6 +8,12 @@ struct bardata {
   real yhigh;
 }
 
+bool inverse = true;
+
+// TODO: make inverses an option.
+// TODO: line-up the data with the release number so that we don't have to
+// have the exact same version range.
+
 void readbarfiles(string[] filelist, bardata[][] data)
 {
     for(int n = 0; n < filelist.length; ++n)
@@ -27,6 +33,13 @@ void readbarfiles(string[] filelist, bardata[][] data)
 	dat.y = (real)fin;
 	dat.ylow = (real)fin;
 	dat.yhigh = (real)fin;
+
+	if(inverse) {
+	  dat.y = 1.0 / dat.y;
+	  real temp = dat.ylow;
+	  dat.ylow = 1.0 / dat.yhigh;
+	  dat.yhigh = 1.0 / dat.ylow;
+	}
 	
 	write(dat.label, dat.y, dat.ylow, dat.yhigh);
 
@@ -91,7 +104,6 @@ void drawbargraph(bardata[][] data, string[] legs, string[] otherlegs) {
       pair p3 = Scale((left[i], bottom));
       filldraw(p0--p1--p2--p3--cycle, p, black);
     }
-
    
     if(false)
       {
@@ -153,12 +165,6 @@ if (legendlist == "") {
     legendlist = filenames;
 }
 
-bool myleg = ((legendlist == "") ? false : true);
-string[] legends = set_legends(legendlist);
-for (int i = 0; i < legends.length; ++i) {
-  legends[i] = texify(legends[i]);
-}
-
 // TODO: the first column will eventually be text.
 string[] testlist = listfromcsv(filenames);
 
@@ -187,11 +193,64 @@ for(int i = 0; i < xyval[0].length; ++i) {
   legs.push(string(xyval[0][i].x));
 }
 
-drawbargraph(data, legs, legends);
+bool bargraph = true;
 
-xaxis(BottomTop);
-yaxis("Time (ms)", LeftRight, RightTicks);
+real[] speedups;
+for(int didx = 0; didx < data.length; ++didx) {
+  int dlength = data[didx].length;
+  real speedup = data[didx][0].y / data[didx][dlength-1].y;
+  if(inverse)
+    speedup = 1.0 / speedup;
+  speedups.push(speedup);
+}
+write(speedups);
 
-if(dolabel)
+bool myleg = ((legendlist == "") ? false : true);
+string[] legends = set_legends(legendlist);
+for (int i = 0; i < legends.length; ++i) {
+  legends[i] = texify(legends[i] + " speedup: " + string(speedups[i],4));
+}
+
+if(bargraph) {
+  drawbargraph(data, legs, legends);
+  xaxis(BottomTop);
+} else {
+  // line graph:
+  scale(Linear,Log);
+
+  string[] label;
+  
+  pair[][] yvals;
+  for(int didx = 0; didx < data.length; ++didx) {
+      pen graphpen = Pen(didx);
+      guide g = scale(0.5mm) * unitcircle;
+      marker mark = marker(g, Draw(graphpen + solid));
+
+    yvals.push(new pair[]);
+    for(int idx = 0; idx < data[didx].length; ++idx) {
+      if(didx == 0) {
+	label.push(data[didx][idx].label);
+      }
+      yvals[didx].push((idx,data[didx][idx].y));
+    }
+    //"asdf", //testlist[didx] + "adsf " +  (string)speedups[didx],
+    draw(graph(yvals[didx]),
+	 graphpen,
+	 legends[didx],
+	 mark);
+  }
+  //write(label);
+  //write(yvals);
+  xaxis(BottomTop, LeftTicks(new string(real x) {
+	return label[round(x)];}));
+}
+
+if(inverse) {
+  yaxis("Transforms per ms", LeftRight, RightTicks);
+} else {
+  yaxis("Time (ms)", LeftRight, RightTicks);
+}
+
+if(dolabel) {
   attach(legend(),point(plain.E),  20*plain.E);
-
+}
