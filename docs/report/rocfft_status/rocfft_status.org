@@ -7,7 +7,7 @@ complex_forward_len_43008_double_ip_batch_500_istride_1_CI_ostride_1_CI_idist_43
    
 ./mybootstrap.py -i cholla_mi100.dat -o cholla_mi100.mdat 
 and then use
-asy -f pdf bargraph.asy -u'dolabel=false;filenames="cholla_mi100.mdat"'
+asy -f pdf bargraph.asy     -u"legendlist='MI100,MI200,MI300'" -u "filenames='cholla_mi100.mdat,cholla_mi200.mdat,cholla_mi300.mdat'"
 mv bargraph.pdf vert.pdf
 ./pdf2emf vert.pdf
 
@@ -28,12 +28,14 @@ input files:
 1dbatch_mi50.dat
 1dbatch_mi100.dat
 1dbatch_mi200.dat
+1dbatch_mi300.dat
 
 commands:
 ./mybootstrap.py -i 1dbatch_mi50.dat -o 1dbatch_mi50.mdat
 ./mybootstrap.py -i 1dbatch_mi100.dat -o 1dbatch_mi100.mdat
 ./mybootstrap.py -i 1dbatch_mi200.dat -o 1dbatch_mi200.mdat
-asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi100.mdat,1dbatch_mi200.mdat';legendlist='MI50,MI100,MI250X'"
+./mybootstrap.py -i 1dbatch_mi300.dat -o 1dbatch_mi300.mdat
+asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi100.mdat,1dbatch_mi200.mdat,1dbatch_mi300.mdat';legendlist='MI50,MI100,MI250X,MI300';inverse=false"
 mv bargraph.pdf horizontal.pdf
 ./pdf2emf horizontal.pdf
 

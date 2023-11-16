@@ -8,7 +8,26 @@ struct bardata {
   real yhigh;
 }
 
+
+// Input data:
+string filenames = "";
+string secondary_filenames = "";
+string legendlist = "";
+
+// Graph formatting
+string xlabel = "Problem size type";
+string ylabel = "Time [s]";
+bool dolabel=true;
+bool dospeedups = false;
+
+
+string primaryaxis = "time";
+string secondaryaxis = "speedup";
 bool inverse = true;
+
+usersetting();
+
+
 
 // TODO: make inverses an option.
 // TODO: line-up the data with the release number so that we don't have to
@@ -225,21 +244,6 @@ texpreamble("\usepackage{bm}");
 
 size(400, 300, IgnoreAspect);
 
-// Input data:
-string filenames = "";
-string secondary_filenames = "";
-string legendlist = "";
-
-// Graph formatting
-string xlabel = "Problem size type";
-string ylabel = "Time [s]";
-bool dolabel=true;
-
-string primaryaxis = "time";
-string secondaryaxis = "speedup";
-
-usersetting();
-
 if(primaryaxis == "gflops") {
     ylabel = "GFLOP/s";
 }
@@ -295,8 +299,10 @@ write(speedups);
 
 bool myleg = ((legendlist == "") ? false : true);
 string[] legends = set_legends(legendlist);
-for (int i = 0; i < legends.length; ++i) {
-  legends[i] = texify(legends[i] + " speedup: " + string(speedups[i],4));
+if(dospeedups) {
+  for (int i = 0; i < legends.length; ++i) {
+    legends[i] = texify(legends[i] + " speedup: " + string(speedups[i],4));
+  }
 }
 
 if(bargraph) {
