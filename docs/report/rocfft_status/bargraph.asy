@@ -51,82 +51,170 @@ void readbarfiles(string[] filelist, bardata[][] data)
 }
 
 void drawbargraph(bardata[][] data, string[] legs, string[] otherlegs) {
-  // Let's go to the bar, eh?
-
   // Assumption: same number of data points.
 
-  int nbars = data.length;
+  int ncase = data.length;
 
-  real width = 1.0 / nbars;
+  string[] barkeys;
+  // FIXME: try and figure out which is the first label.
+  // What happens if the labels are all unique?  I guess we default
+  // to file ordering to break these kinds of ties.
+  
+  // Start with the first file.  If the first key is first or not present
+  // in the other files, then this is the first barekey.  If it's second in
+  // the other files, then re-start the search looking for the key before
+  // the first key.
+  // When we are happy that we've found a key, pop it from the other files.
+  // FIXME: what about (a,b) (b,a)?
+  string[][] allkeys;
+  for(int icase = 0; icase < ncase; ++icase) {
+    allkeys.push(new string[]);
+    for(int idx = 0; idx < data[icase].length; ++idx) {
+      allkeys[icase].push(data[icase][idx].label);
+    }
+  }
+  
+  //write("allkeys:");
+  //write(allkeys);
+  if(ncase == 0)
+    return;
+
+  while(allkeys.length > 0) {
+    int mycase = 0;
+    string key = allkeys[mycase][0];
+    //write(key);
+    bool pushkey = true;
+    do {
+      for(int icase = 0; icase < allkeys.length; ++icase) {
+	if(key != allkeys[icase][0]) {
+	  // See if the key shows up later:
+	  for(int idx = 1; idx < allkeys[icase].length; ++idx) {
+	    if(key == allkeys[icase][idx]) {
+	      key = allkeys[icase][idx];
+	      pushkey = false;
+	      break;
+	    }
+	  }
+	}
+      }
+      // TODO: if the current key shows up later in another case,
+      // switch to the first key in the other case.
+    } while(!pushkey);
+
+    barkeys.push(key);
+    for(int icase = 0; icase < allkeys.length; ++icase) {
+      allkeys[icase].delete(0);
+    }
+
+    int nncase = allkeys.length;
+    for(int icase = nncase-1; icase >= 0; --icase ) {
+      if(allkeys[icase].length == 0) {
+	allkeys.delete(icase);
+      }
+    }
+  }
+  //write("barkeys");
+  //write(barkeys);
+
+  
+  real width = 1.0 / ncase;
   real skip = 0.5;
   
   // Loop through all the data sets.
-  for(int n = 0; n < nbars; ++n) {
-    pen p = Pen(n); // + opacity(0.5);
-    if(n == 2)
+  for(int icase = 0; icase < ncase; ++icase) {
+    pen p = Pen(icase); // + opacity(0.5);
+    if(icase == 2)
       p = deepgreen;
 
-    int len = data[n].length;
+    int len = data[icase].length;
 
+    int nbar = barkeys.length;
+    
     // Set up the left and right sides of the bars.
-    real[] left = new real[len];
-    real[] right = new real[len];
-    left[0] = n * width;
-    for(int i = 1; i < len; ++i) {
-      left[i] = left[i - 1] + nbars * width + skip;
+    real[] left = new real[nbar];
+    real[] right = new real[nbar];
+    left[0] = icase * width;
+    for(int i = 1; i < nbar; ++i) {
+      left[i] = left[i - 1] + ncase * width + skip;
     }
-    for(int i = 0; i < len; ++i) {
+    for(int i = 0; i < nbar; ++i) {
       right[i] = left[i] + width;
     }
     
     // Draw an invisible graph to set up the axes.
-    real[] fakex = new real[len];
+    real[] fakex = new real[nbar];
     fakex[0] = left[0];
     for(int i = 1; i < fakex.length; ++i) {
       fakex[i] = right[i];
     }
     real[] yvals = new real[len];
+    real maxy = -infinity;
     for(int i = 0; i < len; ++i) {
-      yvals[i] = data[n][i].y;
+      if(maxy < data[icase][i].y) {
+	maxy = data[icase][i].y;
+      }
     }
-    draw(graph(left, yvals), invisible, legend = Label(otherlegs[n], p));
-    //draw(graph(left, yvals), invisible); 
 
-
-    // TOTO: in log plots, compute a better bottom.
+    for(int ibar = 0; ibar < nbar; ++ibar) {
+      bool found = false;
+      real yval = -infinity;
+      for(int i = 0; i < len; ++i) {
+	if(barkeys[ibar] == data[icase][i].label) {
+	  found = true;
+	  yval = data[icase][i].y;
+	  break;
+	}
+      }
+      yvals[ibar] = found ? yval : maxy;
+	
+    }
+    
+    {
+      // FIXME: work this out.  Max of the cases?
+      draw(graph(left, yvals), invisible, legend = Label(otherlegs[icase], p));
+      //draw(graph(left, yvals), invisible); 
+    }
+    
+    // TODO: in log plots, compute a better bottom.
     real bottom = 0.0;
     
     // Draw the bars
-    for(int i = 0; i < data[n].length; ++i) {
-      pair p0 = Scale((left[i], data[n][i].y));
-      pair p1 = Scale((right[i], data[n][i].y));
-      pair p2 = Scale((right[i], bottom));
-      pair p3 = Scale((left[i], bottom));
-      filldraw(p0--p1--p2--p3--cycle, p, black);
+    for(int ibar = 0; ibar < barkeys.length; ++ibar) {
+      string key = barkeys[ibar];
+      //write(icase);
+      //write(key);
+      for(int idx = 0; idx < data[icase].length; ++idx) {
+	if(key == data[icase][idx].label) {
+	  pair p0 = Scale((left[ibar], data[icase][idx].y));
+	  pair p1 = Scale((right[ibar], data[icase][idx].y));
+	  pair p2 = Scale((right[ibar], bottom));
+	  pair p3 = Scale((left[ibar], bottom));
+	  filldraw(p0--p1--p2--p3--cycle, p, black);
+	}
+      }
     }
    
     if(false)
       {
 	// Draw the bounds:
-	for(int i = 0; i < data[n].length; ++i) {
+	for(int i = 0; i < data[icase].length; ++i) {
 	  real xval = 0.5 * (left[i] + right[i]);
-	  pair plow = (xval, data[n][i].ylow);
+	  pair plow = (xval, data[icase][i].ylow);
 	  dot(plow);
-	  pair phigh = (xval, data[n][i].yhigh);
+	  pair phigh = (xval, data[icase][i].yhigh);
 	  dot(phigh);
 	  draw(plow--phigh);
 	  draw(plow-(0.25*width)--plow+(0.25*width));
 	  draw(phigh-(0.25*width)--phigh+(0.25*width));
 	}
       }
-    
-    
+        
     // This is there the legends go
-    if(n == nbars - 1) {
-      for(int i = 0; i <  data[n].length; ++i) {
-	pair p = (0.5 * nbars * width + i * (skip + nbars * width), 0);
+    if(icase == ncase - 1) {
+      for(int i = 0; i <  nbar; ++i) {
+	pair p = (0.5 * ncase * width + i * (skip + ncase * width), 0);
 	// 	//label(rotate(90) * Label(xleg[i]), align=S, p);
-	label(Label(data[n][i].label), align=S, p);
+	label(Label(barkeys[i]), align=S, p);
       }
     }
     
