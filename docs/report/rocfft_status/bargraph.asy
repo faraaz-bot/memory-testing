@@ -1,6 +1,9 @@
 import graph;
 import utils;
 
+import palette;
+import colormap;
+
 struct bardata {
   string label;
   real y;
@@ -27,6 +30,28 @@ bool inverse = true;
 
 usersetting();
 
+pen penpicker(int n) {
+  return tab10.palette()[n];
+  if(n == 0)
+    return RGB(179, 0, 0);
+  if(n ==1)
+    return RGB(124, 17, 88);
+  if(n==2)
+    return RGB(68, 33, 175);
+  if(n==3)
+    return RGB(26, 83, 255);
+  if(n==4)
+    return RGB(13, 136, 230);
+  if(n==5)
+    return RGB(0, 183, 199);
+  if(n==6)
+    return RGB(90, 212, 90);
+  if(n==7)
+    return RGB(139, 224, 78);
+  if(n==8)
+    return RGB(235, 220, 120);
+  return Pen(n);
+}
 
 
 // TODO: make inverses an option.
@@ -141,7 +166,7 @@ void drawbargraph(bardata[][] data, string[] legs, string[] otherlegs) {
   
   // Loop through all the data sets.
   for(int icase = 0; icase < ncase; ++icase) {
-    pen p = Pen(icase); // + opacity(0.5);
+    pen p = penpicker(icase); // + opacity(0.5);
     if(icase == 2)
       p = deepgreen;
 
@@ -316,7 +341,7 @@ if(bargraph) {
   
   pair[][] yvals;
   for(int didx = 0; didx < data.length; ++didx) {
-      pen graphpen = Pen(didx);
+      pen graphpen = penpicker(didx);
       guide g = scale(0.5mm) * unitcircle;
       marker mark = marker(g, Draw(graphpen + solid));
 

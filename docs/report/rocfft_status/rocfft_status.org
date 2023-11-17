@@ -1,14 +1,14 @@
-https://amdcloud-my.sharepoint.com/:p:/r/personal/dancyca2_amd_com/_layouts/15/doc2.aspx?sourcedoc=%7B409B03F7-8CCE-4B7C-A7C1-3ABFEDCA2CB1%7D&file=FFT%20Status.pptx
-&PreviousSessionID=2d91445d-dd15-cf44-4648-35949a03d50b
+https://amdcloud.sharepoint.com/:p:/r/sites/MLSELibrariesDevelopment/_layouts/15/Doc.aspx?sourcedoc=%7BEA2B7888-504D-4E24-A1CB-9DC9880D18B1%7D&file=rocFFT%20Status%20Q3%202023.pptx
 * vertical tasting:
 
 complex_forward_len_43008_double_ip_batch_500_istride_1_CI_ostride_1_CI_idist_43008_odist_43008_ioffset_0_0_ooffset_0_0
 
    
 ./mybootstrap.py -i cholla_mi100.dat -o cholla_mi100.mdat 
+./mybootstrap.py -i cholla_mi200.dat -o cholla_mi200.mdat 
+./mybootstrap.py -i cholla_mi300.dat -o cholla_mi300.mdat 
 and then use
-asy -f pdf bargraph.asy     -u"legendlist='MI100,MI200,MI300'" -u "filenames='cholla_mi100.mdat,cholla_mi200.mdat,cholla_mi300.mdat'"
-mv bargraph.pdf vert.pdf
+asy -f pdf bargraph.asy -u"legendlist='MI100,MI200,MI300'" -u "filenames='cholla_mi100.mdat,cholla_mi200.mdat,cholla_mi300.mdat';dospeedups=true" -o vert.pdf
 ./pdf2emf vert.pdf
 
 MI100 with rocm 5.3 base and vbios 37:
@@ -35,8 +35,7 @@ commands:
 ./mybootstrap.py -i 1dbatch_mi100.dat -o 1dbatch_mi100.mdat
 ./mybootstrap.py -i 1dbatch_mi200.dat -o 1dbatch_mi200.mdat
 ./mybootstrap.py -i 1dbatch_mi300.dat -o 1dbatch_mi300.mdat
-asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi100.mdat,1dbatch_mi200.mdat,1dbatch_mi300.mdat';legendlist='MI50,MI100,MI250X,MI300';inverse=false"
-mv bargraph.pdf horizontal.pdf
+asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi100.mdat,1dbatch_mi200.mdat,1dbatch_mi300.mdat';legendlist='MI50,MI100,MI250X,MI300';inverse=false" -o horizontal.pdf
 ./pdf2emf horizontal.pdf
 
 * General benchmark test:
