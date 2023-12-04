@@ -24,20 +24,20 @@ int main()
         input[i] = 1.0 / (1.0 + i);
     }
 
+    std::cout << "hip_out:\n";
     auto hip_out = hip_data(Nx, Ny, gpus, input);
-    std::cout << "hip_out:";
     for(int idx = 0; idx < hip_out.size(); ++idx) {
         for(const auto&val : hip_out[idx]) {
-            std::cout << " " << val;
+	  //std::cout << " " << val;
         }
         std::cout << "\n";
     }
-    
+
+    std::cout << "cuda_out:\n";
     auto cuda_out = cuda_data(Nx, Ny, gpus, input);
-    std::cout << "cuda_out:";
     for(int idx = 0; idx < cuda_out.size(); ++idx) {
         for(const auto&val : cuda_out[idx]) {
-            std::cout << " " << val;
+	  //std::cout << " " << val;
         }
         std::cout << "\n";
     }

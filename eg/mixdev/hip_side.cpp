@@ -9,7 +9,7 @@ std::vector<std::vector<std::complex<double>>> hip_data(const int Nx,
                                                         std::vector<int> &gpus,
                                                         std::vector<std::complex<double>> & input)
 {
-    std::cout << "cufftXt version\n";    
+    std::cout << "hipftXt version\n";    
 
 
     hipLibXtDesc* desc; // input descriptor
