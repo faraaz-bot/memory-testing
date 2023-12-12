@@ -45,3 +45,13 @@ suites:
 dsp ->unbatched_1d
 distribbuted transforms -> batched_1d
 molecular dynamics -> md
+* speedups across versions
+mi100 vs 4.0
+4.0: 1
+5.0: 1.809818367013315
+6.0: 2.156306554111218
+
+mi100: 5 to 6: 1.1881228433654136
+
+mi200: 
+5.0to6.0: 0.938887471860951
