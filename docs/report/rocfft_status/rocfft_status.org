@@ -55,3 +55,6 @@ mi100: 5 to 6: 1.1881228433654136
 
 mi200: 
 5.0to6.0: 0.938887471860951
+
+asy -f pdf bargraph.asy -u"filenames='gmean_mi100.mdat';dolabel=false;inverse=false;ylabel='Geometric Mean Speedup'" -o gmean_mi100.pdf
+pdf2emf gmean_mi100.pdf

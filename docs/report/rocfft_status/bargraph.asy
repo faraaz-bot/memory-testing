@@ -367,7 +367,7 @@ if(bargraph) {
 if(inverse) {
   yaxis("Transforms per ms", LeftRight, RightTicks);
 } else {
-  yaxis("Time (ms)", LeftRight, RightTicks);
+  yaxis(ylabel, LeftRight, RightTicks);
 }
 
 if(dolabel) {
