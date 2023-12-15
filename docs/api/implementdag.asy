@@ -19,7 +19,7 @@ block api         = roundrectangle(Label("API Proposal"),     (0,-dy));
 block oneway = roundrectangle(Label("One-way ops"), (xop,-2dy));
 block onewayfields = roundrectangle(Label("Multi-valued one-way"), (xop,-3dy));
 block twoway = roundrectangle(Label("Round-trip unpadded ops"), (xop,-4dy));
-block twowaypad = roundrectangle(Label("Round-trip padded ops"), (xop,-5dy));
+block twowaypad = roundrectangle(Label("Convolution"), (xop,-5dy));
 
 block fields = roundrectangle(Label("Fields"), (0,-2dy));
 block brickdata = roundrectangle(Label("Brick decomposition"), (0,-3dy));
