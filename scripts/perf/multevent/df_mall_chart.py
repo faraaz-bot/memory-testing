@@ -3,6 +3,7 @@
 import sys
 import pandas as pd
 import plotext as plt
+import argparse
 
 # from tabulate import tabulate #debug only
 
@@ -67,7 +68,7 @@ def plot_mall_chart(df):
                 "Header doesn't match on MI300A! There might some changes from multevent csv."
             )
     elif len(df.columns) == 5:  # MI300X, not tested yet
-        print(df.columns)
+        # print(df.columns)
         if (
             df.columns[0] != "IP"
             or df.columns[1] != "GPUDF_0"
@@ -139,9 +140,21 @@ if __name__ == "__main__":
     """
     Plot key metrics of MALL for MI300 GPU with given csv generated from multevent.
     """
+    # parse args
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s',
+                        '--start_line',
+                        default=18,
+                        type=int,
+                        help='Specify the line start to read.')
+
+    parser.add_argument("df_file", nargs=argparse.REMAINDER)
+
+    args = parser.parse_args()
+
     df = pd.read_csv(
-        sys.argv[1],
-        header=18,  # pick up specific line holding AID# as the header
+        args.df_file[0],
+        header=args.start_line,  # pick up specific line holding AID# as the header
         # on_bad_lines='warn',
         skipinitialspace=True,
     ).dropna()
