@@ -131,6 +131,9 @@ def plot_mall_chart(df):
 
             ss += plt.build() + "\n"
 
+            # Todo: maybe all in plotext
+            # plt.save_fig("./debug.html", keep_colors = True, append = True)
+
         ss += "\n" + "-" * 160 + "\n"
 
     return ss
