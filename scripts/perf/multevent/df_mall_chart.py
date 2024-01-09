@@ -67,12 +67,13 @@ def plot_mall_chart(df):
                 "Header doesn't match on MI300A! There might some changes from multevent csv."
             )
     elif len(df.columns) == 5:  # MI300X, not tested yet
+        print(df.columns)
         if (
             df.columns[0] != "IP"
             or df.columns[1] != "GPUDF_0"
             or df.columns[2] != "GPUDF_1"
             or df.columns[3] != "GPUDF_2"
-            or df.columns[3] != "GPUDF_3"
+            or df.columns[4] != "GPUDF_3"
         ):
             sys.exit(
                 "Header doesn't match  on MI300X! There might some changes from multevent csv."
