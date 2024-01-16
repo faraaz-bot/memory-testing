@@ -1,0 +1,3 @@
+https://gpuopen.com/learn/amd-lab-notes/amd-lab-notes-gpu-aware-mpi-readme/
+
+mpirun --mca pml ucx
