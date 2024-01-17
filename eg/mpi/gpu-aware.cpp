@@ -7,8 +7,6 @@
 
 
 int main(int argc, char **argv) {
-
-    int *d_buf = nullptr;
     MPI_Status status;
 
     const int N = 100;
@@ -23,7 +21,10 @@ int main(int argc, char **argv) {
     std::vector<int> h_buf(N);
 
     const size_t buf_size = h_buf.size() * sizeof(decltype(h_buf)::value_type);
-    hipMalloc(&d_buf, buf_size);
+    int *d_buf = nullptr;
+    if(mpi_rank == 0 || mpi_rank == 1) {
+        hipMalloc(&d_buf, buf_size);
+    }
     
     //initialize buffers
 
@@ -60,15 +61,17 @@ int main(int argc, char **argv) {
     if(mpi_rank == 1) {
         hipMemcpy(h_buf.data(), d_buf, buf_size, hipMemcpyDeviceToHost);
         for(int i = 0; i < N; ++i) {
-            // if(h_buf[i] != i)
-            //     printf("Error: buffer[%d]=%d but expected %dn", i, h_buf[i], i);
+            if(h_buf[i] != i)
+                printf("Error: buffer[%d]=%d but expected %dn", i, h_buf[i], i);
         }
-        //fflush(stdout);
-        //printf("all good!\n");
+        fflush(stdout);
+        printf("all good!\n");
     }
 
     //free buffers
-    hipFree(d_buf);
+    if(mpi_rank == 0 || mpi_rank == 1) {
+        hipFree(d_buf);
+    }
 	
     MPI_Finalize();
 }
