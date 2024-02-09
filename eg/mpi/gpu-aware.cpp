@@ -4,11 +4,39 @@
 #include <hip/hip_runtime.h>
 #include <mpi.h>
 #include <vector>
+#include <iostream>
 
+
+__global__ void multby2(int * data, const int N)
+{
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < N) 
+        data[idx] *= 2;
+}
+
+// Computes ceil(numerator/divisor) for integer types.
+template <typename intT1,
+          class = typename std::enable_if<std::is_integral<intT1>::value>::type,
+          typename intT2,
+          class = typename std::enable_if<std::is_integral<intT2>::value>::type>
+intT1 ceildiv(const intT1 numerator, const intT2 divisor)
+{
+    return (numerator + divisor - 1) / divisor;
+}
 
 int main(int argc, char **argv) {
     MPI_Status status;
+    MPI_Request request;
 
+    hipStream_t stream;
+    hipStreamCreate (&stream);
+
+    hipEvent_t mpi_event, h2d_event;
+    hipEventCreateWithFlags(&mpi_event, hipEventDisableTiming);
+    hipEventCreateWithFlags(&h2d_event, hipEventDisableTiming);
+    
+    //hipEventRecord(mpi_event, stream);
+    
     const int N = 100;
 
     MPI_Init(&argc,&argv);
@@ -42,16 +70,21 @@ int main(int argc, char **argv) {
     }
 
     if(mpi_rank == 0 || mpi_rank == 1) {
-        hipMemcpy(d_buf, h_buf.data(), buf_size, hipMemcpyHostToDevice);
+        hipMemcpyAsync(d_buf, h_buf.data(), buf_size, hipMemcpyHostToDevice, stream);
+        
     }
+    
+    hipEventRecord(h2d_event, stream);
+
+    hipEventSynchronize(h2d_event);
         
     //communication
     switch(mpi_rank) {
     case 0:
-        MPI_Send(d_buf, N, MPI_INT, 1, 123, MPI_COMM_WORLD);
+        MPI_Isend(d_buf, N, MPI_INT, 1, 123, MPI_COMM_WORLD, &request);
         break;
     case 1:
-        MPI_Recv(d_buf, N, MPI_INT, 0, 123, MPI_COMM_WORLD, &status);
+        MPI_Irecv(d_buf, N, MPI_INT, 0, 123, MPI_COMM_WORLD, &request);
         break;
     default:
         break;
@@ -59,19 +92,34 @@ int main(int argc, char **argv) {
 
     //validate results
     if(mpi_rank == 1) {
-        hipMemcpy(h_buf.data(), d_buf, buf_size, hipMemcpyDeviceToHost);
+
+        MPI_Wait(&request, &status);
+        
+        int blockSize = 512;
+        const int gridSize    = ceildiv(N, blockSize);
+        multby2<<<dim3(gridSize), dim3(blockSize), 0, stream>>>(d_buf, N);
+        
+        hipMemcpyAsync(h_buf.data(), d_buf, buf_size, hipMemcpyDeviceToHost, stream);
+        int nerror = 0;
         for(int i = 0; i < N; ++i) {
-            if(h_buf[i] != i)
-                printf("Error: buffer[%d]=%d but expected %dn", i, h_buf[i], i);
+            if(h_buf[i] != 2 * i) {
+                printf("Error: buffer[%d]=%d but expected %d\n", i, h_buf[i], 2 * i);
+                ++nerror;
+            }
         }
         fflush(stdout);
-        printf("all good!\n");
+        if(nerror == 0)
+            printf("all good!\n");
+        else
+            std::cout << "things didn't work!\n";
     }
 
     //free buffers
     if(mpi_rank == 0 || mpi_rank == 1) {
         hipFree(d_buf);
     }
-	
+    hipStreamSynchronize(stream);
+    hipStreamDestroy(stream);
+        
     MPI_Finalize();
 }
