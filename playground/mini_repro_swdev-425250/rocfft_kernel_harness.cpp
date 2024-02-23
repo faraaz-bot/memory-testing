@@ -798,7 +798,7 @@ void init_rtc(std::string const& gpu_arch)
     // nbatch
     kargs0.append_size_t(nbatch0);
     // lds padding
-    kargs0.append_unsigned_int(lds_bytes0);
+    kargs0.append_unsigned_int(lds_padding0);
     // callback params
     kargs0.append_ptr(nullptr);
     kargs0.append_ptr(nullptr);
@@ -837,7 +837,7 @@ void init_rtc(std::string const& gpu_arch)
 
     // if(!hardcoded_dim)
     {
-        kargs1.append_size_t(lengths1.size());
+        kargs1.append_size_t(dim1);
     }
     // lengths
     kargs1.append_ptr(lengths1.data());
@@ -846,7 +846,7 @@ void init_rtc(std::string const& gpu_arch)
     // nbatch
     kargs1.append_size_t(nbatch1);
     // lds padding
-    kargs1.append_unsigned_int(lds_bytes1);
+    kargs1.append_unsigned_int(lds_padding1);
     // callback params
     kargs1.append_ptr(nullptr);
     kargs1.append_ptr(nullptr);
@@ -884,7 +884,7 @@ void init_rtc(std::string const& gpu_arch)
 
     // if(!hardcoded_dim)
     {
-        kargs2.append_size_t(lengths2.size());
+        kargs2.append_size_t(dim2);
     }
     // lengths
     kargs2.append_ptr(lengths2.data());
@@ -893,7 +893,7 @@ void init_rtc(std::string const& gpu_arch)
     // nbatch
     kargs2.append_size_t(nbatch2);
     // lds padding
-    kargs2.append_unsigned_int(lds_bytes2);
+    kargs2.append_unsigned_int(lds_padding2);
     // callback params
     kargs2.append_ptr(nullptr);
     kargs2.append_ptr(nullptr);
