@@ -13,10 +13,17 @@ int main()
 {
     std::cout << "y'all\n";
 
+    // NB: Nx and Ny must be at least 32 for cuFFTXt.
     int Nx = 32;
     int Ny = 32;
     std::vector<int> gpus = {0, 0};
-
+    std::cout << "Nx: " << Nx << "\n";
+    std::cout << "Ny: " << Ny << "\n";
+    std::cout << "GPUs:";
+    for(auto gpu : gpus)
+        std::cout << " " << gpu;
+    std::cout << "\n";
+    
 
     std::vector<std::complex<double>> input(Nx * Ny);
 
@@ -46,18 +53,20 @@ int main()
     double maxdiff = 0.0;
     for(int idx = 0; idx < gpus.size(); ++idx) {
         std::cout << "buffer " << idx << "\n";
+        std::cout << "index\trocfft\t\t\tcufft\t\t\tdifference\n";
         for(int jdx = 0; jdx < hip_out[idx].size(); ++jdx) {
             double diff = std::norm(hip_out[idx][jdx] - cuda_out[idx][jdx]);
             if(diff > maxdiff)
                 maxdiff = diff;
-            std::cout << jdx << "\t"
-                      << hip_out[idx][jdx] << "\t"
-                      << cuda_out[idx][jdx] << "\t"
-                      << diff << "\n";
+            //if(jdx < 16)
+                std::cout << jdx << "\t"
+                          << hip_out[idx][jdx] << "\t"
+                          << cuda_out[idx][jdx] << "\t"
+                          << diff << "\n";
         }
     }
 
-    std::cout << "maxdiff: " << maxdiff << "\n";
+    std::cout << "maxdiff over separate buffers: " << maxdiff << "\n";
 
     double wholemaxdiff = 0.0;
     const int lastbufidx = hip_out.size() - 1;
@@ -66,7 +75,7 @@ int main()
         if(diff > wholemaxdiff)
             wholemaxdiff = diff;
     }
-    std::cout << "wholemaxdiff: " << wholemaxdiff << "\n";
+    std::cout << "maxdiff over XT-coped buffer: " << wholemaxdiff << "\n";
     
     return 0;
 }
