@@ -32,6 +32,8 @@ Copyright (C) 2022 - 2023 Advanced Micro Devices, Inc. All rights reserved.
 
 
 
+--------
+
 The below design doesn't cover multiple nodes/multiple devices.
 
 * Pre/intermediate/post processing fusion
@@ -67,7 +69,7 @@ If yes, check the available path/kernels to fuse.
     * For multiple dimensions FFT won't fit into MALL(>=MI300), batched sliced FFTs might help improve MALL hit rate.
 
 
-Remarks:
+* Remarks:
 
     * Typically, we don't think too much on leaf nodes fusion from sibling trees.
     * No optimazation for special strided FFTs unless important customers ask.
