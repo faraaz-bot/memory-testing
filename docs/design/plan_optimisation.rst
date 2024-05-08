@@ -39,8 +39,8 @@ The below design doesn't cover multiple nodes/multiple devices.
 
 * Pre/intermediate/post processing fusion
 
-Any pre/intermediate/post processing with FFT can be fused? (callback/spectral ops/convolution use case)
-If yes, check the available path/kernels to fuse.
+  Any pre/intermediate/post processing with FFT can be fused? (callback/spectral ops/convolution use case)
+  If yes, check the available path/kernels to fuse.
 
 * FFT algrithms selection
     * R2C/C2R
