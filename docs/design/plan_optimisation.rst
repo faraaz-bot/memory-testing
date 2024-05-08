@@ -36,6 +36,7 @@ Copyright (C) 2022 - 2023 Advanced Micro Devices, Inc. All rights reserved.
 
 The below design doesn't cover multiple nodes/multiple devices.
 
+
 * Pre/intermediate/post processing fusion
 
 Any pre/intermediate/post processing with FFT can be fused? (callback/spectral ops/convolution use case)
@@ -50,6 +51,7 @@ If yes, check the available path/kernels to fuse.
           * Bluestein for prime
 
 * Memory layout algrithmic selection
+
   Apply batched FFT on each dimension recrucevily. The key point is to choose
   the proper bandle FFTs for a workgroup to work with.
     * Multiple dimensions FFT decomposition
