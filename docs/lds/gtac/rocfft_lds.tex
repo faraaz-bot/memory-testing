@@ -4,6 +4,12 @@
 % To enable the double-blind submission format for the review process, use the following line
 \documentclass[blind]{gtac}
 
+\makeatletter
+\def\endthebibliography{%
+  \def\@noitemerr{\@latex@warning{Empty `thebibliography' environment}}%
+  \endlist
+}
+
 \usepackage{cite}
 
 % This is the watermark text. 
