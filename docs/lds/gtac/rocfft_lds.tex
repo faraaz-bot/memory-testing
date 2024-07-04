@@ -1,7 +1,3 @@
-% main.tex
-
-
-
 % To enable the camera-ready format, use the following line
 %\documentclass{gtac}
 
@@ -50,28 +46,26 @@ this article, we propose a model for FFT performance on ROCm GPUs as a function 
 (LDS) size and performance.
 \end{abstract}
 
-\keywords{FIXME}
+\keywords{FFT, GPU, LDS, ROCm}
 
 \section{Introduction}
 
-FIXME
-This template is to be used for all GTAC submissions (and is largely identical to the versions from
-previous GTACs). This document provides the raw Word file to be used, and we also provide some
-guidelines and advice.
+the fast Fourier transforms (FFT) is considered one of the most important algorithms of the modern
+era~\cite{strang1994wavelets} and has a variety of important uses from digital signal
+processing~\cite{sorensen1990efficient}, to computational fluid
+mechanics~\cite{chatterjee2018scaling}, to machine learning~\cite{mathieu2013fast}, and many others.
 
-The GTAC papers are meant to be “archival” manuscripts just like any external conference or journal
-paper. This means that the paper should be self-contained such that if an AMD engineer were to read
-this paper several years from now, the paper would still make sense without the reader having to
-understand the full technological context of the present day. As such, the introduction should
-provide some context and background to help such a future reader better understand the challenges
-and problems that we are trying to solve now with your work. However, as these papers will all be
-restricted for AMD-internal usage only, you may assume that the reader has a certain familiarity
-with our general business and technology areas. You do not need to (nor do you have the space) to
-provide an in-depth tutorial on, e.g., the principles of caching, the basic operations of
-field-effect transistors, or a history of neural networks starting at the original perceptron from
-1958.
+TODO: talk about N log N, so bandwidth-limited.  Also, all-to-all.  Thus, need LDS.
+
+TODO: cache-oblivious algorithms~\cite{frigo1999cache}
+
+TODO: L1DCC~\cite{bailey1990ffts}
+
+FIXME
 
 \subsection{Comments on Formatting}
+
+ref: \begin{verbatim}bailey-ffts_external_memory-1989.pdf\end{verbatim}
 
 Do not change the format of the main body of text, the headings, margin sizes, gutter width, title
 and author block, bibliography, etc.  This includes modifications to the font, font size, line
@@ -82,10 +76,6 @@ footnote. \footnote{A sample footnote.}
 Figures and tables should be accompanied by a numbered label and caption as shown in the Figure
 \ref{fig:1} and Figure \ref{fig:2}. Note that we used 'h' position for Figure \ref{fig:1} and 't'
 for Figure \ref{fig:2}.
-
-This is a sample citation \cite{lamport94}. You can also cite more than one paper \cite{lamport94,
-  greenwade93}. References do count toward the overall page limit.  The complete PDF must be no more
-than four pages.
 
 
 \begin{figure}[h] % 'h' means "here"
