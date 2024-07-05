@@ -25,7 +25,7 @@
 
 \usepackage{breqn}
 \usepackage{cancel}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 
 \def\({\left(}
 \def\){\right)}
@@ -77,15 +77,14 @@ computational complexity from $N^2$ to $N\log{}N$, and the numerical
 error from $\mathcal{O}\(\sqrt{N}\)$ to
 $\mathcal{O}\(\sqrt{\log{}N}\)$ ~\cite{gentleman1966fast}.
 
-On modern hardware, for all practical problem sizes, the FFT is
-bandwidth-limited.  Moreover, the data dependency diagram is
-all-to-all; every point of the output depends on every point of the
-input.  Effective data movemnet is an imporant factor in designing
-high-performace FFT implementations.  In this article, we explore how
-performance on SIMT (single-instruction multiple thread) architectures
-such as the GPU, and establish a theoretical performance model to help
-understand how changes in local data share (LDS) size affects GPU FFT
-performance.
+The FFT is bandwidth-limitedfor all practical problem sizes on modern
+hardware.  Moreover, the data dependency diagram is all-to-all; every
+point of the output depends on every point of the input.  Effective
+data movemnet is an imporant factor in designing high-performace FFT
+implementations.  In this article, we explore how performance on SIMT
+(single-instruction multiple thread) architectures such as the GPU,
+and establish a theoretical performance model to help understand how
+changes in local data share (LDS) size affects GPU FFT performance.
 
 \section{FFTs and hierarchical memory}
 
@@ -93,12 +92,17 @@ Bandwidth-limited algorithms such as the FFT can benefit greatly from
 the improved bandwidth and reduced memory latency provided by data
 caches, and the MI300 now contains three levels of
 cache~\footnote{\url{https://hipfft.readthedocs.io/en/rocm-6.1.2/reference/gpu-arch-specs.html}}.
+Taking advantage of these different levels and sizes of cache is
+labour-intensive, but this cost can be mitigated by making use of
+cache-oblivious algorithms~\cite{frigo1999cache}.  
+
 On the other hand, the LDS size has remained fixed at 64KiB on MI
-devices, while the NVIDIA V100 can be configured to have up to 96KiB,
-the P100 up to 164KiB, and the H100 has 224KiB.
+devices up to the MI300 series, while the NVIDIA V100 can be
+configured to have up to 96KiB, the P100 up to 164KiB, and the H100
+has 224KiB.  
 
 
-TODO: cache-oblivious algorithms~\cite{frigo1999cache}
+TODO: 
 
 TODO: L1DCC~\cite{bailey1990ffts}
 
