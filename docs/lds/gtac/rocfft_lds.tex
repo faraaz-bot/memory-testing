@@ -23,6 +23,15 @@
 \SetWatermarkColor{gray!20}
 
 
+\usepackage{breqn}
+\usepackage{cancel}
+\usepackage{hyperref}
+
+\def\({\left(}
+\def\){\right)}
+\def\[{\left[}
+\def\]{\right]}
+
 \title{FIXME: title \subtitle{Submitted Anonymously for Double-Blind Review}}
 
 
@@ -47,78 +56,98 @@ malcolm.roberts@amd.com}
 
 \thispagestyle{fancy}
 \begin{abstract}
-The performance of bandwidth-limited algorithms strongly depends on compute memory hierarchy.  In
-this article, we propose a model for FFT performance on ROCm GPUs as a function of shared memory
-(LDS) size and performance.
+The performance of bandwidth-limited algorithms strongly depends on
+compute memory hierarchy.  In this article, we propose a model for FFT
+performance on ROCm GPUs as a function of shared memory (LDS) size and
+performance.
 \end{abstract}
 
 \keywords{FFT, GPU, LDS, ROCm}
 
 \section{Introduction}
 
-the fast Fourier transforms (FFT) is considered one of the most important algorithms of the modern
-era~\cite{strang1994wavelets} and has a variety of important uses from digital signal
+the fast Fourier transforms (FFT) is considered one of the most
+important algorithms of the modern era~\cite{strang1994wavelets} and
+has a variety of important uses from digital signal
 processing~\cite{sorensen1990efficient}, to computational fluid
-mechanics~\cite{chatterjee2018scaling}, to machine learning~\cite{mathieu2013fast}, and many others.
+mechanics~\cite{chatterjee2018scaling}, to machine
+learning~\cite{mathieu2013fast}, and many others.  The FFT algorithm,
+first fully developed in~\cite{cooley1965algorithm}, reduces the
+computational complexity from $N^2$ to $N\log{}N$, and the numerical
+error from $\mathcal{O}\(\sqrt{N}\)$ to
+$\mathcal{O}\(\sqrt{\log{}N}\)$ ~\cite{gentleman1966fast}.
 
-TODO: talk about N log N, so bandwidth-limited.  Also, all-to-all.  Thus, need LDS.
+On modern hardware, for all practical problem sizes, the FFT is
+bandwidth-limited.  Moreover, the data dependency diagram is
+all-to-all; every point of the output depends on every point of the
+input.  Effective data movemnet is an imporant factor in designing
+high-performace FFT implementations.  In this article, we explore how
+performance on SIMT (single-instruction multiple thread) architectures
+such as the GPU, and establish a theoretical performance model to help
+understand how changes in local data share (LDS) size affects GPU FFT
+performance.
+
+\section{FFTs and hierarchical memory}
+
+Bandwidth-limited algorithms such as the FFT can benefit greatly from
+the improved bandwidth and reduced memory latency provided by data
+caches, and the MI300 now contains three levels of
+cache~\footnote{\url{https://hipfft.readthedocs.io/en/rocm-6.1.2/reference/gpu-arch-specs.html}}.
+On the other hand, the LDS size has remained fixed at 64KiB on MI
+devices, while the NVIDIA V100 can be configured to have up to 96KiB,
+the P100 up to 164KiB, and the H100 has 224KiB.
+
 
 TODO: cache-oblivious algorithms~\cite{frigo1999cache}
 
 TODO: L1DCC~\cite{bailey1990ffts}
 
+TODO: half-lds.  Also, register file size?
+
+\section{real/complex}
+
 FIXME
 
-\subsection{Comments on Formatting}
+\section{multi-dimensional}
 
-ref: \begin{verbatim}bailey-ffts_external_memory-1989.pdf\end{verbatim}
-
-Do not change the format of the main body of text, the headings, margin sizes, gutter width, title
-and author block, bibliography, etc.  This includes modifications to the font, font size, line
-spacing, kerning, etc. \ul{Abusing the \LaTeX~formatting to circumvent page/content limits can
-  result in an administrative rejection without further review.} This is a sample
-footnote. \footnote{A sample footnote.}
-
-Figures and tables should be accompanied by a numbered label and caption as shown in the Figure
-\ref{fig:1} and Figure \ref{fig:2}. Note that we used 'h' position for Figure \ref{fig:1} and 't'
-for Figure \ref{fig:2}.
+TODO: multi-dimensional
 
 
-\begin{figure}[h] % 'h' means "here"
-    \centering
-    \includegraphics[width=0.4\textwidth]{fig1}
-    \caption{Insert figures using includegraphics.}
-    \label{fig:1}
-\end{figure}
 
-\begin{figure}[h] % 't' means "here"
-    \centering
-    \includegraphics[width=0.4\textwidth]{fig2}
-    \caption{Statistics related to last year's AMD Cares Day of Service.}
-    \label{fig:2}
-\end{figure}
+%% Figures and tables should be accompanied by a numbered label and
+%% caption as shown in the Figure \ref{fig:1} and Figure
+%% \ref{fig:2}. Note that we used 'h' position for Figure \ref{fig:1} and
+%% 't' for Figure \ref{fig:2}.
 
-\subsection{Heading Level 2}
-This is an example of heading level 2.
+%% \begin{figure}[h] % 'h' means "here"
+%%     \centering
+%%     \includegraphics[width=0.4\textwidth]{fig1}
+%%     \caption{Insert figures using includegraphics.}
+%%     \label{fig:1}
+%% \end{figure}
 
-\subsubsection{Heading Level 3}
-This is an example of heading level 3.
-
-\section{Another Section (dummy text)}
-
-\lipsum[1-10] % generates dummy text
+%% \begin{figure}[h] % 't' means "here"
+%%     \centering
+%%     \includegraphics[width=0.4\textwidth]{fig2}
+%%     \caption{Statistics related to last year's AMD Cares Day of Service.}
+%%     \label{fig:2}
+%% \end{figure}
 
 
 \section{Conclusions}
-The conclusions section should state key conclusions and insights.  While perhaps not entirely
-“conclusive”, this is also a good place to discuss any limitations of the work covered in this paper
-(e.g., “we focused on the DL1 cache but have not yet extended the analysis to the L2”), speculations
-for future directions (e.g., “the results were promising for machine learning workloads, and due to
-our matrix-oriented optimizations we expect our technique to have some potential for scientific
-computing”), and any commentary on potential, planned, or actual impact on AMD (e.g., hardware,
-software, tools, methodologies, roadmap).  The last part is useful to provide the reviewers with
-additional context on the broader value of the work.  We recommend simply cut-and-pasting or
-re-summarizing the abstract as that does not really add any value to the paper.
+The conclusions section should state key conclusions and insights.
+While perhaps not entirely “conclusive”, this is also a good place to
+discuss any limitations of the work covered in this paper (e.g., “we
+focused on the DL1 cache but have not yet extended the analysis to the
+L2”), speculations for future directions (e.g., “the results were
+promising for machine learning workloads, and due to our
+matrix-oriented optimizations we expect our technique to have some
+potential for scientific computing”), and any commentary on potential,
+planned, or actual impact on AMD (e.g., hardware, software, tools,
+methodologies, roadmap).  The last part is useful to provide the
+reviewers with additional context on the broader value of the work.
+We recommend simply cut-and-pasting or re-summarizing the abstract as
+that does not really add any value to the paper.
 
 \begingroup
 \let\itshape\upshape
