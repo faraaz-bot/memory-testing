@@ -11,6 +11,8 @@
 }
 
 \usepackage{cite}
+\usepackage{listings}
+\lstset{language=C++}
 
 % This is the watermark text. 
 \SetWatermarkText{
@@ -73,11 +75,12 @@ processing~\cite{sorensen1990efficient}, to computational fluid
 mechanics~\cite{chatterjee2018scaling}, to machine
 learning~\cite{mathieu2013fast}, and many others.  The FFT algorithm,
 first fully developed in~\cite{cooley1965algorithm}, reduces the
-computational complexity from $N^2$ to $N\log{}N$, and the numerical
-error from $\mathcal{O}\(\sqrt{N}\)$ to
-$\mathcal{O}\(\sqrt{\log{}N}\)$ ~\cite{gentleman1966fast}.
+computational complexity from $\mathcal{O}\(N^2\)$ to
+$\mathcal{O}\(N\log{}N\)$, and the numerical error from
+$\mathcal{O}\(\sqrt{N}\)$ to $\mathcal{O}\(\sqrt{\log{}N}\)$
+~\cite{gentleman1966fast}.
 
-The FFT is bandwidth-limitedfor all practical problem sizes on modern
+The FFT is bandwidth-limited for all practical problem sizes on modern
 hardware.  Moreover, the data dependency diagram is all-to-all; every
 point of the output depends on every point of the input.  Effective
 data movemnet is an imporant factor in designing high-performace FFT
@@ -86,35 +89,194 @@ implementations.  In this article, we explore how performance on SIMT
 and establish a theoretical performance model to help understand how
 changes in local data share (LDS) size affects GPU FFT performance.
 
-\section{FFTs and hierarchical memory}
 
 Bandwidth-limited algorithms such as the FFT can benefit greatly from
 the improved bandwidth and reduced memory latency provided by data
 caches, and the MI300 now contains three levels of
-cache~\footnote{\url{https://hipfft.readthedocs.io/en/rocm-6.1.2/reference/gpu-arch-specs.html}}.
+cache\footnote{\url{https://hipfft.readthedocs.io/en/rocm-6.1.2/reference/gpu-arch-specs.html}}.
 Taking advantage of these different levels and sizes of cache is
 labour-intensive, but this cost can be mitigated by making use of
-cache-oblivious algorithms~\cite{frigo1999cache}.  
+cache-oblivious algorithms~\cite{frigo1999cache}.  On the other hand,
+the LDS size has remained fixed at 64KiB on MI devices up to the MI300
+series, while the NVIDIA V100 can be configured to have up to 96KiB,
+the P100 up to 164KiB, and the H100 has 224KiB.  Due to the SIMT
 
-On the other hand, the LDS size has remained fixed at 64KiB on MI
-devices up to the MI300 series, while the NVIDIA V100 can be
-configured to have up to 96KiB, the P100 up to 164KiB, and the H100
-has 224KiB.  
+FIXME: the basic types of algorithms, and how FFTs are representative
+of this kind of thing.
+
+\section{One-Dimensional Complex Transforms}
+\subsection{Single-pass Transforms}
+
+The discrete Fourier transform of the complex input
+$\{f_\ell\}_{\ell=0}^{N-1}$ of length $N$ is
+\begin{dmath}
+  \label{dft}
+  \{F_k\} = \sum_{\ell=0}^{N-1} e^{\frac{-2\pi{}ik\ell{}}{N}} \{f_\ell\}_{\ell=0}^{N-1}
+\end{dmath}
+which is denoted as $F = \mathcal{F}_N\(f\)$.  If the entirety of the
+input fits into LDS, then the transform can be computed with just one
+single pass to global memory.  This is more of less the optimal case
+for FFTs on GPUs; if the batch size is large enough, we can saturate
+the global memory bandwidth, but also avoid reading/writing to global
+memory repeatedly.  Calls to \lstinline{__syncthreads()} prevent
+race-conditions when moving data between LDS and CU registers.  One
+can reduce LDS requirements, allowing for more larger transforms or
+increasing occupancy, by communicating the real and imaginary
+components separately, though this comes at the expense of an
+additional \lstinline{__syncthreads()}.  Since the per-CU VGPR
+register file for MI100/MI200/MI300 is 521KiB with LDS limited to
+64KiB, it's theoretically possible to put up to eight times the LDS
+size per CU, allowing for even larger single-pass transforms.
+However, it's likely possible that some VGPRs will be used by other
+parts of the algorithm (eg the twiddle tables), and there is a
+tradeoff because increased synchronization and reduced occupancy must
+be taken into account.
+
+Strategies for different batch-sizes and optimizations objectives
+should also be considered.  In particular, for a double-precision
+complex FFT of length 512 with batch-size is 1, a latency-optimised
+transform would benefit from having multiple threads work on the same
+data; for larger batches (or, equivalently, throughput-optimised
+transforms) one could theoretically load each individual 512-length
+FFT into the VGPRs of a single SIMT thread.
+
+More LDS allows for a larger range of single-pass FFTs. For
+latency-optimised transforms, an increase in LDS reduces the number of
+CU-level synchronizations.  Calls to \lstinline{__syncthreads()},
+while less costly than loads/stores to global memory, are still
+relatively expensive.
+
+TODO: cost estimate
+
+\subsection{Multiple-Pass Transforms}
+
+As the problem size increases, the FFT will eventually not fit into
+the memory accessible to a single CU.  For larger FFTs, it's necessary
+to use global GPU memory to save intermediate results.  This technique
+makes use of the basic technique for writing cache-aware FFTs relies
+on the recursive decomposition inherent in the FFT algorithm, and was
+first given in~\cite{bailey1990ffts}.  If $N=N_1N_2$, then consider
+$F$ as a two-dimensional array by setting
+\begin{dmath}
+  \{F_k\}_{k=0}^{N-1}
+  =
+  \{F_{k_1 N_2 + k_2} \}_{\(k_1,k_2\)\in\{0,\dots,N_1-1\}\times\{0,\dots,N_2-1\}},
+\end{dmath}
+which allows one to decompose equation~\eqref{dft} as
+\begin{dmath}
+  \label{N1N2}
+  F_{N_1 k_2 + k_1}
+  =
+  \sum_{\ell = 0}^{N-1} e^{\frac{-2\pi{}i\ell{}(N_1 k_2 + k_1)}{N}} f_\ell
+  =
+  \sum_{\ell_1 = 0}^{N_1-1}
+  \sum_{\ell_2 = 0}^{N_2-1}
+  e^{\frac{-2\pi{}i\(\ell_1 N_2 + \ell_2\)(n_1 k_2 + k_1)}{N}}
+  f_{\ell_1 n_2 + \ell_2}
+  =
+  % FIXME: formatting
+  % https://tex.stackexchange.com/questions/44450/how-to-align-a-set-of-multiline-equations?
+  %% \sum_{\ell_1 = 0}^{N_1-1}
+  %% \sum_{\ell_2 = 0}^{N_2-1}
+  %% \cancelto{1}{e^{\frac{-2\pi{}i\(\ell_1 n_2 n_1 k_2 \)}{N}}}
+  %% e^{\frac{-2\pi{}i\(\ell_1 n_2  k_1\)}{n}}
+  %% e^{\frac{-2\pi{}i\(\ell_2n_1 k_2\)}{n}}
+  %% e^{\frac{-2\pi{}i\(\ell_2 k_1 \)}{n}}
+  %% f_{\ell_1 n_2 + \ell_2}
+  %% =
+  \sum_{\ell_2 = 0}^{n_2-1}
+  e^{\frac{-2\pi{}i\ell_2 k_2}{n_2}}
+  e^{\frac{-2\pi{}i\ell_2 k_1 }{n}}
+  \sum_{\ell_1 = 0}^{n_1-1}
+  e^{\frac{-2\pi{}i\ell_1 k_1}{n_1}}
+  f_{\ell_1 n_2 + \ell_2}.
+\end{dmath}
+we have used the fact that $e^{\frac{N_1N_2}{N}}=1$.  The length-$N_1$
+and $N_2$ sums are themselves Fourier transforms; this decomposition
+is exactly the heart of the FFT.  Note that the input and output are
+contiguous in different indices.  We can express the operation in
+equation~\eqref{N1N2} as
+\begin{dmath}
+  \mathcal{F}_{N_2}\[
+  \{
+  e^{\frac{-2\pi{}i\ell_2 k_1 }{N}}
+  \mathcal{F}_{N_1}\[\{f_{\ell_1 N_2 + \ell_2}\}_{\ell_1=0}^{N_1-1}\]
+  \}_{\ell_2=0}^{N_2-1}
+  \].
+\end{dmath}
+This entails a four-step algorithm:
+\begin{enumerate}
+\item Compute $N_2$ length-$N_1$ FFTs
+\item Perform a pointwise multiplication with the $N_1\times{}N_2$
+  matrix $\[e^{\frac{-2\pi{}in_1n_2}{N}}\]$
+\item Transpose $N_1\times{}N_2\rightarrow{}N_2\times{}N_1$
+\item Compute $N_1$ length-$N_2$ FFTs.
+\end{enumerate}
+If the individual FFTs still don't fit into a single-pass
+implementation, then this technique is replied recursively.
+
+These operations may be fused; the output of the FFTs can be
+multiplied by the roots of unity, and the output written in a
+transposed format.  Writing transposed data directly to global memory
+gives calamatous performance due to strided memory access, but this
+can be avoided by making use of LDS memory, though power-of-two
+transforms require padding in order to avoid memory bank conflicts.
+This gives us the ability to compute FFTs unrestrained by the memory
+available to a single compute unit by using global memory to store
+intermediate results.  The cost of this method is quite high; since
+the FFT is already bandwidth limited, additional round-trips to global
+memory are not helping matters.  There isn't a lot of work to keep the
+GPU busy while we wait for global memory, and the algorithm
+fundamentally requires wavefront and kernel level synchronization.
+
+TODO: cost estimate
+
+\subsection{Non-decomposable Transforms}
+
+One is occasionally presented, in the process of computing FFTs, with
+transforms whose lengths are not decomposable into convenient problem
+sizes, or perhaps not decomposable at all.  The resistance of these
+problem sizes to efficient computation may be overcome by using the
+Bluestein algorithm~\cite{bluestein1970linear} which maps an
+arbitrary-lenght FFT to a convolution with a chirp function.  By the
+convolution theorem, this convolution can computed in turn by two
+forward FFTs, a Hadamard product, and an inverse FFT; the advantage
+being that the FFTs must be performed on data which is padded from
+length $N$ to \emph{at least} $2N$.  This gives us the freedom to
+choose a more amenable problem size; for example, one may choose the
+smallest power of two that is at least as large as $2N$.
+
+The Bluestein method is an effective fall-back method, allowing one to
+compute arbitrary-length FFTs with the same scaling and accuracy as
+conventional FFTs.  However, it is at about five times as expensive as
+a typical FFT, and these problem sizes are generally avoided in
+practice.  Small problem sizes that can, a priori, be computed using a
+single SIMT thread's VGPR file cover the first 97 primes for
+double-precision complex transforms.  Using these as building-blocks,
+the proportion of problem sizes up to $2^{30}$ which require a
+Bluestein algorithm is only FIXME.  Since the Bluestein algorithm
+relies on decomposable FFTs, the benefit for these cases is globally
+similar to the decomposable case.
+
+\section{Real/Complex Transforms}
+
+Applications of Fourier transforms typically involve real data.  While
+the Fourier transform is inherently complex-valued, we can still
+reduce the cost of the real/compex FFT by making use of the Hermitian
+symmetry inherent in the output of a real-to-complex FFT.  The
+simplest way to compute a real-to-complex FFT is to simply compute a
+complex FFT where the input has zero imaginary part.  For even-length
+transforms, a pre- or post-processing stage allows for efficient and
+numerically robust computation.  The real-to-complex transform FIXME
 
 
-TODO: 
+FIXME: cost
 
-TODO: L1DCC~\cite{bailey1990ffts}
-
-TODO: half-lds.  Also, register file size?
-
-\section{real/complex}
-
-FIXME
-
-\section{multi-dimensional}
+\section{Multi-Dimensional Transforms}
 
 TODO: multi-dimensional
+
+FIXME: cost
 
 
 
@@ -139,19 +301,22 @@ TODO: multi-dimensional
 
 
 \section{Conclusions}
-The conclusions section should state key conclusions and insights.
-While perhaps not entirely “conclusive”, this is also a good place to
-discuss any limitations of the work covered in this paper (e.g., “we
-focused on the DL1 cache but have not yet extended the analysis to the
-L2”), speculations for future directions (e.g., “the results were
-promising for machine learning workloads, and due to our
-matrix-oriented optimizations we expect our technique to have some
-potential for scientific computing”), and any commentary on potential,
-planned, or actual impact on AMD (e.g., hardware, software, tools,
-methodologies, roadmap).  The last part is useful to provide the
-reviewers with additional context on the broader value of the work.
-We recommend simply cut-and-pasting or re-summarizing the abstract as
-that does not really add any value to the paper.
+
+FIXME
+
+%% The conclusions section should state key conclusions and insights.
+%% While perhaps not entirely “conclusive”, this is also a good place to
+%% discuss any limitations of the work covered in this paper (e.g., “we
+%% focused on the DL1 cache but have not yet extended the analysis to the
+%% L2”), speculations for future directions (e.g., “the results were
+%% promising for machine learning workloads, and due to our
+%% matrix-oriented optimizations we expect our technique to have some
+%% potential for scientific computing”), and any commentary on potential,
+%% planned, or actual impact on AMD (e.g., hardware, software, tools,
+%% methodologies, roadmap).  The last part is useful to provide the
+%% reviewers with additional context on the broader value of the work.
+%% We recommend simply cut-and-pasting or re-summarizing the abstract as
+%% that does not really add any value to the paper.
 
 \begingroup
 \let\itshape\upshape
