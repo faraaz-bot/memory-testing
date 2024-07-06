@@ -267,9 +267,36 @@ symmetry inherent in the output of a real-to-complex FFT.  The
 simplest way to compute a real-to-complex FFT is to simply compute a
 complex FFT where the input has zero imaginary part.  For even-length
 transforms, a pre- or post-processing stage allows for efficient and
-numerically robust computation.  The real-to-complex transform FIXME
+numerically robust computation.  An even-length real-to-complex
+transform is performed by first performing a half-length complex FFT
+where the even-indexed and odd-indexed real values are treated as the
+real and imaginary parts of a complex input, producing
+$\{Z_k\}_{k=0}^{N/2-1}$.  Then a post-processing stage performs the
+final pass to create the $N/2+1$ output values by computing
+% FIXME: ref?
+\begin{dmath}
+  \label{rcpost}
+  F_k
+  = \frac{1}{2}\(Z_k + Z_{\frac{N}{2}-k}^*\)
+  + e^{\frac{-2\pi{}k\ell}{N}} \frac{i}{2}\(Z_{\frac{N}{2}-k}^*-Z_k\),
+\end{dmath}
+where ${}^*$ denotes complex-conjugation.  A similar pre-processing
+stage is used to perform the inverse operation.  Another method for
+performing real/complex when there are an even number of transforms
+is to combine two real inputs into one length-$N$ complex input and
+perform a post-processing stage to seperate the desired outputs.
 
+The complex-embedding and paired transforms require a length-$N$
+complex FFT, the performance of which was discussed above.  On the
+other hand, the even-length transform requires a length-$N/2$ complex
+FFT, which fits better in cache and LDS.  Equation~\eqref{rcpost}
+does, however, have a complicated data flow diagram.  For single-pass
+transforms which communicate the data in one step, combining the
+complex half-length FFT and the post-processing stage is relatively
+straightforward.  For multi-pass half-length FFTs, FIXME: this should
+be possible?
 
+set 
 FIXME: cost
 
 \section{Multi-Dimensional Transforms}
