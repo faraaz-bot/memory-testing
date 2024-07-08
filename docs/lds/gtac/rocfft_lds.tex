@@ -22,7 +22,7 @@
 }
 \SetWatermarkScale{0.3}
 \SetWatermarkAngle{30}
-\SetWatermarkColor{gray!20}
+\SetWatermarkColor{gray!10} % FIXME: was 20?
 
 
 \usepackage{breqn}
@@ -105,6 +105,7 @@ FIXME: the basic types of algorithms, and how FFTs are representative
 of this kind of thing.
 
 \section{One-Dimensional Complex Transforms}
+\label{section1d}
 \subsection{Single-pass Transforms}
 
 The discrete Fourier transform of the complex input
@@ -314,13 +315,34 @@ FIXME: cost
 \section{Multi-Dimensional Transforms}
 
 Multi-dimensional FFTs are performed by performing a series of batched
-one-dimensional FFTs in each direction.  In order to maintain
-efficient global-memory access patterns, the data is transposed
-between batches.  
-
-TODO: multi-dimensional
+one-dimensional FFTs in each direction.  For very small problems that
+fit entirely in LDS, rocFFT produces kernels which can perform the
+entire multi-dimensional FFT with just one wavefront. For larger
+problem sizes, the current state-of-the-art involves computing these
+batches separately.  In order to maintain efficient global-memory
+access patterns, the data is transposed between batches.  Each series
+of one-dimensional transforms follow the cost model described in
+section~\ref{section1d}.
 
 FIXME: cost
+
+In order to perform a multi-dimensional real-to-complex transform, the
+first batch of 1D transforms must be real-to-complex, with following
+1D batches being complex-to-complex.  Again, we will focus on the
+even-length case, due to its practical importance.  Since the 
+
+TODO: real/complex.  Fuse the pre/post with a transpose.  One
+dimension is real/complex, others are complex/complex.
+
+FIXME: cost
+
+Recent work~\cite{partialpassgtac} opens the idea
+of combining passes in different dimensions into one kernel call; in
+certain cases, this can be used to eliminate a global-memory
+round-trip.  Since the one-dimensional multi-pass algorithm is just a
+multi-dimensional FFT with an additional Hadamard product, the
+partial-pass method can also be used to reduce the number of vram
+round-trips for one-dimensional FFTs.
 
 \section{Alternatives}
 
