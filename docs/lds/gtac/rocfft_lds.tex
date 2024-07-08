@@ -260,6 +260,7 @@ relies on decomposable FFTs, the benefit for these cases is globally
 similar to the decomposable case.
 
 \section{Real/Complex Transforms}
+\label{sectionrealcomplex}
 
 Applications of Fourier transforms typically involve real data.  While
 the Fourier transform is inherently complex-valued, we can still
@@ -328,11 +329,19 @@ FIXME: cost
 
 In order to perform a multi-dimensional real-to-complex transform, the
 first batch of 1D transforms must be real-to-complex, with following
-1D batches being complex-to-complex.  Again, we will focus on the
-even-length case, due to its practical importance.  Since the 
-
-TODO: real/complex.  Fuse the pre/post with a transpose.  One
-dimension is real/complex, others are complex/complex.
+1D batches being complex-to-complex.  Again, we will focus on the more
+practically important even-length case, which imposes that the
+contiguous dimension (which is the first transform) is of even length;
+the othe dimensions are taken care of by a complex-to-complex
+transform where it doesn't matter as much of the length is divisible
+by 2.  In addition to the decomposition constraints from
+section~\ref{sectionrealcomplex}, we would also like to ensure that
+the output format from the real-to-complex stage is is compatible with
+the following complex/complex stage - often, this involves a
+transpose.  The real-to-complex post-processing stage in
+equation~\eqref{rcpost} can be fused with this transpose, but the
+$k\leftrightarrow{}N/2-k$ data dependency implies that we need to
+transpose two sections of the output per CU.
 
 FIXME: cost
 
@@ -345,6 +354,8 @@ partial-pass method can also be used to reduce the number of vram
 round-trips for one-dimensional FFTs.
 
 \section{Alternatives}
+
+Shared memory FIXME
 
 FIXME: just do lenght-512 in a single thread?  Or just use global memory?
 Also: swizzle oeprations.
