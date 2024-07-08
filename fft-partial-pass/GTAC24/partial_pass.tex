@@ -1,0 +1,193 @@
+% main.tex
+
+
+
+% To enable the camera-ready format, use the following line
+%\documentclass{gtac}
+
+% To enable the double-blind submission format for the review process, use the following line
+\documentclass[blind]{gtac}
+
+\usepackage{cite}
+\usepackage{bm}
+\usepackage{url}
+\usepackage{breqn}
+\usepackage{diagbox}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage{times}
+\usepackage{hyperref}
+
+% This is the watermark text. 
+\SetWatermarkText{
+  \shortstack{
+        AMD Internal Use Only  \\[1em]  GTAC 2024 
+  }
+}
+\SetWatermarkScale{0.3}
+\SetWatermarkAngle{30}
+\SetWatermarkColor{gray!20}
+
+
+\title{Partial Radix Passes for Improved Performance in rocFFT\subtitle{Submitted Anonymously for Double-Blind Review}}
+
+
+\author{Flavio Teixeira, Malcolm Roberts \\
+AI GPU Software (AGS) \\
+flavio.teixeira@amd.com, malcolm.roberts@amd.com} % Adjust the author names here
+
+
+\begin{document}
+
+\maketitle % Create the title section
+\vspace*{-1.2in} % Adjust this value to reduce the space
+
+
+% Used to fix the header. 
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\cfoot{\thepage} % put the page number in the center of the footer
+\renewcommand{\headrulewidth}{0pt} % Remove the horizontal line from header
+%\chead{\textcolor{gray}{Proceedings of the 2024 AMD Global Technical Authors Conference – AMD Internal Use Only}}
+\chead{{\sffamily\textcolor{red}{\fontsize{10}{12}\selectfont\textbf{DO NOT FORWARD – FOR GTAC’24 REVIEW COMMITTEE ONLY}}}}
+
+\thispagestyle{fancy}
+\begin{abstract}
+
+
+% define size n, radix pass. 
+
+Fast Fourier Transforms (FFTs) are memory-bound workloads on modern GPU accelerators. If $N$ is a power of 2, then a radix-$2$ FFT algorithm recursively expresses the Discrete Fourier Transform (DFT) of length $N$ in terms of smaller DFTs of length $N/2$. More generally, if $N$ is highly composite, e.g., $N=q_1 \times q_2 \times \cdots \times q_k$, then the FFT work can be expressed in terms of radix-$q_i$ passes. For GPU-based FFT algorithms, these passes are performed entirely in shared-memory for improved performance, while the bottleneck is usually the global memory. A single round-trip to and from global memory is required when $N$ is small, but for large enough $N$ an hierarchical algorithm that entails several passes through global memory is required. In this work, we first discuss a mathematical decomposition of FFT work that enable us to rearrange radix-$q_i$ passes in compute kernels in an unconventional way. This decomposition is shown to be applicable to many GPU-based FFT schemes, including large and multidimensional FFTs. We then focus on the multidimensional case, and present a method to optimally distribute FFT work among the compute kernels. By performing partial radix passes in a compute kernel off-dimension in 3D FFTs, the total number of passes through global memory is shown to be reduced by $1/3$. The reduction in global memory transactions directly translates to improved performance in rocFFT for many HPC customers critical workloads.
+ 
+
+\end{abstract}
+
+\keywords{FFTs, HPC apps, GPU memory hierarchy, Speeding-up algorithms, Numerical optimization, Numerical complexity}
+
+\section{Introduction}
+
+\cite{vanloan92}
+
+\section{FFT work decomposition}
+
+\begin{eqnarray}
+\bm{x}_{n_1 \times n_2} & \leftarrow & \bm{x}_{n_1 \times n_2} \bm{F}_{n_2} \\
+\bm{x}_{n_1 \times n_2} & \leftarrow & \bm{F}_n (0:n_1-1, 0:n_2-1) .* \bm{x}_{n_1 \times n_2} \\
+\bm{x}_{n_2 \times n_1} & \leftarrow & \bm{x}_{n_1 \times n_2}^{T} \\
+\bm{x}_{n_2 \times n_1} & \leftarrow & \bm{x}_{n_2 \times n_1} \bm{F}_{n_1}
+\end{eqnarray}
+
+
+\cite{bailey89}
+
+\section{Large and Multidimensional FFTs}
+
+\section{Application: 3D FFTs in rocFFT}
+
+We have focused on a dataset composed of all $k$-combinations with repetitions of the supported 1D lengths in rocFFT. There are currently a total of $193$ supported 1D lengths in rocFFT that fit into LDS. The total size $T$ of this dataset is given by
+
+$$
+  T = \frac{(n+k-1)!}{k!(n-1)!},
+$$
+
+where $k=3$ and $n=193$. Plugging in n and k gives us a total of $T=1,216,865$ 3D problems to explore.
+
+\subsection{The (1D + 1D + 1D) method}
+
+Most of these problems are solved in rocFFT by running three 1D length FFT kernels along each dimension, plus transpose kernels between the dimensions, or by fusing the transpose kernels into the FFT kernels. The best case scenario for this ``one FFT kernel per dimension'' method is to run a total of 3 kernels.
+
+Reducing the total number of kernels to solve the 3D FFT problem is often desirable, as this strategy generally leads to significant performance uplift in rocFFT.
+
+\subsection{The (2D + 1D) method}
+
+In a very few number of cases, rocFFT solves a 3D problem with only two kernels. Let $(N_1,N_2,N_3)$ denote a problem of size $N_1 \times N_2 \times N_3$ in the dataset. If two of the dimensions are small enough, say $N_1$ and $N_2$, such that a 2D length FFT of size $N_1 \times N_2$ can fit entirely into LDS, then the $(N_1,N_2,N_3)$ problem is solved by running a 2D length $(N_1,N_2)$ FFT kernel plus a 1D length $N_3$ FFT kernel. The exploratory analysis first focused on quantifying 3D problems in the dataset that can be solved with only 2 kernels using the aforementioned method. 
+
+Let $M(N)$ denote the total amount of memory required in LDS to execute an FFT of length $N$, and let $K$ denote the maximum allocatable memory size in LDS. If $(N_1,N_2,N_3)$ satisfy 
+\begin{equation}
+M(N_i, N_j) \leq K \text{ for } (i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \},	
+\end{equation}
+then $(N_1,N_2,N_3)$ can be solved with only 2 kernels.
+
+The attached files list all the 3D problems that can be solved with the ``2D length + 1D length'' method in the dataset. There are a total $405,875$ problems for single precision, and $288,195$ problems for double precision, or equivalently $33.35$ and $23.68$ of the problems in the dataset, respectively, that can be solved with this method.
+
+\subsection{The (1.xD + 1.yD) method}
+
+Now, let us consider the partial pass feature for the solution of the $(N_1,N_2,N_3)$ problem. We describe a method for solving 3D problems with only 2 kernels for cases where all the conditions for LDS memory usage in the previous section cannot be satisfied. Specifically, let
+\begin{equation}
+\begin{split}
+\mathcal{Q}_i&=\begin{Bmatrix} q_{i1}, & q_{i2}, & \cdots, & q_{il} \end{Bmatrix}, \\
+& \text{for} \ (i,l) \in \bigl \{ (1,k_1), (2,k_2), (3,k_3) \bigr \}
+\end{split}
+\end{equation}
+denote the factorization sets for $N_1$, $N_2$, and $N_3$, each of size $k_1$, $k_2$, and $k_3$, such that
+\begin{equation}
+   N_1 = \prod_{l=1}^{k_1} q_{1l}, \ N_2 = \prod_{l=1}^{k_2} q_{2l}, \ \text{and} \ N_3 = \prod_{l=1}^{k_3} q_{3l}.
+\end{equation}
+
+Now, say we would like to fuse the FFT work of the first dimension of length $N_1$ into the second and third dimensions of length $N_2$ and $N_3$. By FFT work, here we mean performing additional radix-$q_{1l}$ passes, for $1 \leq l \leq k_1$, in the FFT kernels along the second and third dimensions. In this particular case, solving the 3D problem with only two kernels can be posed as the problem of partitioning the set $\mathcal{Q}_1$ into two new sets $\mathcal{Q}^\star_2 \supseteq \mathcal{Q}_2$ and $\mathcal{Q}^\star_3 \supseteq \mathcal{Q}_3$. For this method to work, the total amount of memory required in LDS to execute the two FFT kernels along the second and third dimensions, plus partial FFT work from the first dimension, must not exceed the maximum allocatable memory size in LDS.
+
+Let us now consider in more details the partition problem. Let
+\begin{equation}
+\begin{split}
+  \mathcal{Q}^\star_i &= \begin{Bmatrix} q^\star_{i1}, & q^\star_{i2}, & \cdots, & q^\star_{il} \end{Bmatrix} \\
+  & \text{for} \ (i,l) \in \bigl \{ (1,k^\star_1), (2,k^\star_2), (3,k^\star_3) \bigr \}
+\end{split}
+\end{equation}
+denote the new factorization sets $\mathcal{Q}^\star_1$, $\mathcal{Q}^\star_2$, and $\mathcal{Q}^\star_3$ of size $k^\star_1$, $k^\star_2$, and $k^\star_3$, respectively. The partition problem can then be defined as follows:
+
+Pick an $(i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \}$ and partition two sets 
+
+
+
+We have the following relation between set sizes 
+\begin{equation}
+\begin{split}
+k_1 & + k_2 + k_3 = k^\star_i + k^\star_j \\
+& \text{for} \  (i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \}.
+\end{split}
+\end{equation}
+Furthermore, 
+\begin{equation}
+\begin{split}
+   N^\star_i & = \prod_{l=1}^{k^\star_i} q^\star_{il} \quad \text{and} \quad N^\star_j = \prod_{l=1}^{k^\star_j} q^\star_{jl} \\
+   & \text{for} \  (i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \},
+ \end{split}
+\end{equation}
+and the following condition for LDS memory usage must be satisfied
+\begin{equation}
+\begin{split}
+  M( & N^\star_i , N^\star_j) \leq K \\
+  & \text{for} \  (i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \}.
+\end{split}
+\end{equation}
+
+\begin{enumerate}
+\item Partition set $\mathcal{N}_1$ into two sets $\mathcal{N}_x = \begin{Bmatrix} \mathcal{N_2}, & n_{1i} \end{Bmatrix}$ for $i \in \mathcal{I}_1 \subseteq \begin{Bmatrix}1, & \cdots, & j\end{Bmatrix}$ and $\mathcal{N}_y = \begin{Bmatrix} \mathcal{N_3}, & n_{1i} \end{Bmatrix}$ for $i \in \mathcal{I}_2 \subseteq \begin{Bmatrix}1, & \cdots, & j\end{Bmatrix}$, such that $|N_x-N_y|$ is minimized.
+\item Partition set $\mathcal{N}_2$ into two sets $\mathcal{N}_x = \begin{Bmatrix} \mathcal{N_1}, & n_{2i} \end{Bmatrix}$ for $i \in \mathcal{I}_1 \subseteq \begin{Bmatrix}1, & \cdots, & k\end{Bmatrix}$ and $\mathcal{N}_y = \begin{Bmatrix} \mathcal{N_3}, & n_{2i} \end{Bmatrix}$ for $i \in \mathcal{I}_2 \subseteq \begin{Bmatrix}1, & \cdots, & k\end{Bmatrix}$, such that $|N_x-N_y|$ is minimized.
+\item Partition set $\mathcal{N}_3$ into two sets $\mathcal{N}_x = \begin{Bmatrix} \mathcal{N_1}, & n_{3i} \end{Bmatrix}$ for $i \in \mathcal{I}_1 \subseteq \begin{Bmatrix}1, & \cdots, & l\end{Bmatrix}$ and $\mathcal{N}_y = \begin{Bmatrix} \mathcal{N_2}, & n_{3i} \end{Bmatrix}$ for $i \in \mathcal{I}_2 \subseteq \begin{Bmatrix}1, & \cdots, & l\end{Bmatrix}$, such that $|N_x-N_y|$ is minimized.
+\end{enumerate}
+
+The problem of obtaining the sets $\mathcal{N}_x$ and $\mathcal{N}_y$ above is a variation of the `partition problem <https://en.wikipedia.org/wiki/Partition_problem>`_ in number theory. This problem and their variations are generally NP hard, but algorithms that are practically usable for their solution do exist. A simple, naive implementation of such an algorithm can be found `here <https://github.com/ROCmSoftwarePlatform/rocFFT-misc/blob/master/fft-partial-pass/solve_prod_partition_problem.m>`_.
+
+
+The attached files list all the 3D problems that can be solved with the ``1.x-D length + 1.y-D length'' method in the dataset. There are a total $195,970$ problems for single precision, and $135,328$ problems for double precision, or equivalently $16.10\%$ and $11.12\%$ of the problems in the dataset, respectively, that can be solved with this method.
+
+\section{Conclusions}
+
+%
+%\section{Conclusions}
+%
+%A new method for the solution of 3D problems in rocFFT has been presented and discussed. An exploratory analysis has been done to evaluate the feasibility and applicability of the new method in a large number of problems. The exploratory analysis has shown that there are a fairly large number of problems where the ``1.x-D length + 1.y-D length'' optimization can be applied to uplift the performance of 3D problems in rocFFT.
+
+\begingroup
+\let\itshape\upshape
+\bibliographystyle{abbrv}
+\bibliography{refs}
+\endgroup
+
+%\section*{\st{Acknowledgments}}
+%Do \ul{not} include acknowledgments in this blind-review version of the paper, as acknowledgments may provide unintended hints that “deblind” your anonymity. If your paper is accepted to GTAC, the final published version can/should include the appropriate acknowledgments.
+
+\end{document}
