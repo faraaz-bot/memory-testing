@@ -287,24 +287,46 @@ is to combine two real inputs into one length-$N$ complex input and
 perform a post-processing stage to seperate the desired outputs.
 
 The complex-embedding and paired transforms require a length-$N$
-complex FFT, the performance of which was discussed above.  On the
-other hand, the even-length transform requires a length-$N/2$ complex
-FFT, which fits better in cache and LDS.  Equation~\eqref{rcpost}
-does, however, have a complicated data flow diagram.  For single-pass
-transforms which communicate the data in one step, combining the
-complex half-length FFT and the post-processing stage is relatively
-straightforward.  For multi-pass half-length FFTs, FIXME: this should
-be possible?
+complex FFT, the performance of which was discussed above.  Since the
+length-$N$ complex-valued data has twice the memory footprint of the
+length-$N$ real-valued 
 
-set 
+
+On the other hand, the even-length transform requires a length-$N/2$
+complex FFT, which fits better in cache and LDS.
+Equation~\eqref{rcpost} does, however, have a complicated data flow
+diagram.  For single-pass transforms which communicate the data in one
+step, combining the complex half-length FFT and the post-processing
+stage is relatively straightforward.  The data depdency graph for the
+pre/post-processing stage imposes a constraint on the data layout for
+multi-stage 1D FFT.  Since element $k$ needs and element $N-k$ need to
+be processed together, each CU needs to process two of the sub-FFTs in
+equation~\eqref{N1N2}. While this increases the per-CU data load (and
+hence register pressure / LDS requirements), it allows one to fuse the
+complex-valued half-length FFT with the pre/post-processing
+real/complex step, thereby eliminating a global-memory round-trip.  In
+practice, users are very rarely interested in odd-length FFTs, so
+optimising the even-length case is of much greater practical
+importance.
+
 FIXME: cost
 
 \section{Multi-Dimensional Transforms}
+
+Multi-dimensional FFTs are performed by performing a series of batched
+one-dimensional FFTs in each direction.  In order to maintain
+efficient global-memory access patterns, the data is transposed
+between batches.  
 
 TODO: multi-dimensional
 
 FIXME: cost
 
+\section{Alternatives}
+
+FIXME: just do lenght-512 in a single thread?  Or just use global memory?
+Also: swizzle oeprations.
+%https://gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations/
 
 
 %% Figures and tables should be accompanied by a numbered label and
@@ -352,8 +374,9 @@ FIXME
 \endgroup
 
 \section*{\st{Acknowledgments}}
-Do \ul{not} include acknowledgments in this blind-review version of the paper, as acknowledgments
-may provide unintended hints that “deblind” your anonymity. If your paper is accepted to GTAC, the
-final published version can/should include the appropriate acknowledgments.
+Do \ul{not} include acknowledgments in this blind-review version of
+the paper, as acknowledgments may provide unintended hints that
+“deblind” your anonymity. If your paper is accepted to GTAC, the final
+published version can/should include the appropriate acknowledgments.
 
 \end{document}
