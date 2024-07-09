@@ -353,13 +353,33 @@ multi-dimensional FFT with an additional Hadamard product, the
 partial-pass method can also be used to reduce the number of vram
 round-trips for one-dimensional FFTs.
 
-\section{Alternatives}
+\section{Alternatives to LDS}
 
-Shared memory FIXME
+The parallelism offered by SIMT architectures needs to be balanced
+with effective inter-thread communication for algorithms that are not
+embarassingly parallel.  Shared memory is a CU-level explicitly
+managed cache which offers good performance with general access
+patterns (modulo bank conflicts); the canonical use is to transpose
+data at the CU level so that read/writes to global memory are
+contiguous.  We also have two or three automatically managed caches
+between the CUs and global memory, and an FFT algorithm designed to
+take advantage of these caches may be able to take advantage of
+various levels of cache in order to share data withing and between
+CUs.  Since the L1 to L3 caches are implicitly managed, it's more
+difficult to predict the performance of an FFT implementation when
+relying on these cache levels.
 
-FIXME: just do lenght-512 in a single thread?  Or just use global memory?
-Also: swizzle oeprations.
-%https://gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations/
+Cross-lane
+operations~\footnote{\href{https://gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations/}{gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations}}
+offer another avenue for communicating data between SIMT threads
+within a CU.  Cross-lane operations take advantage of register
+bandwidth, offering performance advantages over LDS-based
+implementations.  Since the \lstinline{ds_permute_b32} operations work
+on 32 bits, communicating 8-byte values (such as \texttt{double} or
+\texttt{float2}) or 16-byte values (such as \texttt{double2}) requires
+multiple calls.  The development effort for cross-lane operations is
+higher than for LDS-based kernels, but the potential benefit is worth
+exploring.
 
 
 %% Figures and tables should be accompanied by a numbered label and
