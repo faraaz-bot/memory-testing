@@ -99,7 +99,10 @@ labour-intensive, but this cost can be mitigated by making use of
 cache-oblivious algorithms~\cite{frigo1999cache}.  On the other hand,
 the LDS size has remained fixed at 64KiB on MI devices up to the MI300
 series, while the NVIDIA V100 can be configured to have up to 96KiB,
-the P100 up to 164KiB, and the H100 has 224KiB.  Due to the SIMT
+the P100 up to 164KiB, and the H100 has 224KiB.  Due to the SIMT FIXME
+
+
+%https://www.spec.org/workshops/2007/austin/slides/Keynote_Jack_Dongarra.pdf
 
 FIXME: the basic types of algorithms, and how FFTs are representative
 of this kind of thing.
@@ -119,12 +122,12 @@ input fits into LDS, then the transform can be computed with just one
 single pass to global memory.  This is more of less the optimal case
 for FFTs on GPUs; if the batch size is large enough, we can saturate
 the global memory bandwidth, but also avoid reading/writing to global
-memory repeatedly.  Calls to \lstinline{__syncthreads()} prevent
+memory repeatedly.  Calls to \lstinline{__syncthreads} prevent
 race-conditions when moving data between LDS and CU registers.  One
 can reduce LDS requirements, allowing for more larger transforms or
 increasing occupancy, by communicating the real and imaginary
 components separately, though this comes at the expense of an
-additional \lstinline{__syncthreads()}.  Since the per-CU VGPR
+additional \lstinline{__syncthreads}.  Since the per-CU VGPR
 register file for MI100/MI200/MI300 is 521KiB with LDS limited to
 64KiB, it's theoretically possible to put up to eight times the LDS
 size per CU, allowing for even larger single-pass transforms.
@@ -143,37 +146,43 @@ FFT into the VGPRs of a single SIMT thread.
 
 More LDS allows for a larger range of single-pass FFTs. For
 latency-optimised transforms, an increase in LDS reduces the number of
-CU-level synchronizations.  Calls to \lstinline{__syncthreads()},
+CU-level synchronizations.  Calls to \lstinline{__syncthreads},
 while less costly than loads/stores to global memory, are still
 relatively expensive.
 
-TODO: cost estimate
+Let $N$ be the problem size, $L_B$ be the size in bytes of the LDS
+cache, and $T_S$ the size of the data type (eg
+\texttt{sizeof(std::complex<double>)}, which is 16).  If $N T_s \leq
+L_B$, then the problem fits into LDS.  This encurs just one
+global-memory round-trip and one call to \lstinline{__syncthreads}.
+
+
 
 \subsection{Multiple-Pass Transforms}
 
-As the problem size increases, the FFT will eventually not fit into
-the memory accessible to a single CU.  For larger FFTs, it's necessary
-to use global GPU memory to save intermediate results.  This technique
+As problem size increases, the FFT will eventually not fit into the
+memory accessible to a single CU.  For larger FFTs, it's necessary to
+use global GPU memory to save intermediate results.  This technique
 makes use of the basic technique for writing cache-aware FFTs relies
 on the recursive decomposition inherent in the FFT algorithm, and was
-first given in~\cite{bailey1990ffts}.  If $N=N_1N_2$, then consider
+first given in~\cite{bailey1990ffts}.  If $N=N_aN_b$, then consider
 $F$ as a two-dimensional array by setting
 \begin{dmath}
   \{F_k\}_{k=0}^{N-1}
   =
-  \{F_{k_1 N_2 + k_2} \}_{\(k_1,k_2\)\in\{0,\dots,N_1-1\}\times\{0,\dots,N_2-1\}},
+  \{F_{N_a k_b + k_a} \}_{\(k_a,k_b\)\in\{0,\dots,N_a-1\}\times\{0,\dots,N_a-1\}},
 \end{dmath}
 which allows one to decompose equation~\eqref{dft} as
 \begin{dmath}
   \label{N1N2}
-  F_{N_1 k_2 + k_1}
+  F_{N_a k_b + k_a}
   =
-  \sum_{\ell = 0}^{N-1} e^{\frac{-2\pi{}i\ell{}(N_1 k_2 + k_1)}{N}} f_\ell
+  \sum_{\ell = 0}^{N-1} e^{\frac{-2\pi{}i\ell{}(N_a k_b + k_a)}{N}} f_\ell
   =
-  \sum_{\ell_1 = 0}^{N_1-1}
-  \sum_{\ell_2 = 0}^{N_2-1}
-  e^{\frac{-2\pi{}i\(\ell_1 N_2 + \ell_2\)(n_1 k_2 + k_1)}{N}}
-  f_{\ell_1 n_2 + \ell_2}
+  \sum_{\ell_1 = 0}^{N_a-1}
+  \sum_{\ell_2 = 0}^{N_b-1}
+  e^{\frac{-2\pi{}i\(\ell_a N_b + \ell_b\)(n_a k_b + k_a)}{N}}
+  f_{\ell_a n_b + \ell_a}
   =
   % FIXME: formatting
   % https://tex.stackexchange.com/questions/44450/how-to-align-a-set-of-multiline-equations?
@@ -185,33 +194,33 @@ which allows one to decompose equation~\eqref{dft} as
   %% e^{\frac{-2\pi{}i\(\ell_2 k_1 \)}{n}}
   %% f_{\ell_1 n_2 + \ell_2}
   %% =
-  \sum_{\ell_2 = 0}^{n_2-1}
-  e^{\frac{-2\pi{}i\ell_2 k_2}{n_2}}
-  e^{\frac{-2\pi{}i\ell_2 k_1 }{n}}
-  \sum_{\ell_1 = 0}^{n_1-1}
-  e^{\frac{-2\pi{}i\ell_1 k_1}{n_1}}
-  f_{\ell_1 n_2 + \ell_2}.
+  \sum_{\ell_2 = 0}^{N_a-1}
+  e^{\frac{-2\pi{}i\ell_b k_b}{N_b}}
+  e^{\frac{-2\pi{}i\ell_b k_a }{N}}
+  \sum_{\ell_a = 0}^{N_a-1}
+  e^{\frac{-2\pi{}i\ell_a k_a}{N_a}}
+  f_{\ell_a N_b + \ell_b}.
 \end{dmath}
 we have used the fact that $e^{\frac{N_1N_2}{N}}=1$.  The length-$N_1$
-and $N_2$ sums are themselves Fourier transforms; this decomposition
-is exactly the heart of the FFT.  Note that the input and output are
-contiguous in different indices.  We can express the operation in
-equation~\eqref{N1N2} as
+and $N_2$ sums are themselves Fourier transforms; in fact, this
+decomposition is exactly the heart of the FFT.  Note that the input
+and output are contiguous in different indices.  We can express the
+operation in equation~\eqref{N1N2} as
 \begin{dmath}
-  \mathcal{F}_{N_2}\[
+  \mathcal{F}_{N_b}\[
   \{
-  e^{\frac{-2\pi{}i\ell_2 k_1 }{N}}
-  \mathcal{F}_{N_1}\[\{f_{\ell_1 N_2 + \ell_2}\}_{\ell_1=0}^{N_1-1}\]
-  \}_{\ell_2=0}^{N_2-1}
+  e^{\frac{-2\pi{}i\ell_b k_a }{N}}
+  \mathcal{F}_{N_a}\[\{f_{\ell_a N_b + \ell_b}\}_{\ell_a=0}^{N_a-1}\]
+  \}_{\ell_b=0}^{N_b-1}
   \].
 \end{dmath}
 This entails a four-step algorithm:
 \begin{enumerate}
-\item Compute $N_2$ length-$N_1$ FFTs
-\item Perform a pointwise multiplication with the $N_1\times{}N_2$
-  matrix $\[e^{\frac{-2\pi{}in_1n_2}{N}}\]$
-\item Transpose $N_1\times{}N_2\rightarrow{}N_2\times{}N_1$
-\item Compute $N_1$ length-$N_2$ FFTs.
+\item Compute $N_b$ length-$N_a$ FFTs
+\item Perform a pointwise multiplication with the $N_a\times{}N_b$
+  matrix $\[e^{\frac{-2\pi{}iN_aN_b}{N}}\]$
+\item Transpose $N_a\times{}N_b\rightarrow{}N_b\times{}N_a$
+\item Compute $N_a$ length-$N_b$ FFTs.
 \end{enumerate}
 If the individual FFTs still don't fit into a single-pass
 implementation, then this technique is replied recursively.
@@ -230,7 +239,14 @@ memory are not helping matters.  There isn't a lot of work to keep the
 GPU busy while we wait for global memory, and the algorithm
 fundamentally requires wavefront and kernel level synchronization.
 
-TODO: cost estimate
+Assuming that the problem size $N$ is perfectly decomposable, the
+number of global-memory round-trips is
+\begin{dmath}
+  \frac{N T_s}{L_B}
+\end{dmath}
+which requires an equal number of calls to \lstinline{__syncthreads}.
+Note that power-of-two transforms will need padding in LDS to avoid
+bank conflicts, can reduce the size of problem that fits in LDS.
 
 \subsection{Non-decomposable Transforms}
 
@@ -283,16 +299,19 @@ final pass to create the $N/2+1$ output values by computing
   + e^{\frac{-2\pi{}k\ell}{N}} \frac{i}{2}\(Z_{\frac{N}{2}-k}^*-Z_k\),
 \end{dmath}
 where ${}^*$ denotes complex-conjugation.  A similar pre-processing
-stage is used to perform the inverse operation.  Another method for
-performing real/complex when there are an even number of transforms
-is to combine two real inputs into one length-$N$ complex input and
-perform a post-processing stage to seperate the desired outputs.
+stage is used to perform the inverse operation.
+
+Another method for performing real/complex when there are an even
+number of transforms is to combine two real inputs into one length-$N$
+complex input and perform a post-processing stage to seperate the
+desired outputs.
 
 The complex-embedding and paired transforms require a length-$N$
 complex FFT, the performance of which was discussed above.  Since the
 length-$N$ complex-valued data has twice the memory footprint of the
-length-$N$ real-valued 
-
+length-$N$ real-valued, the paired and embedded real/complex
+reduce the cache and LDS efficiency from what one would a priori
+expect for a length-$N$ real/complex FFT.
 
 On the other hand, the even-length transform requires a length-$N/2$
 complex FFT, which fits better in cache and LDS.
@@ -311,8 +330,17 @@ practice, users are very rarely interested in odd-length FFTs, so
 optimising the even-length case is of much greater practical
 importance.
 
-FIXME: cost
-
+The pre- and post-processing passes require that two sets of the data
+be present.  For problems that fit entirely in LDS, this is easy to
+achieve.  For problem sizes where the half-length complex FFT requires
+multiple passes, we require that the decomposition is such that
+$N_a T_s \leq L_B$ and $2N_b T_s \leq L_B$.  In effect, this is just
+a rebalancing of the data decomposition, so we again have
+\begin{dmath}
+  \frac{N T_s}{L_B}
+\end{dmath}
+global-memory round-trips.
+  
 \section{Multi-Dimensional Transforms}
 
 Multi-dimensional FFTs are performed by performing a series of batched
