@@ -34,7 +34,7 @@
 \def\[{\left[}
 \def\]{\right]}
 
-\title{FIXME: title \subtitle{Submitted Anonymously for Double-Blind Review}}
+\title{GPU Shared Memory and FFT Performance \subtitle{Submitted Anonymously for Double-Blind Review}}
 
 
 \author{Malcolm Roberts \\
@@ -78,12 +78,14 @@ first fully developed in~\cite{cooley1965algorithm}, reduces the
 computational complexity from $\mathcal{O}\(N^2\)$ to
 $\mathcal{O}\(N\log{}N\)$, and the numerical error from
 $\mathcal{O}\(\sqrt{N}\)$ to $\mathcal{O}\(\sqrt{\log{}N}\)$
-~\cite{gentleman1966fast}.
+~\cite{gentleman1966fast}.  The FFT is representative of a variety of
+important algorithms, and has been considered as part of a replacement
+for LINPACK for grid-computing benchmarks~\cite{hpcchallenge}.
 
 The FFT is bandwidth-limited for all practical problem sizes on modern
 hardware.  Moreover, the data dependency diagram is all-to-all; every
 point of the output depends on every point of the input.  Effective
-data movemnet is an imporant factor in designing high-performace FFT
+data movement is an important factor in designing high-performance FFT
 implementations.  In this article, we explore how performance on SIMT
 (single-instruction multiple thread) architectures such as the GPU,
 and establish a theoretical performance model to help understand how
@@ -92,20 +94,16 @@ changes in local data share (LDS) size affects GPU FFT performance.
 
 Bandwidth-limited algorithms such as the FFT can benefit greatly from
 the improved bandwidth and reduced memory latency provided by data
-caches, and the MI300 now contains three levels of
-cache\footnote{\url{https://hipfft.readthedocs.io/en/rocm-6.1.2/reference/gpu-arch-specs.html}}.
+caches.  These caches are increasingly large, performant, and deep -
+the MI300 now contains three levels of cache~\cite{amdgpuspecs}.
 Taking advantage of these different levels and sizes of cache is
 labour-intensive, but this cost can be mitigated by making use of
 cache-oblivious algorithms~\cite{frigo1999cache}.  On the other hand,
-the LDS size has remained fixed at 64KiB on MI devices up to the MI300
-series, while the NVIDIA V100 can be configured to have up to 96KiB,
-the P100 up to 164KiB, and the H100 has 224KiB.  Due to the SIMT FIXME
-
-
-%https://www.spec.org/workshops/2007/austin/slides/Keynote_Jack_Dongarra.pdf
-
-FIXME: the basic types of algorithms, and how FFTs are representative
-of this kind of thing.
+cross-lane communication is typically done via local data share (LDS),
+which is an explicitly managed cache.  The LDS size has remained fixed
+at 64KiB on MI devices up to the MI300 series, while the NVIDIA V100
+can be configured to have up to 96KiB, the P100 up to 164KiB, and the
+H100 has 224KiB. 
 
 \section{One-Dimensional Complex Transforms}
 \label{section1d}
@@ -133,19 +131,19 @@ register file for MI100/MI200/MI300 is 521KiB with LDS limited to
 size per CU, allowing for even larger single-pass transforms.
 However, it's likely possible that some VGPRs will be used by other
 parts of the algorithm (eg the twiddle tables), and there is a
-tradeoff because increased synchronization and reduced occupancy must
+trade-off because increased synchronization and reduced occupancy must
 be taken into account.
 
 Strategies for different batch-sizes and optimizations objectives
 should also be considered.  In particular, for a double-precision
-complex FFT of length 512 with batch-size is 1, a latency-optimised
+complex FFT of length 512 with batch-size is 1, a latency-optimized
 transform would benefit from having multiple threads work on the same
-data; for larger batches (or, equivalently, throughput-optimised
+data; for larger batches (or, equivalently, throughput-optimized
 transforms) one could theoretically load each individual 512-length
 FFT into the VGPRs of a single SIMT thread.
 
 More LDS allows for a larger range of single-pass FFTs. For
-latency-optimised transforms, an increase in LDS reduces the number of
+latency-optimized transforms, an increase in LDS reduces the number of
 CU-level synchronizations.  Calls to \lstinline{__syncthreads},
 while less costly than loads/stores to global memory, are still
 relatively expensive.
@@ -153,7 +151,7 @@ relatively expensive.
 Let $N$ be the problem size, $L_B$ be the size in bytes of the LDS
 cache, and $T_S$ the size of the data type (eg
 \texttt{sizeof(std::complex<double>)}, which is 16).  If $N T_s \leq
-L_B$, then the problem fits into LDS.  This encurs just one
+L_B$, then the problem fits into LDS.  This incurs just one
 global-memory round-trip and one call to \lstinline{__syncthreads}.
 
 
@@ -217,8 +215,8 @@ operation in equation~\eqref{N1N2} as
 This entails a four-step algorithm:
 \begin{enumerate}
 \item Compute $N_b$ length-$N_a$ FFTs
-\item Perform a pointwise multiplication with the $N_a\times{}N_b$
-  matrix $\[e^{\frac{-2\pi{}iN_aN_b}{N}}\]$
+\item Perform a point-wise multiplication with the $N_a\times{}N_b$
+  matrix $\[e^{\frac{-2\pi{}i\ell_a\ell_b}{N}}\]$
 \item Transpose $N_a\times{}N_b\rightarrow{}N_b\times{}N_a$
 \item Compute $N_a$ length-$N_b$ FFTs.
 \end{enumerate}
@@ -228,7 +226,7 @@ implementation, then this technique is replied recursively.
 These operations may be fused; the output of the FFTs can be
 multiplied by the roots of unity, and the output written in a
 transposed format.  Writing transposed data directly to global memory
-gives calamatous performance due to strided memory access, but this
+gives calamitous performance due to strided memory access, but this
 can be avoided by making use of LDS memory, though power-of-two
 transforms require padding in order to avoid memory bank conflicts.
 This gives us the ability to compute FFTs unrestrained by the memory
@@ -242,7 +240,7 @@ fundamentally requires wavefront and kernel level synchronization.
 Assuming that the problem size $N$ is perfectly decomposable, the
 number of global-memory round-trips is
 \begin{dmath}
-  \frac{N T_s}{L_B} % FIXME: ceil
+  \lceil  \frac{N T_s}{L_B} \rceil
 \end{dmath}
 which requires an equal number of calls to \lstinline{__syncthreads}.
 Note that power-of-two transforms will need padding in LDS to avoid
@@ -255,7 +253,7 @@ transforms whose lengths are not decomposable into convenient problem
 sizes, or perhaps not decomposable at all.  The resistance of these
 problem sizes to efficient computation may be overcome by using the
 Bluestein algorithm~\cite{bluestein1970linear} which maps an
-arbitrary-lenght FFT to a convolution with a chirp function.  By the
+arbitrary-length FFT to a convolution with a chirp function.  By the
 convolution theorem, this convolution can computed in turn by two
 forward FFTs, a Hadamard product, and an inverse FFT; the advantage
 being that the FFTs must be performed on data which is padded from
@@ -271,16 +269,17 @@ practice.  Small problem sizes that can, a priori, be computed using a
 single SIMT thread's VGPR file cover the first 97 primes for
 double-precision complex transforms.  Using these as building-blocks,
 the proportion of problem sizes up to $2^{30}$ which require a
-Bluestein algorithm is only FIXME.  Since the Bluestein algorithm
+Bluestein algorithm is quite small.  Since the Bluestein algorithm
 relies on decomposable FFTs, the benefit for these cases is globally
 similar to the decomposable case.
+% FIXME: can we calculate this?
 
 \section{Real/Complex Transforms}
 \label{sectionrealcomplex}
 
 Applications of Fourier transforms typically involve real data.  While
 the Fourier transform is inherently complex-valued, we can still
-reduce the cost of the real/compex FFT by making use of the Hermitian
+reduce the cost of the real/complex FFT by making use of the Hermitian
 symmetry inherent in the output of a real-to-complex FFT.  The
 simplest way to compute a real-to-complex FFT is to simply compute a
 complex FFT where the input has zero imaginary part.  For even-length
@@ -303,7 +302,7 @@ stage is used to perform the inverse operation.
 
 Another method for performing real/complex when there are an even
 number of transforms is to combine two real inputs into one length-$N$
-complex input and perform a post-processing stage to seperate the
+complex input and perform a post-processing stage to separate the
 desired outputs.
 
 The complex-embedding and paired transforms require a length-$N$
@@ -318,7 +317,7 @@ complex FFT, which fits better in cache and LDS.
 Equation~\eqref{rcpost} does, however, have a complicated data flow
 diagram.  For single-pass transforms which communicate the data in one
 step, combining the complex half-length FFT and the post-processing
-stage is relatively straightforward.  The data depdency graph for the
+stage is relatively straightforward.  The data dependency graph for the
 pre/post-processing stage imposes a constraint on the data layout for
 multi-stage 1D FFT.  Since element $k$ needs and element $N-k$ need to
 be processed together, each CU needs to process two of the sub-FFTs in
@@ -327,7 +326,7 @@ hence register pressure / LDS requirements), it allows one to fuse the
 complex-valued half-length FFT with the pre/post-processing
 real/complex step, thereby eliminating a global-memory round-trip.  In
 practice, users are very rarely interested in odd-length FFTs, so
-optimising the even-length case is of much greater practical
+optimizing the even-length case is of much greater practical
 importance.
 
 The pre- and post-processing passes require that two sets of the data
@@ -337,7 +336,7 @@ multiple passes, we require that the decomposition is such that
 $N_a T_s \leq L_B$ and $2N_b T_s \leq L_B$.  In effect, this is just
 a rebalancing of the data decomposition, so we again have
 \begin{dmath}
-  \frac{N T_s}{L_B} % FIXME: ceil
+  \lceil\frac{N T_s}{L_B}\rceil
 \end{dmath}
 global-memory round-trips.
   
@@ -352,7 +351,7 @@ batches separately.  In order to maintain efficient global-memory
 access patterns, the data is transposed between batches.  Each series
 of one-dimensional transforms follow the cost model described in
 section~\ref{section1d}.  For a $D$-dimensional FFT of lengths
-$N_1,\dots,N_D$, the number of global memory roundtrips is
+$N_1,\dots,N_D$, the number of global memory round-trips is
 \begin{dmath}
   \prod_{d=1}^{D}
   \lceil \frac{N_d T_s}{L_B} \rceil.
@@ -363,7 +362,7 @@ first batch of 1D transforms must be real-to-complex, with following
 1D batches being complex-to-complex.  Again, we will focus on the more
 practically important even-length case, which imposes that the
 contiguous dimension (which is the first transform) is of even length;
-the othe dimensions are taken care of by a complex-to-complex
+the other dimensions are taken care of by a complex-to-complex
 transform where it doesn't matter as much of the length is divisible
 by 2.  In addition to the decomposition constraints from
 section~\ref{sectionrealcomplex}, we would also like to ensure that
@@ -388,7 +387,7 @@ round-trips for one-dimensional FFTs.
 
 The parallelism offered by SIMT architectures needs to be balanced
 with effective inter-thread communication for algorithms that are not
-embarassingly parallel.  Shared memory is a CU-level explicitly
+embarrassingly parallel.  Shared memory is a CU-level explicitly
 managed cache which offers good performance with general access
 patterns (modulo bank conflicts); the canonical use is to transpose
 data at the CU level so that read/writes to global memory are
@@ -400,17 +399,15 @@ CUs.  Since the L1 to L3 caches are implicitly managed, it's more
 difficult to predict the performance of an FFT implementation when
 relying on these cache levels.
 
-Cross-lane
-operations~\footnote{\href{https://gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations/}{gpuopen.com/learn/amd-gcn-assembly-cross-lane-operations}}
-offer another avenue for communicating data between SIMT threads
-within a CU.  Cross-lane operations take advantage of register
-bandwidth, offering performance advantages over LDS-based
-implementations.  Since the \lstinline{ds_permute_b32} operations work
-on 32 bits, communicating 8-byte values (such as \texttt{double} or
-\texttt{float2}) or 16-byte values (such as \texttt{double2}) requires
-multiple calls.  The development effort for cross-lane operations is
-higher than for LDS-based kernels, but the potential benefit is worth
-exploring.
+Cross-lane operations~\cite{crosslane} offer another avenue for
+communicating data between SIMT threads within a CU.  Cross-lane
+operations take advantage of register bandwidth, offering performance
+advantages over LDS-based implementations.  Since the
+\lstinline{ds_permute_b32} operations work on 32 bits, communicating
+8-byte values (such as \texttt{double} or \texttt{float2}) or 16-byte
+values (such as \texttt{double2}) requires multiple calls.  The
+development effort for cross-lane operations is higher than for
+LDS-based kernels, but the potential benefit is worth exploring.
 
 
 %% Figures and tables should be accompanied by a numbered label and
@@ -435,7 +432,43 @@ exploring.
 
 \section{Conclusions}
 
-FIXME: summarize
+The fast Fourier transform is an important algorithm which is
+representative of a class of bandwidth-limited algorithms which have
+dense data dependency graphs.  When implementing FFTs on SIMT
+architectures, inter-lane communication is an important bottleneck,
+and understanding how this affects computation time allows us to
+understand where the software implementation can be improved, and what
+hardware changes would benefit FFT performance the most.  This article
+is focused on how LDS size affects FFT implementation and performance
+on AMD GPUs: GPU FFT performance depends very strongly on LDS size.
+
+Analysis was done assuming that the problem size allowed for a
+convenient decomposition, which may not always be the case.  However,
+in almost all practical applications, the problem size has many small
+factors, so this assumption is generally reasonable.  The performance
+model shows that, to first order, the number of global-memory
+round-trips is inversely proportional to the LDS size.  However, one
+must round up, and this can impose a significant performance cost,
+particularly for multi-dimensional FFTs, as the number of ceiling
+functions is equal to the dimension of the transform.  Current
+research may help alleviate this inefficiency.  Alternatively, it may
+be possible to increase performance by using cross-lane operations,
+though further work is required to determine the performance of such
+implementations.  Using the register file also offers possible
+performance advantages, though the generality of such implementations
+isn't immediately clear.
+
+In addition, it is not always straightforward to provide GPU kernels
+which efficiently implement the optimal algorithm described in this
+article, and other performance concerns may be more important than
+just counting global-memory round-trips.  Developer time must be spent
+judiciously: we are interested in solving problems which help people.
+For \texttt{rocFFT} software package, the model provided in this
+article indicates that we have a path forward by making better use
+of mode shared memory, and the more, the better.
+
+
+
 
 %% The conclusions section should state key conclusions and insights.
 %% While perhaps not entirely “conclusive”, this is also a good place to
@@ -451,16 +484,18 @@ FIXME: summarize
 %% We recommend simply cut-and-pasting or re-summarizing the abstract as
 %% that does not really add any value to the paper.
 
-\begingroup
-\let\itshape\upshape
-\bibliographystyle{abbrv}
-\bibliography{refs}
-\endgroup
+\begingroup \let\itshape\upshape \bibliographystyle{abbrv}
+\bibliography{refs} \endgroup
 
-\section*{\st{Acknowledgments}}
-Do \ul{not} include acknowledgments in this blind-review version of
-the paper, as acknowledgments may provide unintended hints that
-“deblind” your anonymity. If your paper is accepted to GTAC, the final
-published version can/should include the appropriate acknowledgments.
+%% \section*{\st{Acknowledgments}}
+%% Do \ul{not} include acknowledgments in this blind-review version of
+%% the paper, as acknowledgments may provide unintended hints that
+%% “deblind” your anonymity. If your paper is accepted to GTAC, the final
+%% published version can/should include the appropriate acknowledgments.
 
 \end{document}
+
+% LocalWords:  GTAC FFT ROCm GPUs LDS LINPACK SIMT performant KiB ik
+% LocalWords:  FFTs syncthreads VGPR VGPRs eg sizeof aN dft strided
+% LocalWords:  decomposable Bluestein Hadamard priori pre rcpost vram
+% LocalWords:  rebalancing rocFFT CUs ds
