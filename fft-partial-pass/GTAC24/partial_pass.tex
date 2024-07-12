@@ -3,10 +3,10 @@
 
 
 % To enable the camera-ready format, use the following line
-%\documentclass{gtac}
+\documentclass{gtac}
 
 % To enable the double-blind submission format for the review process, use the following line
-\documentclass[blind]{gtac}
+%\documentclass[blind]{gtac}
 
 \usepackage{cite}
 \usepackage{bm}
@@ -19,6 +19,8 @@
 \usepackage{amsfonts}
 \usepackage{times}
 \usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{flushend}
 
 % This is the watermark text. 
 \SetWatermarkText{
@@ -42,7 +44,7 @@ flavio.teixeira@amd.com, malcolm.roberts@amd.com} % Adjust the author names here
 \begin{document}
 
 \maketitle % Create the title section
-\vspace*{-1.2in} % Adjust this value to reduce the space
+%\vspace*{-1.2in} % Adjust this value to reduce the space
 
 
 % Used to fix the header. 
@@ -56,11 +58,7 @@ flavio.teixeira@amd.com, malcolm.roberts@amd.com} % Adjust the author names here
 \thispagestyle{fancy}
 \begin{abstract}
 
-
-% define size n, radix pass. 
-
-Fast Fourier Transforms (FFTs) are memory-bound workloads on modern GPU accelerators. If $N$ is a power of 2, then a radix-$2$ FFT algorithm recursively expresses the Discrete Fourier Transform (DFT) of length $N$ in terms of smaller DFTs of length $N/2$. More generally, if $N$ is highly composite, e.g., $N=q_1 \times q_2 \times \cdots \times q_k$, then the FFT work can be expressed in terms of radix-$q_i$ passes. For GPU-based FFT algorithms, these passes are performed entirely in shared-memory for improved performance, while the bottleneck is usually the global memory. A single round-trip to and from global memory is required when $N$ is small, but for large enough $N$ an hierarchical algorithm that entails several passes through global memory is required. In this work, we first discuss a mathematical decomposition of FFT work that enable us to rearrange radix-$q_i$ passes in compute kernels in an unconventional way. This decomposition is shown to be applicable to many GPU-based FFT schemes, including large and multidimensional FFTs. We then focus on the multidimensional case, and present a method to optimally distribute FFT work among the compute kernels. By performing partial radix passes in a compute kernel off-dimension in 3D FFTs, the total number of passes through global memory is shown to be reduced by $1/3$. The reduction in global memory transactions directly translates to improved performance in rocFFT for many HPC customers critical workloads.
- 
+Fast Fourier Transforms (FFTs) are memory-bound workloads on modern GPU accelerators. We present a new method to optimally distribute FFT work among compute kernels based on the amount of available shared memory. Rearranging FFT work in this fashion allow us to significantly reduce the total number of passes through global memory, which is frequently the bottleneck in GPU-based FFT algorithms. For rocFFT, the software library for computing FFTs in AMD's ROCm ecosystem, the reduction in global memory transactions directly translates to improved performance for many HPC customers critical workloads.
 
 \end{abstract}
 
@@ -68,21 +66,69 @@ Fast Fourier Transforms (FFTs) are memory-bound workloads on modern GPU accelera
 
 \section{Introduction}
 
-\cite{vanloan92}
+%TODO introductory FFT paragraph and applications of FFT, give references.
 
-\section{FFT work decomposition}
+Fast Fourier Transforms (FFTs) are memory-bound workloads on modern GPU accelerators. If $N$ is a power of 2, then a radix-$2$ FFT algorithm recursively expresses the Discrete Fourier Transform (DFT) of length $N$ in terms of smaller DFTs of length $N/2$. For GPU-based FFT algorithms, the small DFTs in each recursion or pass of the FFT are performed entirely in shared-memory for improved performance, while the bottleneck is usually the global memory. A single round-trip to global memory is required when $N$ is small, but for large enough $N$ an hierarchical algorithm that entails several passes through global memory is required. 
 
-\begin{eqnarray}
-\bm{x}_{n_1 \times n_2} & \leftarrow & \bm{x}_{n_1 \times n_2} \bm{F}_{n_2} \\
-\bm{x}_{n_1 \times n_2} & \leftarrow & \bm{F}_n (0:n_1-1, 0:n_2-1) .* \bm{x}_{n_1 \times n_2} \\
-\bm{x}_{n_2 \times n_1} & \leftarrow & \bm{x}_{n_1 \times n_2}^{T} \\
-\bm{x}_{n_2 \times n_1} & \leftarrow & \bm{x}_{n_2 \times n_1} \bm{F}_{n_1}
-\end{eqnarray}
+\textbf{Main Results:} In this work, we present a method to optimally distribute FFT work among the compute kernels based on the amount of available shared memory. This method is shown to be applicable to many GPU-based FFT schemes, including large one-dimensional and multidimensional FFTs. We then focus on the multidimensional case, and show that performing partial radix passes in a compute kernel off-dimension in 3D FFTs, the total number of round-trips to global memory is reduced by $1/3$. The reduction in global memory transactions directly translates to improved performance in rocFFT for many HPC customers critical workloads.
+
+\section{Background}
+
+\subsection{Discrete Fourier Transform}
+Let $\mathbf{y} = \mathcal{F}\left\{ \mathbf{x} \right\}$ denote the discrete Fourier transform (DFT) of $\mathbf{x}$, which maps an $N$-length input sequence $\mathbf{x} = \begin{bmatrix} x_0 &  \cdots & x_{N-1} \end{bmatrix}$ into an $N$-length output sequence $\mathbf{y} = \begin{bmatrix} y_0 & \cdots & y_{N-1} \end{bmatrix}$ with
+\begin{equation}
+y_k = \sum_{n=0}^{N-1}{x_n e^{-\frac{2 \pi \jmath}{N}nk}}, \qquad k = 0, \ \ldots, \ N-1.
+\label{eq:dft}
+\end{equation}
+The DFT can also be expressed in matrix form as
+\begin{equation}
+\mathbf{y} = \mathbf{F}_N \mathbf{x}
+\label{eq:dft_matrix_form}	
+\end{equation}
+where $\mathbf{F}_N$ is the $N \times N$ DFT matrix with entries 
+$$
+F_{nk} = e^{\frac{-2\pi \jmath}{N} nk }.
+$$
+In this work, we focus on complex-valued entries for the input sequence $\mathbf{x}$. The computational complexity of directly evaluating the DFT scales as $O(N^2)$. 
+
+\subsection{Mixed-Radix FFTs}
+The Fast Fourier Transform (FFT) is a family of algorithms for computing the DFT in $O(N \log(N))$. To achieve reduced computational complexity these algorithms use a divide-and-conquer approach for the computation of the DFT. For example, if $N$ is a power of $2$, then the summation in \labelcref{eq:dft} can be split into two smaller summations in $N/2$, one with the even entries, and the other with the odd entries of the input sequence. Applying this splitting rule to \labelcref{eq:dft} is equivalent to computing two smaller DFTs of length $N/2$. This procedure can in turn be applied recursively to the smaller summations until a length-$2$ DFT is reached. This is the essence of the radix-$2$ Cooley-Tukey (C-T) FFT algorithm. Each recursion of the splitting rule is also known as a stage or a pass of the FFT. There are $\log(N)$ stages for a radix-$2$ FFT and $N/2$ length-$2$ DFTs to be performed at each stage.	
+
+More generally, if $N$ is highly composite, e.g., $N=q_1 \times q_2 \times \cdots \times q_k$, then the summation in \labelcref{eq:dft} can be recursively split into smaller summations, starting with $q_1$ summations in $N/q_1$. These summations in turn can then be split into $q_2$ summations in $N/q_2$, and so on. This procedure corresponds to a mixed-radix C-T algorithm \cite{vanloan92}. There are $k$ stages or passes in a mixed-radix FFT with $N=q_1 \times q_2 \times \cdots \times q_k$ and $N/q_i$ length-$q_i$ DFTs to be performed at each stage. 
+
+\subsection{Computing FFTs with GPUs}
+
+Each DFT in a given stage is completely independent from each other, thus the entire FFT work of a stage is parallelizable. This shows that FFTs are clearly embarrassingly parallel workloads. Each stage requires writing intermediate results back to memory. Since global memory is generally slow compared to the GPU compute units bandwidth, the FFT passes or stages are performed entirely in shared memory. With this approach, only a single trip to global memory is required. The amount of available shared memory is, therefore, a determining factor for performance of FFTs in GPUs. FFTs are clearly memory bound workloads on these devices, since each DFT in an FFT stage typically has low arithmetic intensity.
+
+The splitting rule in the C-T algorithm with even and odd entries of the input sequence requires an index-shuffling stage, which is equivalent to a bit-reversal of the input sequence indices in binary form, and that leads to incoherent memory accesses patterns. GPU implementations typically use a variation of C-T called the Stockham algorithm, which is similar to C-T with the exception of how the indices are arranged in each stage, leading to more favourable access patterns for GPUs.
+
+%81
+
+\subsection{FFT work decomposition}
+
+Consider the case where an FFT of length $N$ does not fit into shared memory. If this FFT is to be performed entirely in global memory, then $\log(N)$ round-trips to global memory are required if a radix-$2$ implementation is used, or $k$ round-trips with $N=q_1 \times q_2 \times \cdots \times q_k$ if a mixed-radix FFT is carried out. This compute scheme, however, would be extremely slow and inefficient on modern GPUs since global memory is significant slower than the compute units. 
+
+We now describe a well-known procedure that allows a length $N$ FFT to be decomposed into a series of smaller FFTs. Let $\mathbf{F}_N (0 \colon N_1-1, 0 \colon N_2-1)$ with $N = N_1 \times N_2$ denote an $N_1 \times N_2$ submatrix of the DFT matrix $\mathbf{F}_N$ obtained by picking the $0$ to $N_1-1$ rows and the $0$ to $N_2-1$ columns of $\mathbf{F}_N$. Similarly, let $\mathbf{X}_{N_1 \times N_2}$ denote an $N_1 \times N_2$ matrix obtained by a column major-ordering of $\mathbf{x}$, i.e., by picking every consecutive $N_1$ entries of $\mathbf{x}$ and setting them as columns of $\mathbf{X}_{N_1 \times N_2}$. The following 4-step method \cite{bailey89} can be used to perform a large $N$ FFT, with $N = N_1 \times N_2$, in terms of two smaller FFTs of length $N_1$ and $N_2$:
+\begin{enumerate}
+\item $\mathbf{X}_{N_1 \times N_2} \leftarrow \mathbf{X}_{N_1 \times N_2} \mathbf{F}_{N_2} \label{4_step_algo_1}$ \\
+\item $\mathbf{X}_{N_1 \times N_2}  \leftarrow \mathbf{F}_n (0 \colon N_1-1, 0 \colon N_2-1) .* \mathbf{X}_{N_1 \times N_2}$ \label{4_step_algo_2}\\
+\item $\mathbf{X}_{N_2 \times N_1}  \leftarrow  \mathbf{X}_{N_1 \times N_2}^{T}$ \label{4_step_algo_3}\\
+\item $\mathbf{X}_{N_2 \times N_1}  \leftarrow  \mathbf{X}_{N_2 \times N_1} \mathbf{F}_{N_1}$ \label{4_step_algo_4}
+\end{enumerate}
+
+Steps \labelcref{4_step_algo_1} and \labelcref{4_step_algo_4} perform the smaller FFTs, $N_1$ FFTs of length $N_2$ along the rows of $\mathbf{X}_{N_1 \times N_2}$, and $N_2$ FFTs of length $N_1$ along the rows of $\mathbf{X}_{N_2 \times N_1}$, respectively. Step \labelcref{4_step_algo_2} involves the Hadamard product between the matrices $\mathbf{F}_n (0 \colon N_1-1, 0 \colon N_2-1)$ and $\mathbf{X}_{N_1 \times N_2}$, while step \labelcref{4_step_algo_3} performs a matrix transposition. If any of the smaller FFTs do not fit into shared memory, the decomposition can be applied recursively until the smaller FFTs satisfy the shared memory size constraints.
+
+In terms of the GPU implementation of this decomposition, multiple round-trips to global memory may be required due to the necessity to save and load intermediate results. However, the total number of passes through global memory is significantly reduced compared to performing the entire FFT within global memory. For example, in rocFFT, if both the smaller FFTs of length $N_1$ and $N_2$ satisfy the shared memory size constraints in the first decomposition of $N$, then an additional round-trip to global memory is required. This is assuming the best case scenario where the Hadamard product and the transposition steps are fused into the two compute kernels that perform the smaller FFTs. In other words, the first compute kernel loads the input data from global memory, perform steps \labelcref{4_step_algo_1} and \labelcref{4_step_algo_2} in shared memory, and save the intermediate results to global memory, while the second compute kernel loads the intermediate results from global memory, perform steps \labelcref{4_step_algo_3} and \labelcref{4_step_algo_4}, and save the final result to global memory. If the length $N_1$ or $N_2$ FFTs do not satisfy the shared memory constraints in the first decomposition of $N$, then the procedure is applied recursively until a smaller enough FFT is reached, thus requiring multiple additional compute kernels.
 
 
-\cite{bailey89}
+%The penalty for this is that the decomposition requires multiple passes in global memory. 
+%This will still be faster than performing the full passes in global memory. 
+%compare log(N) or k stages as opposed to two or more if the FFT is further decomposed into smaller.
 
-\section{Large and Multidimensional FFTs}
+
+\section{Optimal Distribution of FFT Work}
+
+We are constrained by a shared-memory size of $65,536$ bytes for AMD's MI accelerator series. For a single-precision number, $8$ bytes are used and since we are dealing with complex-valued FFTs, we have $16$ bytes per complex-valued element, yielding a maximum FFT length of $N_{\max} = 4,096$ for single-precision, one-dimensional FFTs in rocFFT. For double-precision, the maximum length is, therefore, $N_{\max} = 2,048$. The one-dimensional FFT compute kernels with $1 \leq N \leq N_{\max}$ can be thought of as building blocks upon which larger FFTs can be computed.
 
 \section{Application: 3D FFTs in rocFFT}
 
