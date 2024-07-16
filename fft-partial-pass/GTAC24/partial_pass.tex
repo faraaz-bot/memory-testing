@@ -104,7 +104,17 @@ small, but for large enough $N$ an hierarchical algorithm that entails
 several passes through global memory is required. Multidimensional
 FFTs have similar compute and memory requirements.
 
-\textbf{Main Results:} In this work, we present a method to optimally distribute FFT work among the compute kernels based on the amount of available shared memory. This method is shown to be applicable to many GPU-based FFT compute schemes, including large one-dimensional and multidimensional FFTs. We then focus on the multidimensional case, and show that by performing partial radix passes in a compute kernel off-dimension in three-dimensional FFTs, the total number of round-trips to global memory is reduced by one-third. The reduction in global memory transactions directly translates to improved performance in rocFFT for many HPC customers critical workloads.
+\textbf{Main Results:} In this work, we present a method to optimally
+distribute FFT work among the compute kernels based on the amount of
+available shared memory. This method is shown to be applicable to many
+GPU-based FFT compute schemes, including large one-dimensional and
+multidimensional FFTs. We then focus on the multidimensional case, and
+show that by performing partial radix passes in a compute kernel
+off-dimension in three-dimensional FFTs, the total number of
+round-trips to global memory can be reduced by up to one-third. The
+reduction in global memory transactions directly translates to
+improved performance in rocFFT for many HPC customers critical
+workloads.
 
 \section{Background}
 
@@ -155,7 +165,7 @@ We now describe a well-known procedure that allows a length-$N$ FFT to be decomp
 
 Steps 1 and 4 perform the smaller FFTs, $N_a$ FFTs of length $N_b$ along the rows of $\mathbf{X}_{N_a \times N_b}$, and $N_b$ FFTs of length $N_a$ along the rows of $\mathbf{X}_{N_b \times N_a}$, respectively. Step 2 involves the Hadamard product between the matrices $\mathbf{F}_n (0 \colon N_a-1, 0 \colon N_b-1)$ and $\mathbf{X}_{N_a \times N_b}$, while step 3 performs a matrix transposition. If any of the smaller FFTs do not fit into shared memory, the decomposition can be applied recursively until the smaller FFTs satisfy the shared memory size constraints.
 
-In terms of the GPU implementation of this decomposition, multiple round-trips to global memory may be required due to the necessity to load and store intermediate results. However, the total number of passes through global memory is significantly reduced compared to performing the entire FFT within global memory. For example, in rocFFT, if both the smaller FFTs of length $N_a$ and $N_b$ satisfy the shared memory size constraints in the first decomposition of $N$, then an additional round-trip to global memory is required. This is assuming the best case scenario where the Hadamard product and the transposition steps are fused into the two compute kernels that perform the smaller FFTs. In other words, the first compute kernel loads the input data from global memory, perform steps 1 and 2 in shared memory, and stores the intermediate results into global memory, while the second compute kernel loads the intermediate results from global memory, perform steps 3 and 4, and stores the final result into global memory. If the length $N_a$ or $N_b$ FFTs does not satisfy the shared memory constraints in the first decomposition of $N$, then the procedure is applied recursively until a smaller enough FFT is reached, thus requiring multiple additional compute kernels and global memory accesses.
+In terms of the GPU implementation of this decomposition, multiple round-trips to global memory may be required due to the necessity to load and store intermediate results. However, the total number of passes through global memory is significantly reduced compared to performing the entire FFT within global memory. For example, in rocFFT, if both the smaller FFTs of length $N_a$ and $N_b$ satisfy the shared memory size constraints in the first decomposition of $N$, then an additional round-trip to global memory is required. This is assuming the best case scenario where the Hadamard product and the transposition steps are fused into the two compute kernels that perform the smaller FFTs. In other words, the first compute kernel loads the input data from global memory, perform steps 1 and 2 in shared memory, and stores the intermediate results into global memory, while the second compute kernel loads the intermediate results from global memory, perform steps 3 and 4, and stores the final result into global memory. If the length $N_a$ or $N_b$ FFTs do not satisfy the shared memory constraints in the first decomposition of $N$, then the procedure is applied recursively until a smaller enough FFT is reached, thus requiring multiple additional compute kernels and global memory accesses.
 
 
 \section{Proposed FFT Work Distribution}
