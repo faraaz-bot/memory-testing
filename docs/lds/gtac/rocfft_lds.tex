@@ -69,7 +69,7 @@ dependant on LDS size and performance.
 
 \section{Introduction}
 
-the fast Fourier transforms (FFT) is considered one of the most
+The fast Fourier transforms (FFT) is considered one of the most
 important algorithms of the modern era~\cite{strang1994wavelets} and
 has a variety of important uses from digital signal
 processing~\cite{sorensen1990efficient}, to computational fluid
@@ -114,19 +114,19 @@ The discrete Fourier transform of the complex input
 $\{f_\ell\}_{\ell=0}^{N-1}$ of length $N$ is given by
 \begin{dmath}
   \label{dft}
-  \{F_k\} = \sum_{\ell=0}^{N-1} e^{\frac{-2\pi{}ik\ell{}}{N}} \{f_\ell\}_{\ell=0}^{N-1}
+  F_k = \sum_{\ell=0}^{N-1} e^{\frac{-2\pi{}ik\ell{}}{N}} f_\ell
 \end{dmath}
 which is denoted as $F = \mathcal{F}_N\(f\)$.  If the entirety of the
 input fits into LDS, then the transform can be computed with just one
-single pass to global memory.  This is more of less the optimal case
+single pass to global memory.  This is more or less the optimal case
 for FFTs on GPUs; if the batch size is large enough, we can saturate
 the global memory bandwidth, but also avoid reading/writing to global
-memory repeatedly.  Calls to \lstinline{__syncthreads} prevent
+memory repeatedly.  Calls to \texttt{__syncthreads} prevent
 race-conditions when moving data between LDS and CU registers.  One
 can reduce LDS requirements, allowing for more larger transforms or
 increasing occupancy, by communicating the real and imaginary
 components separately, though this comes at the expense of an
-additional \lstinline{__syncthreads}.  Since the per-CU VGPR register
+additional \texttt{__syncthreads}.  Since the per-CU VGPR register
 file for MI100/MI200/MI300 is 521KiB with LDS limited to 64KiB, it's
 theoretically possible to put up to eight times the LDS size per
 workgroup, allowing for even larger single-pass transforms.  However,
@@ -145,22 +145,21 @@ FFT into the VGPRs of a single SIMT thread.
 
 More LDS allows for a larger range of single-pass FFTs. For
 latency-optimized transforms, an increase in LDS reduces the number of
-CU-level synchronizations.  Calls to \lstinline{__syncthreads}, while
-less costly than loads/stores to global memory, can still be
-expensive.
+CU-level synchronizations.  Calls to \texttt{__syncthreads}, while
+less costly than loads/stores to global memory, is still not free.
 
 Let $N$ be the problem size, $L_B$ be the size in bytes of the LDS
 cache, and $T_S$ the size of the data type (eg
 \texttt{sizeof(std::complex<double>)}, which is 16).  If $N T_s \leq
 L_B$, then the problem fits into LDS.  This incurs just one
-global-memory round-trip and one call to \lstinline{__syncthreads}.
+global-memory round-trip and one call to \texttt{__syncthreads}.
 
 
 
 \subsection{Multiple-Pass Transforms}
 
 As problem size increases, the FFT will eventually not fit into the
-memory accessible to a single workgroup, and it becomess necessary to
+memory accessible to a single workgroup, and it becomes necessary to
 use global GPU memory to save intermediate results.  This technique
 makes use of the basic technique for writing cache-aware FFTs relies
 on the recursive decomposition inherent in the FFT algorithm, and was
@@ -198,13 +197,15 @@ which allows one to decompose equation~\eqref{dft} as
   e^{\frac{-2\pi{}i\ell_b k_a }{N}}
   \sum_{\ell_a = 0}^{N_a-1}
   e^{\frac{-2\pi{}i\ell_a k_a}{N_a}}
-  f_{\ell_a N_b + \ell_b}.
+  f_{\ell_a N_b + \ell_b},
 \end{dmath}
-we have used the fact that $e^{\frac{2\pi{}iN_aN_b}{N}}=e^{2\pi{}i}=1$.
-The length-$N_a$ and $N_b$ sums are themselves Fourier transforms; in
-fact, this decomposition is exactly the heart of the FFT.  Note that
-the input and output are contiguous in different indices.  We can
-express the operation in equation~\eqref{N1N2} as
+where we have used the fact that
+$e^{\frac{2\pi{}iN_aN_b}{N}}=e^{2\pi{}i}=1$.  The length-$N_a$ and
+length-$N_b$ sums are themselves Fourier transforms; in fact, this
+decomposition is exactly the heart of the FFT.  Note that the input
+and output are contiguous in different indices.
+
+We can express the operation in equation~\eqref{N1N2} as
 \begin{dmath}
   \mathcal{F}_{N_b}\[
   \{
@@ -228,7 +229,7 @@ These operations may be fused: the output of the FFTs can be
 multiplied by the roots of unity, and the output written in a
 transposed format.  Writing transposed data directly to global memory
 gives calamitous performance due to strided memory access, but this
-can be avoided by making use of LDS memory, though power-of-two
+can be avoided by making use of LDS memory, noting that power-of-two
 transforms require padding in order to avoid memory bank conflicts.
 This gives us the ability to compute FFTs unrestrained by the memory
 available to a single compute unit by using global memory to store
@@ -243,7 +244,7 @@ number of global-memory round-trips is
 \begin{dmath}
   \lceil  \frac{N T_s}{L_B} \rceil
 \end{dmath}
-which requires an equal number of calls to \lstinline{__syncthreads}.
+which requires an equal number of calls to \texttt{__syncthreads}.
 Note that power-of-two transforms will need padding in LDS to avoid
 bank conflicts, which will reduce the size of problem that fits in
 LDS.
@@ -257,7 +258,7 @@ offer only 1 and themselves as factors.  The resistance of these
 problem sizes to efficient computation may be overcome by using the
 Bluestein algorithm~\cite{bluestein1970linear} which maps an
 arbitrary-length FFT to a convolution with a chirp function.  By the
-convolution theorem, this convolution can computed in turn by two
+convolution theorem, this convolution can be computed in turn by two
 forward FFTs, a Hadamard product, and an inverse FFT; the advantage
 being that the FFTs must be performed on data which is padded from
 length $N$ to \emph{at least} $2N$.  This gives us the freedom to
@@ -267,14 +268,15 @@ smallest power of two that is at least as large as $2N$.
 The Bluestein method is an effective fall-back method, allowing one to
 compute arbitrary-length FFTs with the same scaling and accuracy as
 conventional FFTs.  However, it is at about five times as expensive as
-a typical FFT, and these problem sizes are generally avoided in
+a conventional FFT, and these problem sizes are generally avoided in
 practice.  Small problem sizes that can, a priori, be computed using a
 single SIMT thread's VGPR file cover the first 97 primes for
 double-precision complex transforms.  Using these as building-blocks,
 the proportion of problem sizes which require a Bluestein algorithm is
 quite small.  Since the Bluestein algorithm relies on decomposable
 FFTs, the benefit for these cases is globally similar to the
-decomposable case.
+decomposable case, and we will not go into further details for this
+case.
 % FIXME: can we calculate this?
 
 \section{Real/Complex Transforms}
@@ -283,16 +285,27 @@ decomposable case.
 Applications of Fourier transforms typically involve real data.  While
 the Fourier transform is inherently complex-valued, we can still
 reduce the cost of the real/complex FFT by making use of the Hermitian
-symmetry inherent in the output of a real-to-complex FFT.  The
-simplest way to compute a real-to-complex FFT is to simply compute a
-complex FFT where the input has zero imaginary part.  For even-length
-transforms, a pre- or post-processing stage allows for efficient and
-numerically robust computation.  An even-length real-to-complex
-transform is performed by first performing a half-length complex FFT
-where the even-indexed and odd-indexed real values are treated as the
-real and imaginary parts of a complex input, producing
-$\{Z_k\}_{k=0}^{N/2-1}$.  Then a post-processing stage performs the
-final pass to create the $N/2+1$ output values by computing
+symmetry inherent in the output of a real-to-complex FFT.
+
+The simplest way to compute a real-to-complex FFT is to simply compute
+a complex FFT where the input has zero imaginary part, which
+transforms the real/complex FFT into a copy of $N$ real values, a
+length-$N$ complex FFT, and then a copy of $\lceil{}N/2\rceil{}+1$
+complex values.
+
+Another method for performing real/complex when there are an even
+number of transforms is to combine two real inputs into one length-$N$
+complex input and perform a post-processing stage to separate the
+desired outputs.
+
+For even-length transforms, a pre- or post-processing stage allows for
+efficient and numerically robust computation.  An even-length
+real-to-complex transform is performed by first performing a
+half-length complex FFT where the even-indexed and odd-indexed real
+values are treated as the real and imaginary parts of a complex input,
+producing $\{Z_k\}_{k=0}^{N/2-1}$.  Then a post-processing stage
+performs the final pass to create the $N/2+1$ output values by
+computing
 % FIXME: ref?
 \begin{dmath}
   \label{rcpost}
@@ -303,15 +316,11 @@ final pass to create the $N/2+1$ output values by computing
 where ${}^*$ denotes complex-conjugation.  A similar pre-processing
 stage is used to perform the inverse operation.
 
-Another method for performing real/complex when there are an even
-number of transforms is to combine two real inputs into one length-$N$
-complex input and perform a post-processing stage to separate the
-desired outputs.
 
 The complex-embedding and paired transforms require a length-$N$
 complex FFT, the performance of which was discussed above.  Since the
 length-$N$ complex-valued data has twice the memory footprint of the
-length-$N$ real-valued, the paired and embedded real/complex
+length-$N$ real-valued input, the paired and embedded real/complex
 reduce the cache and LDS efficiency from what one would a priori
 expect for a length-$N$ real/complex FFT.
 
@@ -320,17 +329,17 @@ complex FFT, which fits better in cache and LDS.
 Equation~\eqref{rcpost} does, however, have a complicated data flow
 diagram.  For single-pass transforms which communicate the data in one
 step, combining the complex half-length FFT and the post-processing
-stage is relatively straightforward.  The data dependency graph for the
-pre/post-processing stage imposes a constraint on the data layout for
-multi-stage 1D FFT.  Since element $k$ needs and element $N-k$ need to
-be processed together, each CU needs to process two of the sub-FFTs in
-equation~\eqref{N1N2}. While this increases the per-CU data load (and
-hence register pressure / LDS requirements), it allows one to fuse the
-complex-valued half-length FFT with the pre/post-processing
-real/complex step, thereby eliminating a global-memory round-trip.  In
-practice, users are very rarely interested in odd-length FFTs, so
-optimizing the even-length case is of much greater practical
-importance.
+stage is relatively straightforward.  The data dependency graph for
+the pre/post-processing stage imposes a constraint on the data layout
+for multi-stage 1D FFT.  Since element $k$ needs and element $N-k$
+need to be processed together, each workgroup needs to process two of
+the sub-FFTs in equation~\eqref{N1N2}. While this increases the
+per-workgroup data load (and hence register pressure / LDS
+requirements), it allows one to fuse the complex-valued half-length
+FFT with the pre/post-processing real/complex step, thereby
+eliminating a global-memory round-trip.  In practice, users are very
+rarely interested in odd-length FFTs, so optimizing the even-length
+case is of much greater practical importance.
 
 The pre- and post-processing passes require that two sets of the data
 be present.  For problems that fit entirely in LDS, this is easy to
@@ -342,6 +351,7 @@ a rebalancing of the data decomposition, so we again have
   \lceil\frac{N T_s}{L_B}\rceil
 \end{dmath}
 global-memory round-trips.
+% FIXME: plus transpose?
   
 \section{Multi-Dimensional Transforms}
 
@@ -394,23 +404,23 @@ one-dimensional FFTs.
 
 The parallelism offered by SIMT architectures needs to be balanced
 with effective inter-thread communication for algorithms that are not
-embarrassingly parallel.  Shared memory is a CU-level explicitly
-managed cache which offers good performance with general access
-patterns (modulo bank conflicts); the canonical use is to transpose
-data at the CU level so that read/writes to global memory are
-contiguous.  We also have two or three automatically managed caches
-between the CUs and global memory, and an FFT algorithm designed to
-take advantage of these caches may be able to take advantage of
-various levels of cache in order to share data withing and between
-CUs.  Since the L1 to L3 caches are implicitly managed, it's more
-difficult to predict the performance of an FFT implementation when
-relying on these cache levels.
+embarrassingly parallel.  Shared memory is a workgroup-level
+explicitly managed cache which offers good performance with general
+access patterns (modulo bank conflicts); the canonical use is to
+transpose data at the workgroup level so that read/writes to global
+memory are contiguous.  We also have two or three automatically
+managed caches between the registers and global memory, and an FFT
+algorithm designed to take advantage of these caches may be able to
+take advantage of various levels of cache in order to share data.
+Since the L1 to L3 caches are implicitly managed, it's more difficult
+to predict the performance of an FFT implementation when relying on
+these cache levels.
 
 Cross-lane operations~\cite{crosslane} offer another avenue for
 communicating data between SIMT threads within a CU.  Cross-lane
 operations take advantage of register bandwidth, offering performance
 advantages over LDS-based implementations.  Since the
-\lstinline{ds_permute_b32} operations work on 32 bits, communicating
+\texttt{ds_permute_b32} operations work on 32 bits, communicating
 8-byte values (such as \texttt{double} or \texttt{float2}) or 16-byte
 values (such as \texttt{double2}) requires multiple calls.  The
 development effort for cross-lane operations is higher than for
@@ -505,4 +515,4 @@ of mode shared memory, and the more, the better.
 % LocalWords:  GTAC FFT ROCm GPUs LDS LINPACK SIMT performant KiB ik
 % LocalWords:  FFTs syncthreads VGPR VGPRs eg sizeof aN dft strided
 % LocalWords:  decomposable Bluestein Hadamard priori pre rcpost vram
-% LocalWords:  rebalancing rocFFT CUs ds
+% LocalWords:  rebalancing rocFFT CUs ds workgroup iN
