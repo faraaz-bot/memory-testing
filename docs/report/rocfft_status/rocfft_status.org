@@ -1,6 +1,19 @@
 https://amdcloud.sharepoint.com/:p:/r/sites/MLSELibrariesDevelopment/_layouts/15/Doc.aspx?sourcedoc=%7BEA2B7888-504D-4E24-A1CB-9DC9880D18B1%7D&file=rocFFT%20Status%20Q3%202023.pptx
 * vertical tasting:
 
+4.0_compile_5.0   
+4.1_compile_5.0 
+4.2_compile_5.0 
+4.3_compile_5.0 
+4.4_compile_5.0 
+
+4.0_compile_6.0
+
+cmake -DROCFFT_RUNTIME_COMPILE_DEFAULT=on -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_CLIENTS=off -DCMAKE_INSTALL_PREFIX=${HOME}/rocfft4.0 -DAMDGPU_TARGETS=$(rocminfo | grep amdgcn-amd-amdhsa | grep -Eo  "gfx.*" | tail -n 1)  -DROCFFT_BUILD_KERNEL_CACHE_PATH=${HOME}/repo/aot.cache ..
+
+cmake -DROCFFT_RUNTIME_COMPILE_DEFAULT=on -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_CLIENTS=off -DCMAKE_INSTALL_PREFIX=${HOME}/rocfft4.0 -DAMDGPU_TARGETS=gfx90a  -DROCFFT_BUILD_KERNEL_CACHE_PATH=${HOME}/repo/aot.cache ..
+
+
 complex_forward_len_43008_double_ip_batch_500_istride_1_CI_ostride_1_CI_idist_43008_odist_43008_ioffset_0_0_ooffset_0_0
 
    
