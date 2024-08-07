@@ -8,10 +8,26 @@ https://amdcloud.sharepoint.com/:p:/r/sites/MLSELibrariesDevelopment/_layouts/15
 4.4_compile_5.0 
 
 4.0_compile_6.0
+4.1_compile_6.0
+4.2_compile_6.0
+4.3_compile_6.0
+4.4_compile_6.0
+
+5.0_compile_6.0
+5.1_compile_6.0
+5.2_compile_6.0
+5.3_compile_6.0
+5.4_compile_6.0
+5.5_compile_6.0
+5.6_compile_6.0
+5.7_compile_6.0
+
+sudo apt-get install python3-dev
 
 cmake -DROCFFT_RUNTIME_COMPILE_DEFAULT=on -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_CLIENTS=off -DCMAKE_INSTALL_PREFIX=${HOME}/rocfft4.0 -DAMDGPU_TARGETS=$(rocminfo | grep amdgcn-amd-amdhsa | grep -Eo  "gfx.*" | tail -n 1)  -DROCFFT_BUILD_KERNEL_CACHE_PATH=${HOME}/repo/aot.cache ..
 
-cmake -DROCFFT_RUNTIME_COMPILE_DEFAULT=on -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_CLIENTS=off -DCMAKE_INSTALL_PREFIX=${HOME}/rocfft4.0 -DAMDGPU_TARGETS=gfx90a  -DROCFFT_BUILD_KERNEL_CACHE_PATH=${HOME}/repo/aot.cache ..
+90a:
+cmake -DROCFFT_RUNTIME_COMPILE_DEFAULT=on -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_CLIENTS=off -DCMAKE_INSTALL_PREFIX=${HOME}/rocfft4.0 -DAMDGPU_TARGETS=gfx90a -DROCFFT_BUILD_KERNEL_CACHE_PATH=${HOME}/repo/aot.cache ..
 
 
 complex_forward_len_43008_double_ip_batch_500_istride_1_CI_ostride_1_CI_idist_43008_odist_43008_ioffset_0_0_ooffset_0_0
