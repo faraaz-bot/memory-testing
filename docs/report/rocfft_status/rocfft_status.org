@@ -1,5 +1,5 @@
 https://amdcloud.sharepoint.com/:p:/r/sites/MLSELibrariesDevelopment/_layouts/15/Doc.aspx?sourcedoc=%7BEA2B7888-504D-4E24-A1CB-9DC9880D18B1%7D&file=rocFFT%20Status%20Q3%202023.pptx
-* vertical tasting:
+* vertical tasting
 
 4.0_compile_5.0   
 4.1_compile_5.0 
@@ -52,6 +52,7 @@ cholla_mi200.dat
 ./clients/staging/rocfft-rider --double --length 8192 -b 8192 -N 10
 ./clients/staging/rocfft-rider --double --length 16384 -b 16384 -N 10
 ./clients/staging/rocfft-rider --double --length 32768 -b 32768 -N 10
+./clients/staging/rocfft-rider --double --length 65536 -b 65536 -N 10
 
 input files:
 1dbatch_mi50.dat
@@ -70,8 +71,10 @@ asy -f pdf bargraph.asy -u"dolabel=true;filenames='1dbatch_mi50.mdat,1dbatch_mi1
 * General benchmark test:
 run the "all" suite.
 
+./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S all -o 6.2_all_mi200 --lib ~/versions/rocfft6.2/build/library/src/librocfft.so
+
 suites:
-dsp ->unbatched_1d
+dsp -> unbatched_1d
 distribbuted transforms -> batched_1d
 molecular dynamics -> md
 * speedups across versions
