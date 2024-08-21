@@ -90,3 +90,6 @@ mi200:
 
 asy -f pdf bargraph.asy -u"filenames='gmean_mi100.mdat';dolabel=false;inverse=false;ylabel='Geometric Mean Speedup'" -o gmean_mi100.pdf
 pdf2emf gmean_mi100.pdf
+* versions
+2024Q3:
+https://amdcloud.sharepoint.com/:p:/r/sites/MLSELibrariesDevelopment/_layouts/15/Doc.aspx?sourcedoc=%7B586D5ECC-AA57-4A79-AE37-92A862DF98A4%7D&file=rocFFT%20Status%20Q3%202024.pptx&action=edit&mobileredirect=true
