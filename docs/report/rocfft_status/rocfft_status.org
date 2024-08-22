@@ -84,6 +84,14 @@ run the "all" suite.
   ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S unbatched_1d -o 6.2_dsp_mi50 --lib ~/versions/rocfft6.2/build/library/src/librocfft.so && \
   ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S md           -o 6.2_md_mi50  --lib ~/versions/rocfft6.2/build/library/src/librocfft.so
 
+./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S all          -o 6.2_all_mi100 --lib ~/versions/rocfft6.2/build/library/src/librocfft.so && \
+  ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S unbatched_1d -o 6.2_dsp_mi100 --lib ~/versions/rocfft6.2/build/library/src/librocfft.so && \
+  ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench -S md           -o 6.2_md_mi100  --lib ~/versions/rocfft6.2/build/library/src/librocfft.so
+
+./rocfft-perf run --bench ~/repo/hipfft/build/clients/staging/hipfft-bench -S all          -o all_h100 && \
+  ./rocfft-perf run --bench ~/repo/hipfft/build/clients/staging/hipfft-bench  -S unbatched_1d -o dsp_h100 && \
+  ./rocfft-perf run --bench ~/repo/hipfft/build/clients/staging/hipfft-bench -S md           -o md_h100 
+
 suites:
 dsp -> unbatched_1d
 distribbuted transforms -> batched_1d
