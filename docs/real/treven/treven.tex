@@ -1,0 +1,272 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+
+
+
+\usepackage{color}
+\definecolor{heavyblue}{cmyk}{1,1,0,0.25}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{listings}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+
+% these bracket shortcuts break algorithm packages:
+%\renewcommand{\(}{\left(}
+%\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+\newcommand{\thetitle}{Real-complex multi-dimensional FFTs with transposition to use the even-length method FIXME: this is a bad title.}
+\newcommand{\theauthor}{Malcolm Roberts \\
+AIG Software Development \\
+malcolm.roberts@amd.com}
+
+
+\hypersetup{
+  pdftitle={\thetitle},
+  pdfpagemode=UseOutlines,
+  citebordercolor=0 0 1,
+  colorlinks=true,
+  allcolors=heavyblue,
+  breaklinks=true,
+  pdfauthor={\theauthor},
+  pdfpagetransition=Dissolve,
+  bookmarks=true
+}
+
+\title{\thetitle}
+\author{\theauthor}
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+Fast Fourier transforms (FFTs) are an important algorithm in
+high-performance computing, offering improved numerical accuracy and
+reduced computational and bandwidth costs.  While the Fourier
+transform is most naturally defined on complex values, applications of
+the Fourier transform generally use real values.  This document
+outlines a new method for efficiently computing real-to-complex FFTs in
+situations where conventional methods are not applicable.  This
+method, which we refer to as the real-transpose method, allows for
+increased performance and accuracy compared to alternatives.
+
+FIXME: add N log N and numerical error.
+
+\section{Problem statement}
+
+The FFT of the one-dimensional input $x=\{x_n\}_{n=0}^{N-1}$ is 
+\begin{dmath}
+  \label{dft}
+  X_k = \mathcal{F}\left[x\right]_k = \sum_{n=0}^{N-1} \omega_N^{kn}x_n
+\end{dmath}
+for $k=0,\dots,{N-1}$, and where $\omega_N=e^{\frac{-2\pi{}i}{N}}$ is
+the $N$th root of unity.  If $x$ is real-valued, then
+equation~\eqref{dft} exhibits Hermitian symmetry.  That is,
+\begin{dmath}
+  X_k = X^*_{-k}
+\end{dmath}
+where ${}^*$ denotes complex conjugation.  As such, we can save flops
+and bytes by not computing redundant values.  In particular, we
+store the following $\floor{N/2}+1$ values
+\begin{dmath}
+  X_0, X_1, \dots, X_{\floor{N/2}}
+\end{dmath}
+and note that $X_0$ is guaranteed to be real-valued, as is
+$X_{\floor{N/2}}$ if $N$ is even.
+
+\subsection{Complex embedding}
+\label{sscomplexembed}
+
+The simplest way to compute a real-to-complex FFT is to embed the real
+data into a complex buffer with zero real part, perform a
+complex-to-complex FFT of length $N$, and then copy the first
+$\floor{N/2}+1$ values into the output buffer.  This is outline in
+alrogithm~\ref{complexembed1d}.  The memory footprint is roughly twice
+the size of the real-valued input, and the underlying
+complex-to-complex FFT is of length $N$..  The inverse,
+complex-to-real transform follows much as one would expect.  This
+algorithm works for general problem sizes.
+\begin{algorithm}
+  \caption{Complex embedding}\label{complexembed1d}
+  \begin{algorithmic}[1]
+    \For{$n\gets 0, N-1$}
+    \State $z_n \gets x_n$
+    \EndFor
+    \State $Z \gets \Four_N\left[z\right]$
+    \For{$n\gets 0, \floor{N/2}$}
+    \State $X_n \gets Z_n$
+    \EndFor
+    \State \textbf{return} $X$
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Paired transforms}
+
+Improvements to the complex embedding method rely, more-or-less, on
+the fact that there are two real values in each complex value.  This
+is particularly clear in the paired-transform method.  If we have two
+real-valued inputs $x$ and $y$ which we wish to transform, we can make
+use of the linearity of the Fourier transform to compute the transform
+with a lower cost than that in subsection~\ref{sscomplexembed}.  In
+particular, let $z_n = x_n + i y_n$.  Then, $Z_k = X_k + i Y_k$, and
+we can recover the invididual transforms via
+\begin{align}
+  X_k &= \frac{Z_k + Z_{N-k}^*}{2} \\
+  Y_k &= \frac{Z_k - Z_{N-k}^*}{2i}.
+\end{align}
+This entails one length-$N$ complex-to-complex FFT for two inputs,
+which has the same memory footprint as the two real-valued inputs.
+The algorithm is described in algorithm~\ref{paired}.  This method
+works for both even and off $N$, but requires an even number of
+transforms.  If $x$ and $y$ have very different magnitudes, then this
+method is not numerically robust, as the smaller input will have a
+numerical error dominated by the larger input.
+\begin{algorithm}
+  \caption{Paired transforms}\label{paired}
+  \begin{algorithmic}[1]
+    \For{$n\gets 0, N-1$}
+    \State $z_n \gets x_n + i y_n$
+    \EndFor
+    \State $Z \gets \Four_N\left[z\right]$
+    \For{$k\gets 0, \floor{N/2}$}
+    \State $X_k \gets \frac{Z_k + Z_{N-k}}{2}$
+    \State $Y_k \gets \frac{Z_k - Z_{N-k}}{2i}$
+    \EndFor
+    \State \textbf{return} $X$, $Y$
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Even-length transforms}
+
+When $N$ is even, we have the opportunity to use a more efficient
+algorithm, where we treat the data as complex-valued from the
+beginning.  In particular, let $z_n = x_{2n} + i x_{2n+1}$ for
+$n=0,\dots,N/2-1$.  Then,
+\begin{align}
+  X_0 &= \Re{Z_0} - Im{Z_0}\\
+  X_k &= \frac{1}{2} \left(Z_k + Z_{\frac{N}{2}-k}^*\right)
+  + \omega_N^k \frac{i}{2} \left(Z_{\frac{N}{2}-k}^* - Z_{}k\right) \\
+  X_{\frac{N}{2}} &=  \Re{Z_0} + Im{Z_0}
+\end{align}
+This entail a complex FFT of length $N/2$, and the memory footprint
+for this transform is basically the same as that of the single input.
+Since this method only relies on one input, it doesn't have the same
+numerical robustness problems as the paired algorithm.
+\begin{algorithm}
+  \caption{Even algorithm}\label{even}
+  \begin{algorithmic}[1]
+    \For{$n\gets 0, N/2-1$}
+    \State $z_n \gets x_{2n} + i x_{2n+1}$
+    \EndFor
+    \State $Z \gets \Four_{N/2}\left[z\right]$
+    \State $X_0 \gets \Re{Z_0} - \Im{Z_0}$ 
+    \For{$k\gets 1, N/2-1$}
+    \State $X_k \gets \frac{1}{2} \left(Z_k + Z_{\frac{N}{2}-k}^*\right)
+  + \omega_N^k \frac{i}{2} \left(Z_{\frac{N}{2}-k}^* - Z_{}k\right)$
+    \EndFor
+    \State $X_{\frac{N}{2}} \gets \Re{Z_0} + \Im{Z_0}$ 
+    \State \textbf{return} $X$
+  \end{algorithmic}
+\end{algorithm}
+
+The paired algorithm offers performance advantages, and is the
+preferred algorithm when it is available.
+
+\section{Multi-dimensional transforms}
+
+Many applications make use of 2D or 3D FFTs.  The standard method for
+compute a $d$-dimensional FFT with length
+$N_1\times{}\dots{}\times{}N_d$ is to perform batched 1D transforms in
+each dimension.  For real-to-complex transforms, the output exhibits
+Hermitian symmetry, so only about half of the values are needed in the
+output.
+
+In the 1D case, there isn't much choice on how to apply this symmetry;
+one keeps either the lower half or upper half of the array, and it's
+just much simpler to keep the lower half.  In higher dimensions, the
+symmetry is over some plane that bisects the data, and it saves a lot
+of trouble to make this plane perpendicular to one of the axes.  In a
+row-major format, uers expect $N_d$ to be chopped in half, and in a
+column-major format, one expects $N_1$ to be chopped in half.  For
+simplicity, let us stick to the row-major case for the remainder of
+the discussion, keeping in mind that the results are applicable in
+both cases.
+
+When computing multi-dimensional real-to-complex FFTs, the first
+batched 1D transforms take real data as input and produce complex
+(Hermitian symmetric) data as output.  If $N_d$ is even, then we can
+apply the even-length real/complex algorithm, which allows for
+efficient, numerically robust computation.  If $N_d$ is not even, then
+we woud fall back to less optimal algorithm.  However, if one of the
+other dimensions is even, one is sorely tempted to use the even-length
+method in that direction.  The result is indeed the Fourier transform
+of the input, but with the symmetry taken in a different direction.
+This isn't a problem for applications of the convolution theorem,
+where one just performs a pointwise multiplication and then inverts
+the transform.  But if the user needs to do a pointwise operation
+which depends on the multi-index of the output, this will produce
+incorrect results, since the output is transposed and half of it is
+the complex conjugate of the expected result.
+
+We can resolve tihs issue by re-applying the Hermitian symmetry
+condition to recover the expected output.  Suppose $N_d$ is odd, and
+$N_e$ is even.  Then we can compute the real-to-complex batched 1D
+FFTs in the $N_e$ direction, producing a purely complex output,
+perform the remaining batched 1D FFTs in the other directions.  The
+Hermitian symmetry is the re-imposed by transposing the data and
+taking the complex conjugate as approporiate.
+
+The even-length method is about twice as efficient as the complex
+embedding method, since the length of the underlying complex FFT is
+half in the even case as in the embedded case.  If all of the
+dimensions are roughly equal in magnitude, then the transpose-to-even
+method has computational cost
+\begin{dmath}
+  \frac{k}{2} N_e \log{N_e} \prod_{d\neq e} N_d
+  + \sum_{d \neq e}  k N_d \log{N_d}  \prod_{b\neq d} N_b
+  =  \left(\frac{k}{2}  \log{N_e} + \sum_{d \neq e} k \log{N_d} \right)
+  \prod_{d}{N_d}
+\end{dmath}
+For 2D problems, this is about 25\% less than the complex-embedding
+method, and 17\% less for 3D problems.  Since smaller FFTs have better
+cache behaviour, the memory efficiency may even be better in practice.
+
+FIXME: mention that this is novel
+
+FIXME: algorithm.
+
+\end{document}
+
