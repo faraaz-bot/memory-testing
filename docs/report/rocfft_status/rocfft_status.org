@@ -108,8 +108,22 @@ mi100 vs 4.0
 
 mi100: 5 to 6: 1.1881228433654136
 
-mi200: 
-5.0to6.0: 0.938887471860951
+mi200 vs 4.0
+4.0: 1
+5.0: 1.423507727863971
+6.0: 1.8235911424293936
+
+mi200 vs 5.0
+5.0: 1
+6.0: 1.5674936364813508
+6.2: 1.5710936205541473
+
+mi200 vs 6.0
+6.0: 1
+6.2: 1.0085139191112507
+
+asy -f pdf bargraph.asy -u"filenames='gmean_mi200.mdat';dolabel=false;inverse=false;ylabel='Geometric Mean Speedup'" -o gmean_mi200.pdf
+pdf2emf gmean_mi200.pdf
 
 asy -f pdf bargraph.asy -u"filenames='gmean_mi100.mdat';dolabel=false;inverse=false;ylabel='Geometric Mean Speedup'" -o gmean_mi100.pdf
 pdf2emf gmean_mi100.pdf
