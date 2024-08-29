@@ -316,15 +316,23 @@ into LDS and the longer did not.
     \State $X_{n_1,\dots,n_{e-1},N_e/2,n_{e+1},\dots,n_D}  \gets \Re{z_{0}} + \Im{z_{N_e-1}}$
     \EndFor
     \For{$d \in \left(1, \dots, e-1, e+1, \dots, D\right)$}
-    \For{$\left(n_1, n_2, \dots, n_{d-1}, n_{d+1}, \dots, n_{e-1}, n_{e+1}, \dots,n_D \right) \in
-      \prod_{b\notin{}\{d,e\}} \left(0,\dots,N_b-1 \right)$}
+    \State $S =
+      \prod_{\substack{b=0\\ b\notin{}\{d,e\}}}^{e-1} \left(0,\dots,N_b-1 \right)
+      \times \left(0,\dots,N_e' \right)
+      \times \prod_{\substack{b=e+1\\ b\notin{}\{d,e\}}}^{D} \left(0,\dots,N_b-1 \right)$
+      \For{$\left(n_1, n_2, \dots, n_{d-1}, n_{d+1}, \dots,n_D \right) \in S$}
     \State $\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}
     \gets \Four_{N_d}\left[\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}\right]$
     \EndFor
     \EndFor
-    \For{$\left(n_1, \dots, n_{e-1}, n_{e+1}, \dots,n_{D-1} \right) \in
-      \prod_{b\notin{}\{D,e\}} \left(0,\dots,N_b-1 \right)$}
-    \State todo: transpose and conjugate
+    \State $S =
+      \prod_{d=1}^{e-1} \left(0,\dots,N_d-1 \right)
+      \times \left(0,\dots,N_e' \right)
+      \times \prod_{d=e+1}^{D} \left(0,\dots,N_d-1 \right)$
+    \For{$\left(n_1, \dots, n_{e-1}, n_{e+1}, \dots,n_{D} \right) \in S$}
+    \If{$n_e > N_e'$}
+    \State $X_{n_1,\dots, N_e - n_e ,\dots, N_d - n_d} \gets X_{n_1,\dots, n_e,  \dots, n_D}^*$ \Comment{$X$ changes shape here}
+    \EndIf
     \EndFor
     \State \textbf{return} $X$
   \end{algorithmic}
