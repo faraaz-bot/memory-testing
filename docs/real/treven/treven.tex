@@ -223,7 +223,33 @@ row-major format, uers expect $N_d$ to be chopped in half, and in a
 column-major format, one expects $N_1$ to be chopped in half.  For
 simplicity, let us stick to the row-major case for the remainder of
 the discussion, keeping in mind that the results are applicable in
-both cases.
+both cases.  Let $N_d' = \floor{N_d/2}+1$.
+
+
+\begin{algorithm}
+  \caption{Standard $D$-dimensional real-to-complex FFT}\label{DFFTold}
+  \begin{algorithmic}[1]
+    \For{$\left(n_1,\dots,N_{D-1}\right) \in \left(0,\dots,N_1-1\right) \times \left(0,\dots,N_{D-1}-1\right) $}
+    \For{$n_D \in \left(0,\dots,N_D-1\right)$}
+    \State $z_{n_1,n_2,\dots,n_D} \gets x_{n_1,n_2,\dots,n_D}$ \Comment{$z$ is complex}
+    \EndFor
+    \State $\left\{z_{n_1,n_2,\dots,n_d}\right\}_{n_1=0}^{N_1-1}
+    \gets \Four_{N_1}\left[\left\{z_{n_1,n_2,\dots,n_d}\right\}_{n_1=0}^{N_1-1}\right]$
+    \For{$n_1 \in \left(0,\dots,N_D'-1\right)$}
+    \State $X_{n_1,n_2,\dots,n_d} \gets z_{n_1,n_2,\dots,n_d}$
+    \EndFor
+    \EndFor
+    \For{$d \in \left(1, \dots, D-1\right)$}
+    \For{$\left(n_1, n_2, \dots, n_{d-1}, n_{d+1}, \dots,n_D \right) \in
+      \left(0,\dots, N_D'-1\right) \times
+      \prod_{b\neq{}d} \left(0,\dots,N_b-1 \right)$}
+    \State $\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}
+    \gets \Four_{N_d}\left[\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}\right]$
+    \EndFor
+    \EndFor
+    \State \textbf{return} $X$
+  \end{algorithmic}
+\end{algorithm}
 
 When computing multi-dimensional real-to-complex FFTs, the first
 batched 1D transforms take real data as input and produce complex
@@ -241,7 +267,7 @@ which depends on the multi-index of the output, this will produce
 incorrect results, since the output is transposed and half of it is
 the complex conjugate of the expected result.
 
-We can resolve tihs issue by re-applying the Hermitian symmetry
+We can resolve this issue by re-applying the Hermitian symmetry
 condition to recover the expected output.  Suppose $N_d$ is odd, and
 $N_e$ is even.  Then we can compute the real-to-complex batched 1D
 FFTs in the $N_e$ direction, producing a purely complex output,
@@ -261,8 +287,19 @@ method has computational cost
   \prod_{d}{N_d}
 \end{dmath}
 For 2D problems, this is about 25\% less than the complex-embedding
-method, and 17\% less for 3D problems.  Since smaller FFTs have better
-cache behaviour, the memory efficiency may even be better in practice.
+method, and 17\% less for 3D problems.  In general, a (roughly
+equiproportional) $D$-dimensional FFT would be sped up by a factor of
+\begin{dmath}
+  \frac{D - \frac{1}{2}}{D}.
+\end{dmath}
+Since smaller FFTs have better cache behaviour, the performance
+improvement is likely better in practice.  For example, GPU-based 1D
+FFTs using LDS will have more global-memory round-trips; performing a
+length-$N$ vs a length $N/2$ complex FFT could conceivably not just
+double but quadruple the bandwidth costs if the shorter transform fits
+into LDS and the longer did not.
+
+
 
 FIXME: mention that this is novel
 
