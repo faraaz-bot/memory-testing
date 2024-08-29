@@ -41,10 +41,10 @@
 %% \renewcommand{\{}{\left{}
 %% \renewcommand{\}}{\right}}
 
-\newcommand{\thetitle}{Real-complex multi-dimensional FFTs with transposition to use the even-length method FIXME: this is a bad title.}
-\newcommand{\theauthor}{Malcolm Roberts \\
-AIG Software Development \\
-malcolm.roberts@amd.com}
+\newcommand{\thetitle}{Efficient computation of multi-dimensional
+  real/complex FFTs where the contiguous dimension is odd}
+\newcommand{\theauthor}{Malcolm Roberts \\ AIG Software Development
+  \\ malcolm.roberts@amd.com}
 
 
 \hypersetup{
@@ -78,12 +78,10 @@ high-performance computing, offering improved numerical accuracy and
 reduced computational and bandwidth costs.  While the Fourier
 transform is most naturally defined on complex values, applications of
 the Fourier transform generally use real values.  This document
-outlines a new method for efficiently computing real-to-complex FFTs in
-situations where conventional methods are not applicable.  This
-method, which we refer to as the real-transpose method, allows for
+outlines a new method for efficiently computing real-to-complex FFTs
+in situations where conventional methods are not applicable.  This
+method, which we refer to as the symmetrize-to-even method, allows for
 increased performance and accuracy compared to alternatives.
-
-FIXME: add N log N and numerical error.
 
 \section{Problem statement}
 
@@ -105,7 +103,34 @@ store the following $\floor{N/2}+1$ values
   X_0, X_1, \dots, X_{\floor{N/2}}
 \end{dmath}
 and note that $X_0$ is guaranteed to be real-valued, as is
-$X_{\floor{N/2}}$ if $N$ is even.
+$X_{\floor{N/2}}$ if $N$ is even.  For the sake of convenience, we
+donote $N'=N/2+1$.
+
+In multiple dimensions, say $D$,
+$\mathbf{k}=\left(k_1,\dots,k_D\right)$, $\mathbf{n}=\left(n_1,\dots,n_D\right)$, and
+$\mathbf{N}=\left(N_1,\dots,N_D\right)$ are vector-valued.  If $x_{\mathbf{n}}$ is real-valued,
+then $X_{\mathbf{k}}$ is complex with Hermitian symmetry, in that
+\begin{dmath}
+  F_{\mathbf{N} - \mathbf{k}} = F_{\mathbf{k}}^*.
+\end{dmath}
+Figure~\ref{hermitian2d} shows Hermitian symmetry for a 2D array.
+\begin{figure}
+  \centering
+  \includegraphics{hermitian2d}
+  \caption{Demonstration of Hermitian-symmetry for a 2D array.  Red
+    and blue points connect with arrows are complex-conjugates of
+    eachother.}
+  \label{hermitian2d}
+\end{figure}
+\begin{figure}
+  \centering
+  \includegraphics{hermitian2ddiff}
+  \caption{Two possible choices for which part of a 2D
+    Hermitian-symmetric array to store.  On the left, we remove
+    redundant data in the first dimension; on the right, we remove
+    redundant data in the second dimension.}
+  \label{hermitian2ddiff}
+\end{figure}
 
 \subsection{Complex embedding}
 \label{sscomplexembed}
@@ -116,9 +141,9 @@ complex-to-complex FFT of length $N$, and then copy the first
 $\floor{N/2}+1$ values into the output buffer.  This is outline in
 alrogithm~\ref{complexembed1d}.  The memory footprint is roughly twice
 the size of the real-valued input, and the underlying
-complex-to-complex FFT is of length $N$..  The inverse,
-complex-to-real transform follows much as one would expect.  This
-algorithm works for general problem sizes.
+complex-to-complex FFT is of length $N$.  The inverse, complex-to-real
+transform follows much as one would expect.  This algorithm works for
+general problem sizes.
 \begin{algorithm}
   \caption{Complex embedding}\label{complexembed1d}
   \begin{algorithmic}[1]
@@ -264,8 +289,9 @@ This isn't a problem for applications of the convolution theorem,
 where one just performs a pointwise multiplication and then inverts
 the transform.  But if the user needs to do a pointwise operation
 which depends on the multi-index of the output, this will produce
-incorrect results, since the output is transposed and half of it is
-the complex conjugate of the expected result.
+incorrect results, since the output is symmetrized and half of it is
+the complex conjugate of the expected result, albeit in a different
+location in memory.
 
 We can resolve this issue by re-applying the Hermitian symmetry
 condition to recover the expected output.  Suppose $N_d$ is odd, and
@@ -300,7 +326,7 @@ double but quadruple the bandwidth costs if the shorter transform fits
 into LDS and the longer did not.
 
 \begin{algorithm}
-  \caption{$D$-dimensional real-to-complex FFT using the even-transpose method}\label{DFFTold}
+  \caption{$D$-dimensional real-to-complex FFT using the symmetrize-to-even method}\label{DFFTold}
   \begin{algorithmic}[1]
     \For{$\left(n_1,\dots,n_{e-1},n_{e+1}, \dots, n_{D}\right) \in \prod_{d\neq{}e}\left(0,\dots,N_d-1\right)$}
     \For{$n_e \in \left(0,\dots,N_e/2-1\right)$}
@@ -341,7 +367,6 @@ into LDS and the longer did not.
 
 FIXME: mention that this is novel
 
-FIXME: algorithm.
 
 \end{document}
 
