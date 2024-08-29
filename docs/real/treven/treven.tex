@@ -298,13 +298,13 @@ condition to recover the expected output.  Suppose $N_d$ is odd, and
 $N_e$ is even.  Then we can compute the real-to-complex batched 1D
 FFTs in the $N_e$ direction, producing a purely complex output,
 perform the remaining batched 1D FFTs in the other directions.  The
-Hermitian symmetry is the re-imposed by transposing the data and
+Hermitian symmetry is then re-imposed by re-indexing the data and
 taking the complex conjugate as approporiate.
 
 The even-length method is about twice as efficient as the complex
 embedding method, since the length of the underlying complex FFT is
 half in the even case as in the embedded case.  If all of the
-dimensions are roughly equal in magnitude, then the transpose-to-even
+dimensions are roughly equal in magnitude, then the symmetrize-to-even
 method has computational cost
 \begin{dmath}
   \frac{k}{2} N_e \log{N_e} \prod_{d\neq e} N_d
