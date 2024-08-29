@@ -299,6 +299,36 @@ length-$N$ vs a length $N/2$ complex FFT could conceivably not just
 double but quadruple the bandwidth costs if the shorter transform fits
 into LDS and the longer did not.
 
+\begin{algorithm}
+  \caption{$D$-dimensional real-to-complex FFT using the even-transpose method}\label{DFFTold}
+  \begin{algorithmic}[1]
+    \For{$\left(n_1,\dots,n_{e-1},n_{e+1}, \dots, n_{D}\right) \in \prod_{d\neq{}e}\left(0,\dots,N_d-1\right)$}
+    \For{$n_e \in \left(0,\dots,N_e/2-1\right)$}
+    \State $z_{n_1,\dots,n_D} \gets x_{n_1,\dots,2n_{e-1},\dots,n_D} + i x_{n_1,\dots,2n_{e-1}+1,\dots,n_D}$ 
+    \EndFor
+    \State $\left\{z_{n_1,n_2,\dots,n_d}\right\}_{n_e=0}^{N_e/2-1}
+    \gets \Four_{N_e/2}\left[\left\{z_{n_1,n_2,\dots,n_d}\right\}_{n_1=0}^{N_e/2-1}\right]$
+    \State $X_{n_1,\dots,n_{e-1},0,n_{e+1},\dots,n_D} \gets \Re{z_{n_1,n_2,\dots,n_D}} - \Im{z_{n_1,n_2,\dots,n_D}}$
+    \For{$n_1 \in \left(0,\dots,N_D'-1\right)$}
+    \State $X_k \gets \frac{1}{2} \left(Z_k + Z_{\frac{N}{2}-k}^*\right)
+    + \omega_N^k \frac{i}{2} \left(Z_{\frac{N}{2}-k}^* - Z_{}k\right)$
+    \EndFor
+    \State $X_{n_1,\dots,n_{e-1},N_e/2,n_{e+1},\dots,n_D} \gets \Re{z_{n_1,n_2,\dots,n_D}} + \Im{z_{n_1,n_2,\dots,n_D}}$
+    \EndFor
+    \For{$d \in \left(1, \dots, e-1, e+1, \dots, D\right)$}
+    \For{$\left(n_1, n_2, \dots, n_{d-1}, n_{d+1}, \dots, n_{e-1}, n_{e+1}, \dots,n_D \right) \in
+      \prod_{b\notin{}\{d,e\}} \left(0,\dots,N_b-1 \right)$}
+    \State $\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}
+    \gets \Four_{N_d}\left[\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}\right]$
+    \EndFor
+    \EndFor
+    \For{$\left(n_1, \dots, n_{e-1}, n_{e+1}, \dots,n_{D-1} \right) \in
+      \prod_{b\notin{}\{D,e\}} \left(0,\dots,N_b-1 \right)$}
+    \State todo: transpose and conjugate
+    \EndFor
+    \State \textbf{return} $X$
+  \end{algorithmic}
+\end{algorithm}
 
 
 FIXME: mention that this is novel
