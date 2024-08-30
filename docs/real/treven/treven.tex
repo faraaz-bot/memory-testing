@@ -83,7 +83,7 @@ in situations where conventional methods are not applicable.  This
 method, which we refer to as the symmetrize-to-even method, allows for
 increased performance and accuracy compared to alternatives.
 
-\section{Problem statement}
+\section{Real-complex FFTs}
 
 The FFT of the one-dimensional input $x=\{x_n\}_{n=0}^{N-1}$ is 
 \begin{dmath}
@@ -106,31 +106,6 @@ and note that $X_0$ is guaranteed to be real-valued, as is
 $X_{\floor{N/2}}$ if $N$ is even.  For the sake of convenience, we
 donote $N'=N/2+1$.
 
-In multiple dimensions, say $D$,
-$\mathbf{k}=\left(k_1,\dots,k_D\right)$, $\mathbf{n}=\left(n_1,\dots,n_D\right)$, and
-$\mathbf{N}=\left(N_1,\dots,N_D\right)$ are vector-valued.  If $x_{\mathbf{n}}$ is real-valued,
-then $X_{\mathbf{k}}$ is complex with Hermitian symmetry, in that
-\begin{dmath}
-  F_{\mathbf{N} - \mathbf{k}} = F_{\mathbf{k}}^*.
-\end{dmath}
-Figure~\ref{hermitian2d} shows Hermitian symmetry for a 2D array.
-\begin{figure}
-  \centering
-  \includegraphics{hermitian2d}
-  \caption{Demonstration of Hermitian-symmetry for a 2D array.  Red
-    and blue points connect with arrows are complex-conjugates of
-    eachother.}
-  \label{hermitian2d}
-\end{figure}
-\begin{figure}
-  \centering
-  \includegraphics{hermitian2ddiff}
-  \caption{Two possible choices for which part of a 2D
-    Hermitian-symmetric array to store.  On the left, we remove
-    redundant data in the first dimension; on the right, we remove
-    redundant data in the second dimension.}
-  \label{hermitian2ddiff}
-\end{figure}
 
 \subsection{Complex embedding}
 \label{sscomplexembed}
@@ -161,13 +136,14 @@ general problem sizes.
 \subsection{Paired transforms}
 
 Improvements to the complex embedding method rely, more-or-less, on
-the fact that there are two real values in each complex value.  This
-is particularly clear in the paired-transform method.  If we have two
-real-valued inputs $x$ and $y$ which we wish to transform, we can make
-use of the linearity of the Fourier transform to compute the transform
-with a lower cost than that in subsection~\ref{sscomplexembed}.  In
-particular, let $z_n = x_n + i y_n$.  Then, $Z_k = X_k + i Y_k$, and
-we can recover the invididual transforms via
+the fact that there are two real values in each complex value, and
+this is particularly clear in the paired-transform method.  If we have
+two real-valued inputs $x$ and $y$ which we wish to transform, we can
+make use of the linearity of the Fourier transform to compute the
+transform with a lower cost than that in
+subsection~\ref{sscomplexembed}.  In particular, let $z_n = x_n + i
+y_n$.  Then, $Z_k = X_k + i Y_k$, and we can recover the invididual
+transforms via
 \begin{align}
   X_k &= \frac{Z_k + Z_{N-k}^*}{2} \\
   Y_k &= \frac{Z_k - Z_{N-k}^*}{2i}.
@@ -209,7 +185,9 @@ $n=0,\dots,N/2-1$.  Then,
 This entail a complex FFT of length $N/2$, and the memory footprint
 for this transform is basically the same as that of the single input.
 Since this method only relies on one input, it doesn't have the same
-numerical robustness problems as the paired algorithm.
+numerical robustness problems as the paired algorithm. The paired
+algorithm offers performance advantages, and is the preferred
+algorithm when it is available.
 \begin{algorithm}
   \caption{Even algorithm}\label{even}
   \begin{algorithmic}[1]
@@ -227,29 +205,58 @@ numerical robustness problems as the paired algorithm.
   \end{algorithmic}
 \end{algorithm}
 
-The paired algorithm offers performance advantages, and is the
-preferred algorithm when it is available.
 
 \section{Multi-dimensional transforms}
 
-Many applications make use of 2D or 3D FFTs.  The standard method for
-compute a $d$-dimensional FFT with length
-$N_1\times{}\dots{}\times{}N_d$ is to perform batched 1D transforms in
-each dimension.  For real-to-complex transforms, the output exhibits
-Hermitian symmetry, so only about half of the values are needed in the
-output.
+Many applications make use of 2D or 3D FFTs.  The standard method to
+compute a $D$-dimensional FFT with length
+$N_1\times{}\dots{}\times{}N_D$ is to perform batched 1D transforms in
+each dimension.  As in the 1D case, real-to-complex transforms, the
+output exhibits Hermitian symmetry, so only about half of the values
+are needed in the output.
+
+\subsection{Conventional multi-dimensional transforms}
 
 In the 1D case, there isn't much choice on how to apply this symmetry;
 one keeps either the lower half or upper half of the array, and it's
 just much simpler to keep the lower half.  In higher dimensions, the
-symmetry is over some plane that bisects the data, and it saves a lot
-of trouble to make this plane perpendicular to one of the axes.  In a
-row-major format, uers expect $N_d$ to be chopped in half, and in a
-column-major format, one expects $N_1$ to be chopped in half.  For
-simplicity, let us stick to the row-major case for the remainder of
-the discussion, keeping in mind that the results are applicable in
-both cases.  Let $N_d' = \floor{N_d/2}+1$.
-
+symmetry is over some plane that bisects the data\footnote{In general,
+any decomposition which keeps at least one of $F_{\mathbf{k}}$ and
+$F_{\mathbf{N}-\mathbf{k}}$ would suffice, but having a regular data
+structure makes a lot more sense.}, and it saves a lot of trouble to
+make this plane perpendicular to one of the axes.  In a row-major
+format, uers expect $N_D$ to be chopped in half, and in a column-major
+format, one expects $N_1$ to be chopped in half.  In multiple
+dimensions $\mathbf{k}=\left(k_1,\dots,k_D\right)$,
+$\mathbf{n}=\left(n_1,\dots,n_D\right)$, and
+$\mathbf{N}=\left(N_1,\dots,N_D\right)$ are vector-valued.  If
+$x_{\mathbf{n}}$ is real-valued, then $X_{\mathbf{k}}$ is complex with
+Hermitian symmetry, in that
+\begin{dmath}
+  F_{\mathbf{N} - \mathbf{k}} = F_{\mathbf{k}}^*.
+\end{dmath}
+Figure~\ref{hermitian2d} shows Hermitian symmetry for a 2D array.
+Figure~\ref{hermitian2ddiff} shows two possible choices for data
+formats which make use of this symmetry.  The standard algorithm for
+computing a $D$-dimensional real-to-complex FFT when $N_D$ is odd
+is given in algorithm~\ref{DFFTold}.
+\begin{figure}
+  \centering
+  \includegraphics{hermitian2d}
+  \caption{Demonstration of Hermitian-symmetry for a 2D array.  Red
+    and blue points connect with arrows are complex-conjugates of
+    eachother.}
+  \label{hermitian2d}
+\end{figure}
+\begin{figure}
+  \centering
+  \includegraphics{hermitian2ddiff}
+  \caption{Two possible choices for which part of a 2D
+    Hermitian-symmetric array to store.  On the left, we remove
+    redundant data in the first dimension; on the right, we remove
+    redundant data in the second dimension.}
+  \label{hermitian2ddiff}
+\end{figure}
 
 \begin{algorithm}
   \caption{Standard $D$-dimensional real-to-complex FFT}\label{DFFTold}
@@ -276,57 +283,47 @@ both cases.  Let $N_d' = \floor{N_d/2}+1$.
   \end{algorithmic}
 \end{algorithm}
 
-When computing multi-dimensional real-to-complex FFTs, the first
-batched 1D transforms take real data as input and produce complex
-(Hermitian symmetric) data as output.  If $N_d$ is even, then we can
-apply the even-length real/complex algorithm, which allows for
-efficient, numerically robust computation.  If $N_d$ is not even, then
-we woud fall back to less optimal algorithm.  However, if one of the
-other dimensions is even, one is sorely tempted to use the even-length
-method in that direction.  The result is indeed the Fourier transform
-of the input, but with the symmetry taken in a different direction.
-This isn't a problem for applications of the convolution theorem,
+\subsection{Even-resymmetrize multi-dimensional transforms}
+
+This section introduces the even-resymmetrize method, which improves
+performance when $N_D$ is odd, but some other dimension is even.  By
+re-applying the Hermitian symmetry after computing the transform, we
+can recover the expected data format while still making use of the
+more efficient even-length method.  As far as we are aware, this
+method is novel.
+
+For simplicity, let us stick to the row-major case for the remainder
+of the discussion, keeping in mind that the results are applicable in
+both cases.  When computing multi-dimensional real-to-complex FFTs,
+the first batched 1D transforms take real data as input and produce
+complex (Hermitian symmetric) data as output.  If $N_D$ is even, then
+we can apply the even-length real/complex algorithm, which allows for
+efficient, numerically robust computation.  If $N_D$ is not even, then
+we woud fall back to less optimal algorithm, notably the
+complex-embedding method.  However, if one of the other dimensions is
+even, one is sorely tempted to use the even-length method in that
+direction.  The result is indeed the Fourier transform of the input,
+but with the symmetry taken in a different direction.  This isn't a
+problem for applications of, for example, the convolution theorem,
 where one just performs a pointwise multiplication and then inverts
-the transform.  But if the user needs to do a pointwise operation
-which depends on the multi-index of the output, this will produce
-incorrect results, since the output is symmetrized and half of it is
-the complex conjugate of the expected result, albeit in a different
-location in memory.
+the transform, but if the user needs to do a pointwise operation which
+depends on the multi-index of the output, this will produce incorrect
+results, since the output is symmetrized and half of it is the complex
+conjugate of the desired result, and the map from logical index to
+memory address is different than what the user expects.
 
 We can resolve this issue by re-applying the Hermitian symmetry
-condition to recover the expected output.  Suppose $N_d$ is odd, and
-$N_e$ is even.  Then we can compute the real-to-complex batched 1D
-FFTs in the $N_e$ direction, producing a purely complex output,
-perform the remaining batched 1D FFTs in the other directions.  The
-Hermitian symmetry is then re-imposed by re-indexing the data and
-taking the complex conjugate as approporiate.
-
-The even-length method is about twice as efficient as the complex
-embedding method, since the length of the underlying complex FFT is
-half in the even case as in the embedded case.  If all of the
-dimensions are roughly equal in magnitude, then the symmetrize-to-even
-method has computational cost
-\begin{dmath}
-  \frac{k}{2} N_e \log{N_e} \prod_{d\neq e} N_d
-  + \sum_{d \neq e}  k N_d \log{N_d}  \prod_{b\neq d} N_b
-  =  \left(\frac{k}{2}  \log{N_e} + \sum_{d \neq e} k \log{N_d} \right)
-  \prod_{d}{N_d}
-\end{dmath}
-For 2D problems, this is about 25\% less than the complex-embedding
-method, and 17\% less for 3D problems.  In general, a (roughly
-equiproportional) $D$-dimensional FFT would be sped up by a factor of
-\begin{dmath}
-  \frac{D - \frac{1}{2}}{D}.
-\end{dmath}
-Since smaller FFTs have better cache behaviour, the performance
-improvement is likely better in practice.  For example, GPU-based 1D
-FFTs using LDS will have more global-memory round-trips; performing a
-length-$N$ vs a length $N/2$ complex FFT could conceivably not just
-double but quadruple the bandwidth costs if the shorter transform fits
-into LDS and the longer did not.
-
+condition to recover the expected output.  Suppose $N_D$ is odd, and
+$N_e$ is even for some index $e$ with $1\leq{}e<D$.  Then we can
+compute the real-to-complex batched 1D FFTs in the $N_e$ direction
+using the efficient even-length method, producing a purely complex
+output.  One then performs the remaining batched 1D FFTs in the other
+directions.  The Hermitian symmetry is then re-imposed by re-indexing
+the data and taking the complex conjugate as approporiate, which
+produces the desired output.  This algorithm is detailed in
+algorithm~\ref{symeven}.
 \begin{algorithm}
-  \caption{$D$-dimensional real-to-complex FFT using the symmetrize-to-even method}\label{DFFTold}
+  \caption{$D$-dimensional real-to-complex FFT using the symmetrize-to-even method}\label{symeven}
   \begin{algorithmic}[1]
     \For{$\left(n_1,\dots,n_{e-1},n_{e+1}, \dots, n_{D}\right) \in \prod_{d\neq{}e}\left(0,\dots,N_d-1\right)$}
     \For{$n_e \in \left(0,\dots,N_e/2-1\right)$}
@@ -363,9 +360,43 @@ into LDS and the longer did not.
     \State \textbf{return} $X$
   \end{algorithmic}
 \end{algorithm}
+  
+If all of the dimensions are roughly equal in magnitude, then the
+symmetrize-to-even method has computational cost
+\begin{dmath}
+  \frac{k}{2} N_e \log{N_e} \prod_{d\neq e} N_d
+  + \sum_{d \neq e}  k N_d \log{N_d}  \prod_{b\neq d} N_b
+  =  \left(\frac{k}{2}  \log{N_e} + \sum_{d \neq e} k \log{N_d} \right)
+  \prod_{d}{N_d}
+\end{dmath}
+For 2D problems, this is about 25\% less than the complex-embedding
+method, and 17\% less for 3D problems.  In general, a (roughly
+equiproportional) $D$-dimensional FFT would be sped up by a factor of
+about
+\begin{dmath}
+  \frac{D - \frac{1}{2}}{D}.
+\end{dmath}
+Since smaller FFTs have better cache behaviour, the performance
+improvement is likely better in practice.  For example, GPU-based 1D
+FFTs using LDS will have more global-memory round-trips; performing a
+length-$N$ vs a length $N/2$ complex FFT could conceivably not just
+double but quadruple the bandwidth costs if the shorter transform fits
+into LDS and the longer did not.  If the user is ok with having a
+different data layout, this extra symmetrization step may be omitted.
 
+The inverse transform, follows roughly along similar lines and offers
+identical performance advantages.
 
-FIXME: mention that this is novel
+\section{Conclusion}
+
+This document introduces a new, more efficient method for computing
+multi-dimensional real/complex FFTs when at least one dimension is of
+even length, but the contiguous dimension is not.  By performing the
+1D real--complex sub-transform in the even direction, and then the
+remaining complex--complex sub-transforms in the remaining directions,
+one can make use of a more efficient and numerically stable
+even-length transform.  In order to recover the expected data format,
+Hermitian symmetry is re-imposed on the output.  
 
 
 \end{document}
