@@ -104,7 +104,7 @@ store the following $\floor{N/2}+1$ values
 \end{dmath}
 and note that $X_0$ is guaranteed to be real-valued, as is
 $X_{\floor{N/2}}$ if $N$ is even.  For the sake of convenience, we
-donote $N'=N/2+1$.
+denote $N'=N/2+1$.
 
 
 \subsection{Complex embedding}
@@ -114,7 +114,7 @@ The simplest way to compute a real-to-complex FFT is to embed the real
 data into a complex buffer with zero real part, perform a
 complex-to-complex FFT of length $N$, and then copy the first
 $\floor{N/2}+1$ values into the output buffer.  This is outline in
-alrogithm~\ref{complexembed1d}.  The memory footprint is roughly twice
+algorithm~\ref{complexembed1d}.  The memory footprint is roughly twice
 the size of the real-valued input, and the underlying
 complex-to-complex FFT is of length $N$.  The inverse, complex-to-real
 transform follows much as one would expect.  This algorithm works for
@@ -142,7 +142,7 @@ two real-valued inputs $x$ and $y$ which we wish to transform, we can
 make use of the linearity of the Fourier transform to compute the
 transform with a lower cost than that in
 subsection~\ref{sscomplexembed}.  In particular, let $z_n = x_n + i
-y_n$.  Then, $Z_k = X_k + i Y_k$, and we can recover the invididual
+y_n$.  Then, $Z_k = X_k + i Y_k$, and we can recover the individual
 transforms via
 \begin{align}
   X_k &= \frac{Z_k + Z_{N-k}^*}{2} \\
@@ -225,7 +225,7 @@ any decomposition which keeps at least one of $F_{\mathbf{k}}$ and
 $F_{\mathbf{N}-\mathbf{k}}$ would suffice, but having a regular data
 structure makes a lot more sense.}, and it saves a lot of trouble to
 make this plane perpendicular to one of the axes.  In a row-major
-format, uers expect $N_D$ to be chopped in half, and in a column-major
+format, users expect $N_D$ to be chopped in half, and in a column-major
 format, one expects $N_1$ to be chopped in half.  In multiple
 dimensions $\mathbf{k}=\left(k_1,\dots,k_D\right)$,
 $\mathbf{n}=\left(n_1,\dots,n_D\right)$, and
@@ -245,7 +245,7 @@ is given in algorithm~\ref{DFFTold}.
   \includegraphics{hermitian2d}
   \caption{Demonstration of Hermitian-symmetry for a 2D array.  Red
     and blue points connect with arrows are complex-conjugates of
-    eachother.}
+    each-other.}
   \label{hermitian2d}
 \end{figure}
 \begin{figure}
@@ -299,7 +299,7 @@ the first batched 1D transforms take real data as input and produce
 complex (Hermitian symmetric) data as output.  If $N_D$ is even, then
 we can apply the even-length real/complex algorithm, which allows for
 efficient, numerically robust computation.  If $N_D$ is not even, then
-we woud fall back to less optimal algorithm, notably the
+we would fall back to less optimal algorithm, notably the
 complex-embedding method.  However, if one of the other dimensions is
 even, one is sorely tempted to use the even-length method in that
 direction.  The result is indeed the Fourier transform of the input,
@@ -319,7 +319,7 @@ compute the real-to-complex batched 1D FFTs in the $N_e$ direction
 using the efficient even-length method, producing a purely complex
 output.  One then performs the remaining batched 1D FFTs in the other
 directions.  The Hermitian symmetry is then re-imposed by re-indexing
-the data and taking the complex conjugate as approporiate, which
+the data and taking the complex conjugate as appropriate, which
 produces the desired output.  This algorithm is detailed in
 algorithm~\ref{symeven}.
 \begin{algorithm}
@@ -401,3 +401,6 @@ Hermitian symmetry is re-imposed on the output.
 
 \end{document}
 
+
+% LocalWords:  FFTs symmetrize FFT th dft Im resymmetrize pointwise
+% LocalWords:  symmetrized equiproportional LDS ok symmetrization
