@@ -78,10 +78,11 @@ high-performance computing, offering improved numerical accuracy and
 reduced computational and bandwidth costs.  While the Fourier
 transform is most naturally defined on complex values, applications of
 the Fourier transform generally use real values.  This document
-outlines a new method for efficiently computing real-to-complex FFTs
-in situations where conventional methods are not applicable.  This
-method, which we refer to as the symmetrize-to-even method, allows for
-increased performance and accuracy compared to alternatives.
+outlines a new method for efficiently computing multi-dimensional
+real-to-complex FFTs in situations where conventional methods are not
+applicable.  This method, which we refer to as the symmetrize-to-even
+method, allows for increased performance and accuracy compared to
+alternatives.
 
 \section{Real-complex FFTs}
 
@@ -113,7 +114,7 @@ denote $N'=N/2+1$.
 The simplest way to compute a real-to-complex FFT is to embed the real
 data into a complex buffer with zero real part, perform a
 complex-to-complex FFT of length $N$, and then copy the first
-$\floor{N/2}+1$ values into the output buffer.  This is outline in
+$\floor{N/2}+1$ values into the output buffer.  This is outlined in
 algorithm~\ref{complexembed1d}.  The memory footprint is roughly twice
 the size of the real-valued input, and the underlying
 complex-to-complex FFT is of length $N$.  The inverse, complex-to-real
@@ -151,7 +152,7 @@ transforms via
 This entails one length-$N$ complex-to-complex FFT for two inputs,
 which has the same memory footprint as the two real-valued inputs.
 The algorithm is described in algorithm~\ref{paired}.  This method
-works for both even and off $N$, but requires an even number of
+works for both even and odd $N$, but requires an even number of
 transforms.  If $x$ and $y$ have very different magnitudes, then this
 method is not numerically robust, as the smaller input will have a
 numerical error dominated by the larger input.
@@ -225,9 +226,10 @@ any decomposition which keeps at least one of $F_{\mathbf{k}}$ and
 $F_{\mathbf{N}-\mathbf{k}}$ would suffice, but having a regular data
 structure makes a lot more sense.}, and it saves a lot of trouble to
 make this plane perpendicular to one of the axes.  In a row-major
-format, users expect $N_D$ to be chopped in half, and in a column-major
-format, one expects $N_1$ to be chopped in half.  In multiple
-dimensions $\mathbf{k}=\left(k_1,\dots,k_D\right)$,
+format, users expect $N_D$ (the last dimension) to be chopped in half,
+and in a column-major format, one expects $N_1$ (the first dimension)
+to be chopped in half.  In multiple dimensions
+$\mathbf{k}=\left(k_1,\dots,k_D\right)$,
 $\mathbf{n}=\left(n_1,\dots,n_D\right)$, and
 $\mathbf{N}=\left(N_1,\dots,N_D\right)$ are vector-valued.  If
 $x_{\mathbf{n}}$ is real-valued, then $X_{\mathbf{k}}$ is complex with
@@ -272,9 +274,9 @@ is given in algorithm~\ref{DFFTold}.
     \EndFor
     \EndFor
     \For{$d \in \left(1, \dots, D-1\right)$}
+    \State $S \gets \left[\prod_{b\neq{}d} \left(0,\dots,N_b-1 \right)\right] \times \left(0,\dots, N_D'-1\right) $
     \For{$\left(n_1, n_2, \dots, n_{d-1}, n_{d+1}, \dots,n_D \right) \in
-      \left(0,\dots, N_D'-1\right) \times
-      \prod_{b\neq{}d} \left(0,\dots,N_b-1 \right)$}
+      S$}
     \State $\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}
     \gets \Four_{N_d}\left[\left\{X_{n_1,n_2,\dots,n_d}\right\}_{n_d=0}^{N_d-1}\right]$
     \EndFor
@@ -299,7 +301,7 @@ the first batched 1D transforms take real data as input and produce
 complex (Hermitian symmetric) data as output.  If $N_D$ is even, then
 we can apply the even-length real/complex algorithm, which allows for
 efficient, numerically robust computation.  If $N_D$ is not even, then
-we would fall back to less optimal algorithm, notably the
+we would fall back to a less optimal algorithm, namely the
 complex-embedding method.  However, if one of the other dimensions is
 even, one is sorely tempted to use the even-length method in that
 direction.  The result is indeed the Fourier transform of the input,
@@ -339,7 +341,7 @@ algorithm~\ref{symeven}.
     \State $X_{n_1,\dots,n_{e-1},N_e/2,n_{e+1},\dots,n_D}  \gets \Re{z_{0}} + \Im{z_{N_e-1}}$
     \EndFor
     \For{$d \in \left(1, \dots, e-1, e+1, \dots, D\right)$}
-    \State $S =
+    \State $S \gets
       \prod_{\substack{b=0\\ b\notin{}\{d,e\}}}^{e-1} \left(0,\dots,N_b-1 \right)
       \times \left(0,\dots,N_e' \right)
       \times \prod_{\substack{b=e+1\\ b\notin{}\{d,e\}}}^{D} \left(0,\dots,N_b-1 \right)$
