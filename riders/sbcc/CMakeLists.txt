@@ -4,6 +4,8 @@ project( sbcc_rider LANGUAGES CXX )
 
 option( SBCC_RUNTIME_COMPILE "Runtime-compile the SBCC kernel with hipRTC"  OFF )
 
+find_package( HIP REQUIRED )
+
 add_executable( sbcc-rider sbcc-rider.cpp)
 set_property(TARGET sbcc-rider PROPERTY CXX_STANDARD 17 )
 

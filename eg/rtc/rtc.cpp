@@ -58,7 +58,10 @@ std::string hiprtcResult_str(const hiprtcResult ret)
       return "HIPRTC_ERROR_INTERNAL_ERROR";
     case HIPRTC_ERROR_LINKING:
       return "HIPRTC_ERROR_LINKING";
+    default:
+        return "unkown error";
     }
+  
 }
 
 struct cosine_kernel_args
@@ -132,8 +135,11 @@ int main(int argc, char* argv[])
       ss << hiprtcResult_str(rtc_ret);
       throw std::runtime_error(ss.str());
     }
+    
     {
+#ifdef __clang__
       std::cout << "Host clang version: " <<  __clang_version__ << "\n";
+#endif
         size_t logSize;
         hiprtcGetProgramLogSize(prog, &logSize);
         std::cout << "compilation log:\n";
