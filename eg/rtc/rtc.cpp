@@ -81,15 +81,13 @@ int main(int argc, char* argv[])
     size_t nthread = 1;
     size_t nrepeat = 1<<14;
     int deviceId = 0;
-    bool segfault = false;
     
     po::options_description opdesc("rtc sample command line options");
     opdesc.add_options()("help,h", "produces this help message")
       ("n", po::value<size_t>(&n)->default_value(1<<20), "data laneght")
       ("nthread", po::value<size_t>(&nthread)->default_value(1), "Number of omp threads")
       ("nrepeat", po::value<size_t>(&nrepeat)->default_value(1), "Number of omp threads")
-      ("d", po::value<int>(&deviceId)->default_value(0), "HIP device ID.")
-      ("segfault", "Call hipSetDevice in between module load and execution.");
+      ("d", po::value<int>(&deviceId)->default_value(0), "HIP device ID.");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, opdesc), vm);
@@ -101,12 +99,6 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
-    
-    if(vm.count("segfault"))
-    {
-      segfault = true;
-    }
-    
     hiprtcProgram prog;
   
     int num_headers = 0;
@@ -174,11 +166,8 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hiprtcDestroyProgram");
     }
 
-    if(!segfault) {
-      // Calling here is OK.
-      if(hipSetDevice(deviceId)  != hipSuccess) {
+    if(hipSetDevice(deviceId)  != hipSuccess) {
         throw std::runtime_error("hipSetDevice");
-      }
     }
   
     
@@ -191,13 +180,6 @@ int main(int argc, char* argv[])
     if(hip_ret != hipSuccess) {
         throw std::runtime_error("hipModuleGetFunction");
     }
-
-    if(segfault) {
-      // Calling here produces a segfault.
-      if(hipSetDevice(deviceId)  != hipSuccess) {
-        throw std::runtime_error("hipSetDevice");
-      }
-    }   
 
     // Number of data points that we will output:
     const size_t nshow = std::min(n, (size_t)8);
@@ -237,7 +219,7 @@ int main(int argc, char* argv[])
 #pragma omp parallel for num_threads(nthread)
     for(size_t ithread = 0; ithread < nthread; ++ithread) {
         int tid = omp_get_thread_num();
-        std::cout << "thread " << tid << std::endl;
+        std::cout << "openmp thread: " << tid << std::endl;
         
         void* config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, &args[ithread],
             HIP_LAUNCH_PARAM_BUFFER_SIZE, &size,
