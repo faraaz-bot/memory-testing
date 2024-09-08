@@ -1,35 +1,43 @@
-function partial_pass_test()
+function partial_pass_test()    
+  
+  format longG;
+  ordering='column-major';
+  data_empty_value = -123456789;
+    
   % Input parameters
   in_length = [64 64 64];  
   N = prod(in_length);
   
-  pp_dim = 2;    
+  pp_dim = 2;
   pp_radices = [8 8];  
-  pp_mode = 'six-step';
+  pp_mode = 'four-step';
     
-  % Generate input data  
-  in = complex(0:N-1,0:N-1);
-  % in = randn(in_length);
-  in = reshape(in, in_length(1), in_length(2), in_length(3));
+  in = rocfft_input_data();
+  in = convert_1d_to_3d(in, in_length(1), in_length(2), in_length(3), ordering);
   
-  % 3D-FFT
-  out = fftn(in);  
+  out_ = rocfft_output_data();
+  out_ = convert_1d_to_3d(out_, in_length(1), in_length(2), in_length(3), ordering);
+  out_ = convert_3d_to_1d(out_, ordering);
   
-  % CS_3D_RC
-  [out_3d_rc, out_3d_rc_pp_1, out_3d_rc_pp_2] = run_CS_3D_RC(in_length, in, pp_dim, pp_radices, pp_mode);        
+  % Validate output  
+  idx_data=find(real(out_)~=data_empty_value);
+  if ( length(idx_data) != N )
+    error('Error: incomplete data');
+  endif  
   
-  % CS_TRTRTR
-  % [out_trtrtr, out_trtrtr_pp_1, out_trtrtr_pp_2] = run_CS_TRTRTR(in_length, in, pp_dim, pp_radices);  
-    
-  % Validate output
-  out_flat = reshape(out, 1, []);
-  out_3d_rc_flat = reshape(out_3d_rc, 1, []);  
-  % out_3d_rc_pp_1_flat = reshape(out_3d_rc_pp_1, 1, []);
-  % out_3d_rc_pp_2_flat = reshape(out_3d_rc_pp_2, 1, []);
-  % out_trtrtr_flat = reshape(out_trtrtr, 1, []);  
-    
-  disp(norm(out_flat-out_3d_rc_flat, 'inf'));  
-  % disp(norm(out_flat-out_trtrtr_flat, 'inf'));   
+  % 3D-FFT (MATLAB built-in)
+  out = fftn(in);
+  out = convert_3d_to_1d(out, ordering);
+  linf_rocfft_vs_octave_built_in = norm(out(idx_data)-out_(idx_data),'inf');
+  disp(['l-inf norm: '  num2str(linf_rocfft_vs_octave_built_in)]);
+ 
+  % CS_3D_RC from rocFFT (with partial pass)
+  #[out_3d_rc, out_3d_rc_pp_1, out_3d_rc_pp_2] = run_CS_3D_RC(in_length, in, pp_dim, pp_radices, pp_mode);        
+  #out_3d_rc = convert_3d_to_1d(out_3d_rc, ordering);
+  #out_3d_rc_pp_1 = convert_3d_to_1d(out_3d_rc_pp_1, ordering);
+  #out_3d_rc_pp_2 = convert_3d_to_1d(out_3d_rc_pp_2, ordering);
+  #linf_rocfft_vs_octave_3d_rc_pp = norm(out_3d_rc(idx_data)-out_(idx_data),'inf');  
+  # disp(['l-inf norm: '  num2str(linf_rocfft_vs_octave_3d_rc_pp)]);
   
   function [out, out_pp_1, out_pp_2] = run_CS_3D_RC(in_length, in, pp_dim, pp_radices, pp_mode)
     n = in_length(pp_dim);
@@ -56,14 +64,20 @@ function partial_pass_test()
   
     if (pp_dim == 2)
       % 1st kernel (1st dimension)
-      out = fft(out,[], 1);       
-      out = partial_pass_step_1_2(out, 2, n1, n2, F_n1, F_n2, F_n, pp_mode);    
+      out = fft(out,[], 1);
+      out = partial_pass_step_1_2(out, 2, n1, n2, F_n1, F_n2, F_n, pp_mode);
       out_pp_1 = out;
             
       % 2nd kernel (3rd dimension)
+      transp_order = [3 2 1];
+      out = permute(out, transp_order);      
+      
       out = partial_pass_step_3_4(out, 2, n1, n2, F_n1, F_n2, F_n, pp_mode);
       out_pp_2 = out;
-      out = fft(out,[], 3);
+      
+      out = fft(out,[], 1);
+
+      out = permute(out, transp_order);         
     endif
   
     if (pp_dim == 3)               
@@ -77,54 +91,6 @@ function partial_pass_test()
       out_pp_2 = out;
       out = fft(out,[], 2);
     endif
-  endfunction
-  
-  function [out, out_pp_1, out_pp_2] = run_CS_TRTRTR(in_length, in, pp_dim, pp_radices)
-    n = in_length(pp_dim);  
-    n1 = pp_radices(1);
-    n2 = pp_radices(2);
-    
-    F_n = dft_matrix(n);  
-    F_n1 = dft_matrix(n1);
-    F_n2 = dft_matrix(n2);
-    
-    transp_order = [2 3 1];    
-
-    if (pp_dim == 1)         
-      out = permute(in, transp_order); 
-      out = permute(out, transp_order);
-      out = fft(out,[], 1);  
-      out = partial_pass_step_1_2(out, 3, n1, n2, F_n1, F_n2, F_n); %TODO: figure out input arg here 1,2,3?
-      out_pp_1 = out;
-      out = permute(out, transp_order);
-      out = partial_pass_step_3_4(out, 3, n1, n2, F_n1, F_n2, F_n); %TODO: figure out input arg here 1,2,3?
-      out_pp_2 = out;
-      out = fft(out,[], 1);  
-    endif  
-    
-    if (pp_dim == 2)            
-      out = permute(in, transp_order); 
-      out = fft(out,[], 1);    
-      out = partial_pass_step_1_2(out, 1, n1, n2, F_n1, F_n2, F_n);    
-      out_pp_1 = out;
-      out = permute(out, transp_order);
-      out = permute(out, transp_order);
-      out = partial_pass_step_3_4(out, 1, n1, n2, F_n1, F_n2, F_n);
-      out_pp_2 = out;
-      out = fft(out,[], 1);  
-    endif
-    
-    if (pp_dim == 3)            
-      out = permute(in, transp_order); 
-      out = fft(out,[], 1);    
-      out = partial_pass_step_1_2(out, 1, n1, n2, F_n1, F_n2, F_n);    
-      out_pp_1 = out;
-      out = permute(out, transp_order);
-      out = fft(out,[], 1);  
-      out = partial_pass_step_3_4(out, 1, n1, n2, F_n1, F_n2, F_n);
-      out_pp_2 = out;
-      out = permute(out, transp_order);
-    endif    
   endfunction
   
   function [dim1, dim2] = get_data_dim_partial_pass(input, pp_dim)
@@ -167,20 +133,20 @@ function partial_pass_test()
     
     [dim1, dim2] = get_data_dim_partial_pass(input, pp_dim);
         
-    for idx1=1:dim1
-      for idx2=1:dim2
+    for idx2=1:dim2
+      for idx1=1:dim1
         in_decomp = get_pp_decomposed_data(output, pp_dim, idx1, idx2, n1, n2);
         
         if strcmp(mode, 'four-step')
-          % Length n2 FFT 
-          out_decomp = in_decomp*F_n2;
+          % Length-n2 FFT along rows of in_decomp
+          out_decomp = fft(in_decomp, n2, 2);
           % Twiddle multiply
           out_decomp = F_n(1:n1, 1:n2).*out_decomp;
         elseif strcmp(mode, 'six-step')
-          % Local transpose
-          out_decomp = in_decomp.';          
-          % Length n1 FFT 
-          out_decomp = F_n1*out_decomp;
+          % Local transpose 
+          out_decomp = in_decomp.';
+          % Length-n1 FFT along columns of out_decomp
+          out_decomp = fft(out_decomp, n1, 1);
           % Twiddle multiply
           out_decomp = F_n(1:n1, 1:n2).*out_decomp;
         else
@@ -199,18 +165,18 @@ function partial_pass_test()
     
     for idx1=1:dim1
       for idx2=1:dim2
-        in_decomp = get_pp_decomposed_data(output, pp_dim, idx1, idx2, n1, n2);
+        in_decomp = get_pp_decomposed_data(output, pp_dim, idx1, idx2, n1, n2);        
         
         if strcmp(mode, 'four-step')
           % Local transpose
           out_decomp = in_decomp.';
-          % Length n1 FFT
-          out_decomp = out_decomp*F_n1;
+          % Length-n1 FFT along rows of out_decomp
+          out_decomp = fft(out_decomp, n1, 2);
         elseif strcmp(mode, 'six-step')
           % Local transpose
           out_decomp = in_decomp.';
-          % Length n2 FFT
-          out_decomp = F_n2*out_decomp;
+          % Length-n2 FFT along columns of out_decomp
+          out_decomp = fft(out_decomp, n2, 1);
           % Local transpose
           out_decomp = out_decomp.';
         else
