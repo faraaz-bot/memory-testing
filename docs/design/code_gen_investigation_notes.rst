@@ -64,5 +64,5 @@ formulas expressed in SPL.
 Open discussion
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Do we need DAG?
+- Should we go for DAG?
 - How does SPIRAL optimize for NV platform?

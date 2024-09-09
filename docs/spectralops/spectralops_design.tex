@@ -1,0 +1,927 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{mathtools}
+\usepackage{xcolor}
+\usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{darkgreen}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{Spectral Operation design doc for rocFFT}
+%\author{}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Operations}
+
+
+\subsection{Convolution/correlation}
+
+We can have an arbitrary number of inputs.  Each input can have its
+own format (length, stride, precision).  Typically, inputs will have
+the same type (ie real vs complex), but it would be perfectly
+reasonable to convolve real data with complex data, or complex data
+with Hermitian-symmetric complex data.  Real and Hermitian-symmetric
+complex wouldn't really make sense, as they are on opposite sides of
+the Fourier transform.  In general, we expect that all inputs and
+outputs be in the same space, ie either all in the time/space domain
+or all in the frequency domain.
+
+The convolution of two inputs $\{f_n\}$ and $\{g_n\}$ is denoted
+$f\ast{}g$ and is given by
+\begin{dmath}
+  f\ast{}g_\ell
+  = \sum_m f_m g_{\ell-m}
+  = \sum_{m_0}\sum_{m_1}f_{m_0} g_{m_1} \delta_{\ell, m_0 + m_1}
+\end{dmath}
+where
+\begin{dmath}
+  \delta_{a,b} = \begin{cases}
+  1  & a=b  \\
+  0 & a \neq b
+\end{cases}
+\end{dmath}
+is the Kronecker delta.  This can be extended from a binary convolution
+to a general $n$-ary convolution as
+\begin{dmath}
+  \label{nary}
+  \ast{}\(f_0, \dots, f_{n-1} \)_\ell
+  = \sum_{m_0, \dots, m_{n-1}} f_{m_0} \dots f_{m_{n-1}}  \delta_{\ell, \sum m_i} 
+\end{dmath}
+
+Note that the bounds on equation~\eqref{nary} are not given.  For
+$\{f_n\}_{n=0}^{N-1}$, $\{g_n\}_{n=0}^{M-1}$, \href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html#scipy.signal.fftconvolve}{python}
+allows for outputs of length
+\begin{itemize}
+\item \texttt{full}: $\max(M,N)$
+\item \texttt{valid}: $M+N-1$
+\item \texttt{same}:  $\max(M, N) - \min(M, N) + 1$.
+\end{itemize}
+
+For $\{f_n\}_{n=-N+1}^{N-1}$, $\{g_n\}_{n=-M+1}^{M-1}$, we have a
+centred convolution (which is typical for Hermitian-symmetric data
+involved in pseudospectral simulations of, eg, Navier--Stokes flow and
+MHD), the output typically has \texttt{full} output.
+
+In terms of internal implementation, centred Hermitian convolutions
+needs a different algorithm depending on the order of the operator.
+In particular, while centred $n$-ary convolutions can be efficiently
+computed via a series of binary convolutions without extra padding for
+dealiasing, this is not the case for centred convolutions, where
+\texttt{full} output will result in the convolution being
+non-associative.
+
+\subsubsection{Phase-shift dealiasing}
+
+Phase-shift dealiasing (cf: Rogallo 1981 FIXME ref) is used for
+pseudospetral simulation with a quadratic nonlinearity. Only some of
+the terms are recovered, specifically those within a certain radius of
+the Fourier origin.  This technique does not zero-pad the transform,
+but instead perform two identical round-trip transformations, one of
+which has an extra read operator which shifts the transform by $1/2$ a
+grid point in each dimension.  I don't totally understand this yet.
+Seems to be used by GESTS?
+
+\subsection{Shift}
+
+The shift function is a nice Fourier transform trick which allows one
+to move perform an affine transform in index space by multiplying by
+roots of unity.  Multiplying the input via
+\begin{dmath}
+  u_{n} \leftarrow \omega^{\alpha + \beta n} u_{n}
+\end{dmath}
+maps the output to
+\begin{dmath}
+  U_{k} \leftarrow U_{\alpha + \beta k}
+\end{dmath}
+
+\subsection{Differentiation}
+
+The Fourier transform maps differentiation to component-wise
+multiplication.  This is because
+\begin{dmath}
+  \mathcal{F}\left[\partial_x u\right]
+  = \int  \partial_x e^{ikx} u(x) dx 
+  = ik \int  e^{ikx} u(x)
+  = ik U(k).
+\end{dmath}
+The operator is
+\begin{dmath}
+  \hat{f} \leftarrow i k \hat{f}
+\end{dmath}
+where $k$ depends on the index and some constant factor.
+
+
+\subsection{Poisson solver}
+
+Solving the Poisson equation is a round-trip operation.  The Poisson
+equation is
+\begin{dmath}
+  \label{poisson}
+  \nabla^2 \phi = f
+\end{dmath}
+By taking the transform of equation~\eqref{poisson}, we get
+\begin{dmath}
+  (ik)^2 \hat{\phi} = \hat{f}
+\end{dmath}
+so we can solve for $\hat{\phi} = -\hat{f}/k^2$ and then
+get $\phi$ by inverting the transform.  The operation is
+\begin{dmath}
+\hat\phi_{k} = \begin{cases}
+  -\hat{f}_k/{k^2}  & k\neq 0  \\
+  0 & k=0
+  \end{cases}
+\end{dmath}
+The $0$-mode is solved by setting appropriate boundary conditions.  
+
+\subsection{Filter}
+
+Filters are round-trip operations which is linearized by the FFT.  The
+low-pass filter with cutoff $k_c$ 
+\begin{dmath}
+\hat{f}_{k} = \begin{cases}
+  \hat{f}  & k < k_c  \\
+  0  & k \geq k
+  \end{cases}
+\end{dmath}
+and similar for a low-pass filter.  Note that this can be optimized by
+skipping zero-data on the inverse transform.  Other filter choices may
+be smoother, or have some more complicated behaviour.  Actually, if we
+start from $\phi$, we can get each $\partial_i\phi$ from a
+direction-$i$ round-trip transform.
+
+\subsection{Hamming window}
+
+Since the FFT works on periodic signals, non-periodic signals are
+often windowed in order to improve results, and the Hamming window is
+a popular choice.  This can be used in round-trip operations, or as
+part of a normal transform.  The operation is
+\begin{dmath}
+  f_n \leftarrow w(x_n) f_n
+\end{dmath}
+where $x_n$ depends on the index $n$ and some constant values.
+
+\subsection{Other operators}
+
+Other spectral operators include
+\begin{itemize}
+\item upsampling, which seems to be a transform, extension with zero-padding, and an inverse transform of an extended length.
+\item non-uniform FFTs (see \url{https://finufft.readthedocs.io/})
+\item image compression, which seems to be a high-amplitude filter
+\item cross-correlation, which involved finding the index of the
+  maximum of the output of a correlation
+\end{itemize}
+
+\section{Applications}
+
+\subsection{AI/ML}
+
+See hyena operator. FIXME: write this.
+
+\subsection{Radio astronomy}
+
+FIXME: write this.
+
+\subsection{Spectral/pseudospectral simulations}
+
+\subsubsection{2D incompressible voriticty-based}
+
+FIXME: ref dealias2
+
+Given a velocity field $u=\(u_x,u_y,u_z\)$, define the vorticity
+$\omega = \nabla \times u$, which has evolution equation
+\begin{dmath}
+  \label{vort}
+  \frac{\partial \omega}{\partial t}
+  + \(u \cdot{} \nabla \) \omega
+  =
+  \(\omega \cdot{} \nabla \) u
+  + \nu \nabla^2 \omega
+  + \nabla \times F.
+\end{dmath}
+For 2D flow, $\omega{}=\omega_z\hat{z}$ so $\(\omega \cdot \nabla\)u=0$.  Thus,
+equation~\eqref{vort} can be written as
+\begin{dmath}
+  \label{2dvort}
+  \frac{\partial \omega_z}{\partial t}
+  + \(u \cdot{} \nabla \) \omega
+  =
+  \nu \nabla^2 \omega
+  + \nabla \times F
+\end{dmath}
+We use the vector identity
+\begin{dmath}
+  \nabla \times \(\nabla \times u\)
+  =
+  \nabla\(\nabla \cdot{} u \)
+  - \nabla^2 u
+\end{dmath}
+and the fact that, for incompressible turbulence, $\nabla \times u=0$,
+so,
+\begin{dmath}
+  \nabla \times \(\nabla \times u\) = - \nabla^2 u
+\end{dmath}
+which implies that
+\begin{dmath}
+  \label{vort2vel2d}
+  u = -\nabla^{ -2} \(\nabla \times \omega \).
+\end{dmath}
+In fourier space, this is
+\begin{dmath}
+  \(U_x,U_y\)
+  =
+  \(
+  \frac{ik_y}{k_x^2 + k_y^2}\Omega_z,
+  \frac{-ik_x}{k_x^2 + k_y^2}\Omega_z
+  \)
+\end{dmath}
+This is easy to solve in Fourier space.  Thus, we can recover
+$u=\(u_x,u_y,0\)$ from $\omega_z$.  Now, we would like to get the
+source equation for $\partial_t \omega$ in equation~\eqref{2dvort}
+given $\Omega_z = \mathcal{F}\left[\omega_z\right]$,
+\begin{dmath}
+  \Omega_z
+  \rightarrow
+  U \nobreak{=}
+  \frac{1}{k_x^2 + k_y^2}
+  \(ik_y \Omega_z , -ik_x \Omega_z \)
+  \rightarrow
+  \mathcal{F}\left[\(u \cdot{} \nabla \) \omega\right]
+  \nobreak{=}
+  \(
+  \frac{ik_y}{k_x^2 + k_y^2} \Omega_z ik_x
+  -\frac{ik_x}{k_x^2 + k_y^2} \Omega_z ik_y
+  \)
+  \ast
+  \Omega_z
+\end{dmath}
+which can be written as
+\begin{dmath}
+  \frac{ik_y}{k_x^2 + k_y^2} \Omega_z \ast ik_x \Omega_z
+  -\frac{ik_x}{k_x^2 + k_y^2} \Omega_z \ast ik_y \Omega_z
+\end{dmath}
+In Fourier space, the multiplications are mapped to convolutions.
+This takes a single input $\omega_z$, which is read-callback-RTC'd to
+four inputs to the Fourier transform, and is then convolved with
+pointwiser operator
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3\) \rightarrow f_0 f_1 + f_2 f_3.
+\end{dmath}
+This requires four inverse and one forward FFTs for a total of five
+transforms.
+
+However, in dealias2 (FIXME:ref), we have a formulation which involves
+fewer inputs.  This is
+\begin{dmath}
+  \(\partial_x^2 - \partial_y^2 \) \(u_x u_y\)
+  + \partial_x\partial_y \(u_y^2 - u_x^2\).
+\end{dmath}
+Given $\Omega_z$ and using equation~\eqref{vort2vel2d}, we can write
+\begin{dmath}
+  \(-k_x^2 +k_y^2 \)
+  \(
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \ast
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
+  \)
+  - k_x k_y
+  \(
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \ast
+  \(\frac{ik_y}{k_x^2 + k_y^2} \Omega_z\)
+  \)
+  -k_x k_y
+  \(
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
+  \ast
+  \(\frac{-ik_x}{k_x^2 + k_y^2}\Omega_z\)
+  \) 
+\end{dmath}
+which is mapped to a convolution and has pointwise operator
+\begin{dmath}
+  \(f_0, f_1\) \rightarrow \(f_0 f_1, f_0 f_0 + f_1 f_1\)
+\end{dmath}
+with a post-processing phase.  This method requires two inverse and
+two forward FFTs for a total of four transforms.
+
+\subsubsection{3D Navier--Stokes}
+
+For the 3D Navier--Stokes, we use the velocity
+formulation with
+\begin{dmath}
+  \frac{\partial u}{\partial t}
+  + \(u \cdot \nabla  \) u
+  - \nu \nabla^2 u
+  =
+  - \nabla p
+  + F.
+\end{dmath}
+The nonlinear term expands to 12 terms.  Using the identity
+\begin{dmath}
+  \(u\cdot \nabla\) u
+  = \omega \times u + \frac{1}{2} \nabla \(u \cdot u\)
+\end{dmath}
+(ref: \url{https://www.math.uh.edu/~molshan/ftp/pub/37488.pdf}) we can
+use the rotational formulation,
+\begin{dmath}
+  \frac{\partial u}{\partial t}
+  + \omega \times u
+  - \nu \nabla^2 u
+  =
+  - \nabla P
+  + F
+\end{dmath}
+where $P = p + \frac{1}{2}u\cdot{}u$. We are given $u$ as input, so
+it's easy to compute $\omega = \nabla \times u$.  This gives us a
+nonlinear term with six forward and three inverse FFTs, for a total of
+9 transforms.  In particular, we have
+\begin{dmath}
+  \label{omegadef}
+  \omega
+  = \(
+  \partial_y u_z - \partial_z u_y,
+  \partial_z u_x -\partial_x u_z,
+  \partial_x u_y - \partial_y u_x,
+  \)
+\end{dmath}
+so
+\begin{dmath}
+  \omega \times u
+  =
+  \(
+  \begin{matrix}
+  \omega_y u_z - \omega_z u_y\\
+  \omega_z u_x -\omega_x u_z\\
+  \omega_x u_y - \omega_y u_x
+  \end{matrix}
+  \)
+  =
+  \(
+  \begin{matrix}
+    \(\partial_z u_x -\partial_x u_z\) u_z
+    - \(\partial_x u_y - \partial_y u_x\) u_y\\
+    \(\partial_x u_y - \partial_y u_x\) u_x
+    -\(\partial_y u_z - \partial_z u_y\) u_z\\
+    \( \partial_y u_z - \partial_z u_y\) u_y
+    - \(\partial_z u_x -\partial_x u_z\) u_x
+  \end{matrix}
+  \)
+\end{dmath}
+which has six inverse and three forward FFTs for a total of nine
+transforms.  The pointwise operator is
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3, f_4, f_5\)
+  \rightarrow
+  \(
+  f_4 f_2 - f_5 f_1,
+  f_5 f_1 - f_3 f_2,
+  f_3 f_1 - f_4 f_0
+  \)
+\end{dmath}
+where
+\begin{dmath}
+  \(f_0, f_1, f_2, f_3, f_4, f_5\)
+  =
+  \(u_x, u_y, u_z, \omega_x, \omega_y, \omega_z\).
+\end{dmath}
+
+
+
+
+In (FIXME: ref basdevant 1983), the transform count can be reduced for
+incompressible turbulence.  In particular, we take
+\begin{dmath}
+  \partial_t u_x
+  + \frac{1}{3} \partial_x \(u_x^2 -u_y^2\)
+  + \frac{1}{3} \partial_x \(u_x^2 -u_z^2\)
+  + \partial_y u_x u_y
+  + \partial_y u_x u_z
+  =
+  -\partial_x \(P + \frac{1}{3}\(u_x^2 + u_y^2 + u_z^2\)\)
+  + \nu \nabla^2 u.
+\end{dmath}
+The $u_y$ and $u_z$ evolution equations follow similarly.  The data
+flow looks ike
+\begin{dmath}
+  \(
+  \begin{matrix}
+    U_x\\
+    U_y\\
+    U_z
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    u_x\\
+    u_y\\
+    u_z
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    u_x^2 - u_y^2\\
+    u_y^2 - u_z^2\\
+    u_x u_y\\
+    u_y u_z\\
+    u_z u_x\\
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    U_x \ast U_x - U_y \ast U_y\\
+    U_y \ast U_y - U_z \ast U_z\\
+    U_x \ast U_y\\
+    U_y \ast U_z\\
+    U_z \ast U_x\\
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    U_x \ast U_x - U_y \ast U_y\\
+    U_y \ast U_y - U_z \ast U_z\\
+    U_x \ast U_y\\
+    U_y \ast U_z\\
+    U_z \ast U_x
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    ik_x U_x \ast U_x + ik_y U_x \ast U_x + ik_z U_x \ast U_z  \\
+    ik_x U_y \ast U_x + ik_y U_y \ast U_x + ik_z U_y \ast U_z  \\
+    ik_x U_z \ast U_x + ik_y U_z \ast U_x + ik_z U_z \ast U_z  
+  \end{matrix}
+  \)
+\end{dmath}
+which has convolution operator
+\begin{dmath}
+  \(
+  \begin{matrix}
+    f_0\\ f_1\\ f_2
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    f_0  f_0 - f_1 f_1 \\
+    f_1  f_1 - f_2 f_2 \\
+    f_0 f_1\\
+    f_1 f_2\\
+    f_2 f_0
+  \end{matrix}
+  \)
+\end{dmath}
+and write operator
+\begin{dmath}
+  \(
+  \begin{matrix}
+    f_0\\ f_1\\ f_2 \\ f_3 \\ f_4
+  \end{matrix}
+  \)
+  \rightarrow
+  \(
+  \begin{matrix}
+    \frac{ik_x}{3}\(f_0 + f_1 \) + ik_y f_2 + i k_z f_3\\
+    \frac{ik_y}{3}\(-2f_0 + f_1 \) + ik_y f_3 + i k_z f_4\\
+    \frac{ik_z}{3}\(f_0 + f_1 ? \) + ik_y f_4 + i k_x f_5
+  \end{matrix}
+  \)  
+\end{dmath}
+which requires three inverse and five forward FFTs for a total of
+eight transforms.
+
+
+\subsubsection{Including other terms in post-processing}
+
+We can also include the linear terms (ie dissipation and forcing) in a
+post-processing phase, further reducing global memory round-trips.
+
+\subsubsection{Can we do some transforms before finishing them all?}
+
+Note that the 3D FFT can be broken up into several steps.  Now, if we
+want to compute $\omega$ from $u$ to simulate Navier--Stokes flow, we
+can get $\omega_x=\partial_uu_z-\partial_zu_y$.  Note that, for
+example, the $x$-dirction differentiation commutes with the $y$- and
+$z$-direction transforms.  So, to get $\omega$ from
+$U=\mathcal{F}\left[u\right]$ to compute the nonlinearity of the 3D
+Navier--Stokes, we note that
+\begin{dmath}
+  \omega
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{xz}^{-1}\left[U_z\right]\right]
+    -
+    \mathcal{F}_{z}^{-1}\left[ik_y \mathcal{F}_{xy}^{-1}\left[U_y\right]\right]
+    \\
+    \mathcal{F}_{z}^{-1}\left[ik_z \mathcal{F}_{yx}^{-1}\left[U_x\right]\right]
+    -
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{yz}^{-1}\left[U_z\right]\right]
+    \\
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{zy}^{-1}\left[U_y\right]\right]
+    -
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{zx}^{-1}\left[U_x\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+So if we first compute
+\begin{dmath}
+  \tilde{U}
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_x^{-1}\left[U_x\right]\\
+    \mathcal{F}_y^{-1}\left[U_y\right]\\
+    \mathcal{F}_z^{-1}\left[U_z\right]
+  \end{matrix}
+  \),
+\end{dmath}
+then we can compute $u$ and $\omega$ via
+\begin{dmath}
+  u
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{yz}^{-1}\left[\tilde{U_x}\right]\\
+    \mathcal{F}_{xz}^{-1}\left[\tilde{U_y}\right]\\
+    \mathcal{F}_{xy}^{-1}\left[\tilde{U_z}\right]
+  \end{matrix}
+  \)
+\end{dmath}
+and
+\begin{dmath}
+  \omega
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{x}^{-1}\left[\tilde{U_z}\right]\right]
+    -
+    \mathcal{F}_{z}^{-1}\left[ik_y \mathcal{F}_{x}^{-1}\left[\tilde{U_y}\right]\right]
+    \\
+    \mathcal{F}_{z}^{-1}\left[ik_z \mathcal{F}_{x}^{-1}\left[\tilde{U_x}\right]\right]
+    -
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{z}^{-1}\left[\tilde{U_z}\right]\right]
+    \\
+    \mathcal{F}_{x}^{-1}\left[ik_x \mathcal{F}_{y}^{-1}\left[\tilde{U_y}\right]\right]
+    -
+    \mathcal{F}_{y}^{-1}\left[ik_y \mathcal{F}_{z}^{-1}\left[\tilde{U_x}\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+which skips three one-dimensional batched transforms, but we have to
+compute the vorticity as a sum of transforms (as opposed to a
+transform of sums), so this method is more expensive overall.
+
+
+However, we do get some fun if we need to compute the gradiant of some
+scalar $\phi$, ie
+$\nabla\phi=\(\partial_x\phi,\partial_y\phi,\partial_z\phi\)$,
+starting with $\Phi=\mathcal{F}\left[\phi\right]$.  Then, we have
+\begin{dmath}
+  \nabla\phi
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xyz}\left[ ik_x \Phi\right]\\
+    \mathcal{F}^{-1}_{xyz}\left[ ik_y \Phi\right]\\
+    \mathcal{F}^{-1}_{xyz}\left[ ik_z \Phi\right]
+  \end{matrix}
+  \)
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x\mathcal{F}^{-1}_{z}\left[  \Phi\right]\right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y\mathcal{F}^{-1}_{z}\left[  \Phi\right]\right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+Let $\tilde{\Phi_z}=\mathcal{F}^{-1}_{z}\left[\Phi\right]$ .  Then,
+\begin{dmath}
+  \nabla\phi
+  =
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+which means that we can save a $z$-dimension transform.  The data flow
+is then
+\begin{dmath}
+  \Phi
+  \rightarrow
+  \left(
+  \begin{matrix}
+    \tilde\Phi_z=\mathcal{F}^{-1}_{z}\left[\Phi\right]\\
+    \mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]
+  \end{matrix}
+  \right)
+  \rightarrow
+  \(
+  \begin{matrix}
+    \mathcal{F}^{-1}_{xy}\left[ik_x \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[ik_y \tilde\Phi_z \right]\\
+    \mathcal{F}^{-1}_{xy}\left[\mathcal{F}^{-1}_{z}\left[ ik_z \Phi\right]\right]
+  \end{matrix}
+  \)
+\end{dmath}
+
+Moreover, if we start with $\phi$, then we can just use the fact that
+$\tilde\Phi_z=\mathcal{F}^{-1}_{xy}\left[\phi\right]$, skipping a
+forward transforms as well.
+
+
+\section{Other libraries}
+
+Other libraries also offer various spectral operations as part of a larger
+FFT package.
+
+\subsection{rocFFT/cuFFT callbacks}
+
+rocFFT and cuFFT both have callback functions.  These have
+\begin{lstlisting}
+void cb(T* data,
+        size_t offset,
+        T element,
+        void* cbdata,
+        void* sharedMem);
+\end{lstlisting}
+note that \lstinline{sharedMem} isn't used (the corresponding
+parameter \lstinline{shared_mem_bytes} must be zero).
+\lstinline{offset} is the index of the \lstinline{element}, and
+\lstinline{void* cbdata} is a general pointer to something in global
+memory.  The \lstinline{offset} isn't sufficient to get the Fourier
+index on, for example, multi-kernel 1D FFTs.
+
+While callbacks have serious performance issues, the interface does
+allow one to, for example, apply a window to input data and to
+convolve with data that has been transformed and stored in vram.  The
+new spectral operation interface should cover these use cases.
+
+\subsection{Python}
+
+Python has a convolution operator which computes non-centred
+convolution on two inputs and one output.  Mismatched sizes are
+handled (though not in generality), and the output can have different
+sizes (\texttt{full}, \texttt{valid}, \texttt{same}) and
+\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.convolve2d.html}{scipy.signal.convolve2d}
+offers similarly-named options for the boundary.
+
+Python implements a
+\href{https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html}{shift}
+operator which allows one to shift the Fourier origin to the middle of
+the array.
+
+Also see
+\href{https://www.tensorflow.org/api_docs/python/tf/signal/}{tensorflow}
+
+\subsection{vkFFT}
+
+vkFFT offers convolution operators, though no examples are given and
+it's hard to tell what the interface is in the 40 000 lines which make
+up the single file of the header-only library.  From discussion with
+and talks by the author, vkFFT makes use of shuffled Cooley-Tukey
+transforms and probably keeps at least the last stage of the FFT
+in-flight (ie avoids a global memory round-trip) to achieve a
+$\approx30\%$ speedup as compared with \texttt{cuFFT}.
+
+\subsection{cuFFTDx}
+
+\href{https://docs.nvidia.com/cuda/cufftdx/index.html}{\texttt{cuFFTDx}}
+allows the user to embed FFT kernels into their own cuda code.  This
+allows for user-defined spectral operations which are quite general.
+However, size limitations are quite restrictive, with double-precision
+transforms being limited to length 16384 (see
+\href{https://docs.nvidia.com/cuda/cufftdx/requirements_func.html#supported-functionality}{supported-functionality}
+for details.)  It appears that multi-dimensional FFTs are not
+supported.  The interface seems quite complicated, but does offer a
+very flexible framework for the supported transforms.
+
+\subsection{Spiral/FFTX}
+
+\href{http://www.spiral.net/software/fftx.html}{Spiral/FFTX} is a
+different beast entirely; this is essentially a code generator which
+can generate very general spectral operations.  They have CPU, CUDA,
+and HIP back-ends.  The interface is quite complicated; one writes a
+specification in \texttt{C++} which is turned into a program and
+compiled.  The user interface is based on tensor notation (cf: Van
+Loan's FFT book).  While quite general, the user interface is very
+difficult to use.  The authors are unaware of implicitly dealiased
+convolution routines.
+
+\subsection{FFTW++}
+
+\href{https://github.com/dealias/fftwpp}{FFTW++} is a wrapper for FFTW
+which also includes convolution routines.  Implicitly dealiased
+convolutions are implemented, which offer better performance than
+conventional routines.  Centred and non-centred convolutions are
+handled, including ternary centred convolutions.  The number of
+inputs and outputs is arbitrary, but they must all have the same size.
+The pointwise operator is given via a function pointer.  An MPI
+interface is provided.
+
+\subsection{FastFFT}
+\href{https://github.com/StochasticAnalytics/FastFFT/}{FastFFT} is
+another library which offers some interesting 2D spectral operations.
+They seem to offer a cross-correlation peak locator which skips a vram
+round-trip.  Works on cuda.  Worth looking into a bit more.
+
+\subsection{cutensor}
+\href{https://docs.nvidia.com/cuda/cutensor/getting_started.html}{cutensor}
+offers and API for specifying array dimensions which may be useful for
+the round-trip API in rocFFT.
+
+\section{Spectral operator API proposal}
+
+There are two basic cases:
+\begin{enumerate}
+\item Part-of-transform
+\item Round-trip
+\end{enumerate}
+
+\subsection{Indexing function}
+
+The pointwise operation may depend on the logical index, which isn't
+necessarily going to be the same as the array index.  For example, 1D
+transforms which use multiple kernels will have effectively transposed
+the data; the map from array index to logical index depends on the FFT
+plan.  For index-dependant functions, we will need the index map in
+order to correctly apply the pointwise function.
+
+This can also just be an optimization.
+
+\subsection{Part-of-transform}
+
+For differentiation, shift, result scaling, and amplitude filters.
+
+The functionality here is similar to use cases for callback API.
+However, the callback functionality doesn't know about the
+array-index-to-logical-index map.  Also, the performance of callbacks
+have been very problematic on the GPU, so moving to another API where
+we can RTC user-specified functions into the FFT kernel will allow for
+significantly better performance.  As with the callback API, we can specify
+a load and a store function.  The functions have signature
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+\end{lstlisting}
+That is, they take exactly one value (real or complex) and a
+multi-index, and return exactly one value of the same type.
+
+For example, a Poisson solve is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const double k0 = 2.0; // User-specified
+  const double k2 = k0 * k0
+         * (idx_x * idx_x +  idx_y * idx_y +  idx_z * idx_z);
+  if(k2 == 0)
+     return u;
+  return u / k2;
+}
+\end{lstlisting}
+
+A low-pass filter is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const double k0 = 2.0; // User-specified
+  const double k2 = k0 * k0
+         * (idx_x * idx_x +  idx_y * idx_y +  idx_z * idx_z);
+  if(k2 > cutoff)
+     return 0;
+  return u;
+}
+\end{lstlisting}
+
+A shift operator is provided by
+\begin{lstlisting}
+Tval f(Tval u, size_t idx_x, size_t idx_y, size_t idx_z)
+{
+  const Tval omega = exp(2 * pi / N); // User-specified
+  return u * pow(omega, a + b * idx_x);
+}
+\end{lstlisting}
+
+We will have to provide a method of getting the complex type from the
+real type and vice-versa.
+
+\subsection{Round-trip}
+
+Round trip computations are used for convolutions, Poisson solves,
+high/low-pass filters, and other operations.  They can be combined
+with pre/post functions, eg: windowed transform.
+
+We add the information to the \texttt{rocfft_plan_description}.  We
+need to specify the lengths and strides separately for each input
+buffer.  We can have an arbitrary number of inputs and outputs.  Outputs
+can be mixed real/complex or complex/Hermitian-complex.
+
+We need to specify the order of the operation: Poisson solves are
+order-1, binary convolutions are order-2, ternary convolutions are
+order-3, etc.
+
+We need to specify the pointwise operator.  This has to match the
+order of the operation (eg: $-u/k^2$ is order-1, $u\odot v$ is
+order-2, etc).  If the operator has higher order than what is
+specified, then incorrect results will be returned.
+
+We need to specify the size of the output.  TODO: this isn't super
+clear what options there are; cf numpy outputs.  This also has to be
+generalized to higher-order transforms, and also made clear for
+first-order operations.
+
+TODO: add functions for Navier--Stokes, MHD, Maxwell's equations.
+(And divergence-free optimized versions.)  Nonlinear Schrodinger?
+
+Question: if we have complex data, does it matter if we do a forward
+or inverse transform?  (is there a complex-conjugation issue?)
+
+
+\begin{lstlisting}
+rocfft_status rocfft_roundtrip_plan_create(...)
+\end{lstlisting}
+
+\begin{lstlisting}
+rocfft_status rocfft_roundtrip_execute(
+  const rocfft_plan     plan,
+  void** in_buffers,
+  void** out_buffers)
+\end{lstlisting}
+
+
+\subsection{Interface for pointwise function}
+
+\begin{enumerate}
+\item Just use callbacks?  Super slow
+\item User-provided string?  (Check that it fits the API by doing a
+  compilation pre-test in a sandbox environment.)
+  \subitem Presets (with enum?)
+  \subitem Examples?  With common cases provided?
+\item Allow users to select from a list of rocFFT-provided options?
+  (enums?)
+\item rocRoller?
+\end{enumerate}
+
+If we have, for example, a shift operator followed by a filter
+operator, who is responsible for ensuring that the new index matches
+the filter operator's indexing scheme?
+
+\section{Other infra}
+
+These spectral operations can have important interactions with other
+libraries, for example hipGraph and rocFFT multi-gpu implementations.
+
+
+\end{document}
+
+% LocalWords:  ie convolve ary pseudospectral eg Navier MHD affine dx
+% LocalWords:  dealiasing ikx ik poisson linearized FFT upsampling cb
+% LocalWords:  FFTs rocFFT cuFFT cbdata sharedMem mem vram vkFFT cuda
+% LocalWords:  Tukey cuFFTDx FFTX dealiased FFTW pointwise MPI RTC
+% LocalWords:  FastFFT cutensor Tval idx const pre rocfft TODO numpy
+% LocalWords:  roundtrip enum enums rocRoller hipGraph gpu

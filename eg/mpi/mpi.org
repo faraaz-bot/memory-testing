@@ -1,0 +1,6 @@
+https://gpuopen.com/learn/amd-lab-notes/amd-lab-notes-gpu-aware-mpi-readme/
+
+cmake -DCMAKE_CXX_COMPILER=hipcc ..
+
+mpirun --mca pml ucx
+

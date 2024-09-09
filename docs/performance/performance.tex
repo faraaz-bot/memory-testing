@@ -49,6 +49,22 @@
 
 This document contains notes on performance for \texttt{rocFFT}.
 
+\section{Increase supported radices}
+
+cuFFT has building blocks for all primes less than 128
+(\href{https://docs.nvidia.com/cuda/cufft/index.html#accuracy-and-performance}{cuFFT
+  accuracy and performance}), of which there are 31: 2, 3, 5, 7, 11,
+13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71 73, 79, 83,
+89, 97, 101, 103, 107, 109, 113, 127.
+
+\section{Allow for increased work memory}
+
+We can sometimes fuse more kernels if we have extra work memory, eg to
+get a second work buffer.  cuFFT does this
+(see \href{https://docs.nvidia.com/cuda/cufft/index.html#function-cufftxtsetworkareapolicy}{cufftxtsetworkareapolicy}).
+
+Ticket: \href{https://ontrack-internal.amd.com/browse/SWDEV-396013}{SWDEV-396013}
+
 \section{Reduce number of transposes for 3D complex}
 
 The 3D plans are \texttt{RTRT}, with the first \texttt{R} being a 2D
@@ -91,6 +107,23 @@ There are several tickets for this work:
 \end{itemize}
 Implementation would require modified kernels and would be a large
 feature.
+
+\subsection{Taking advantage of batches}
+
+FIXME: write this
+
+\subsection{Online twiddles}
+
+FIXME: write this
+
+\subsection{4-fold algorithm}
+
+FIXME: write this.  That one in the FFTS PhD dissertation.
+
+\subsection{Sorensen real/complex FFT}
+
+FIXME: write this.
+
 
 \subsection{Tiny FFTs for ants}
 

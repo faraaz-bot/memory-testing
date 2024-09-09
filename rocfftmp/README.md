@@ -1,0 +1,79 @@
+# rocFFTmp
+
+rocFFTmp is a prototype implementation to compute 3-D FFTs using
+either [rocFFT] or [FFTW3] as backends and advanced MPI for tensor transposition.
+
+[rocFFT]: https://github.com/ROCmSoftwarePlatform/rocFFT
+[FFTW3]: https://www.fftw.org
+
+
+## Dependencies
+rocFFTmp requires [rocFFT] or [FFTW3] libraries to be installed in the system, and an MPI distribution such as [OpenMPI] or [MVAPICH].
+
+[OpenMPI]: https://www.open-mpi.org
+[MVAPICH]: https://mvapich.cse.ohio-state.edu
+
+## How it works?
+rocFFTmp currently takes as input distributed data on slabs configurations as shown below:
+
+![alt text](https://github.com/af-ayala/images/blob/master/slabs_rocfft.jpg?raw=true)
+
+
+The transposition is performed using **MPI_Alltoallw**, sequences of subarray data types are created during plan.
+
+Notes:
+* The slab implementation requires only 1 transpose to obtain the FFT result, and 1 extra transpose to put back data in original processor grid alignment.
+
+* The test file includes a validation step in which we compute the accuracy of the calculation in comparison to FFTW, for double precision data this error is in the order of $10^{-16}$, and it is found as:
+
+$$
+|| X - IFFT_{\textnormal{fftw}}(FFT_{\textnormal{rocfft}}(X)) ||_{\max},
+$$
+
+where we measure the max-norm of the input minus the inverse transform (calculated with FFTW) of the forward transform (calculated with rocFFT_mp).
+
+## Building from source
+
+### Library build dependencies
+
+To build the rocFFTmp library:
+* rocFFTmp depends on [rocFFT] on AMD platforms;
+* rocFFTmp depends on [FFTW3] on other platforms.
+
+## Compiling source and tests
+
+The initial release of rocFFTmp is provided as a header file
+[rocfft_mp.h].
+
+[rocfft_mp.h]: https://github.com/ROCmSoftwarePlatform/rocFFT-misc/blob/master/rocfft_mp/rocfft_mp.h
+
+
+Tests are compiled using hipcc:
+
+```
+hipcc test_rocfft_mp_3D.cpp -I<PATH_TO_ROCFFT>/include
+-L <PATH_TO_ROCFFT>/library -lrocfft -I<PATH_TO_FFTW3>/include
+-L <PATH_TO_FFTW3>/library -lfftw3   -I<PATH_TO_MPI>/include
+-L <PATH_TO_MPI>/library -lmpi -o test_rocfft_mp_3D
+```
+
+## Current Features
+
+The following functionality is currently available for rocFFTmp:
+1. 3-D Complex-to-Complex FFT computation using slabs decomposition.
+2. Precision: single and double.
+3. Tensor transposition can be used as an independent kernel.
+
+Current tests:
+
+| Test          | Dependencies                  | Description                            |
+|-----------------|-------------------------------|------------------------------------------|
+| 3-D C2C FFT   | `test_rocfft_mp_3D.cpp`    | Parallel FFT via slab decomposition
+| 3-D transpose  | `test_transpose_3D.cpp`    | Parallel transposition of 3-D slabs
+
+## Contribution Rules
+
+### Source code formatting
+
+* C++ source code must be formatted with clang-format file herein.
+* Python source code must be formatted with yapf --style pep8.

@@ -1,6 +1,233 @@
 import math
 import cmath
 import numpy as np
+import copy
+import itertools
+
+# Main function for real-to-complex FFT with read/write ops.
+def rcfft(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    # We ignore the paired algorithm.
+    if length[-1] % 2 == 0:
+        return rcfft_even(x, length, batch, readop, writeop)
+    else:
+        return rcfft_embed(x, length, batch, readop, writeop)
+
+# Main function for complex-to-real FFT with read/write ops:
+def crfft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    # We ignore the paired algorithm.
+    if length[-1] %2 == 0:
+        return crfft_even(X, length, batch, readop, writeop)
+    else:
+        return crfft_embed(X, length, batch, readop, writeop)
+        
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def rcfft_even(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    if length[-1] %2 != 0:
+        raise ValueError("Last dimension is not even")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+
+    # The real-to-complex dimension:
+    for ibatch in range(batch):
+        Zlength = copy.deepcopy(length)
+        Zlength[-1] //= 2
+        z = np.zeros(shape=Zlength, dtype=complex)
+        for idx in (list(itertools.product(*[range(l) for l in Zlength]))):
+            lidx = list(idx)
+            ridx0 = lidx[0:-1]
+            ridx0.append(lidx[-1] * 2)
+            ridx1 = lidx[0:-1]
+            ridx1.append(lidx[-1] * 2 + 1)
+            # Read op here.
+            if readop == None:
+                z[idx] = complex(x[ibatch][tuple(ridx0)], x[ibatch][tuple(ridx1)])
+            else:
+                z[idx] = readop(x[ibatch][tuple(ridx0)],ibatch,ridx0) \
+                    + 1j * readop(x[ibatch][tuple(ridx1)],ibatch,ridx1) 
+        Z = np.fft.fft(z)
+        for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
+            X[ibatch][idx] = postkernel(Z[idx])
+
+    # Complex-to-complex transform on all of the non-batch dimensions:
+    for dim in range(len(Zlength) - 1):
+        X = np.fft.fft(X, axis = dim + 1)
+
+    # Write op here.
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx)
+    
+    return X
+
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def crfft_even(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    if length[-1] %2 != 0:
+        raise ValueError("Last dimension is not even")
+
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1
+    X0 = np.empty(shape=np.append(batch, hlength), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+
+    # Complex-to-complex transform on all of the non-batch dimensions:
+    for dim in range(len(length) - 1):
+        X0 = np.fft.ifft(X0, axis = dim + 1) * length[dim]
+
+    x = np.zeros(shape=np.append(batch, length), dtype=float)
+    
+    for ibatch in range(batch):
+        for idx in (list(itertools.product(*[range(l) for l in length[0:-1]]))):
+            
+            Z = prekernel(X0[ibatch][idx])
+            Z = np.fft.ifft(Z) * len(Z)
+
+            Nhalf = length[-1] // 2
+            for i in range(0, Nhalf):
+                if writeop == None:
+                    x[ibatch][idx][2 * i] = Z[i].real
+                    x[ibatch][idx][2 *i + 1] = Z[i].imag
+                else:
+                    ridx = list(idx)
+                    ridx.append(2 * i)
+                    iidx = list(idx)
+                    iidx.append(2 * i + 1)
+                    x[ibatch][idx][2 * i] = writeop(Z[i].real, ibatch, ridx)
+                    x[ibatch][idx][2 * i + 1] = writeop(Z[i].imag, ibatch, iidx)
+                
+    return x
+
+# Perform a general-dimensional batched real-to-complex FFT via complex embedding.
+def rcfft_embed(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+    
+    # The real-to-complex dimension:
+    for ibatch in range(batch):
+        for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
+            Z = np.zeros(length[-1], dtype=complex)
+            for idx0 in range(length[-1]):
+                if readop == None:
+                    Z[idx0] = x[ibatch][idx][idx0]
+                else:
+                    idxx = list(idx)
+                    idxx.append(idx0)
+                    Z[idx0] = readop(x[ibatch][idx][idx0],ibatch,idxx)
+            Z = np.fft.fft(Z)
+            for idx0 in range(hlength[-1]):
+                X[ibatch][idx][idx0] = Z[idx0]
+
+    # TODO: what if we apply the non-Hermitian symmetric readop here?  For shift at least.
+    # Complex-to-complex transform on all of the non-batch dimensions:
+    for dim in range(len(hlength) - 1):
+        X = np.fft.fft(X, axis = dim + 1)
+    
+    # Write op here.
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx)
+    
+    return X
+
+def crfft_embed(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X0 = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+
+    for dim in range(len(hlength) - 1):
+        X0 = np.fft.ifft(X0, axis = dim + 1) * length[dim]
+
+    x = np.zeros(shape=np.append(batch, length), dtype=float)
+    
+    for ibatch in range(batch):
+        for idx in (list(itertools.product(*[range(l) for l in length[:-1]]))):
+            Z = np.zeros(length[-1], dtype=complex)
+            for ix in range(hlength[-1]):
+                Z[ix] = X0[ibatch][idx][ix]
+                Z[-ix] = X0[ibatch][idx][ix].conjugate()
+            Z = np.fft.ifft(Z) * len(Z)
+            for ix in range(length[-1]):
+                if writeop == None:
+                    x[ibatch][idx][ix] = Z[ix].real
+                else:
+                    idxx = list(idx)
+                    idxx.append(ix)
+                    x[ibatch][idx][ix] = writeop(Z[ix].real, ibatch, idxx)
+    return x
+
+                
+    
+# Perform a general-dimensional batched real-to-complex even-length FFT.
+def rcfft_pair(x, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+    otherlength = batch * np.prod(length[:-1])
+    if otherlength %2 != 0:
+        raise ValueError("not an even number somewhere")
+    
+    hlength = copy.deepcopy(length)
+    hlength[-1] = hlength[-1] // 2 + 1 
+    X = np.zeros(shape=np.append(batch, hlength), dtype=complex)
+    
+    x0 = np.reshape(x, [otherlength, length[-1]])
+    X = np.reshape(X, [otherlength, hlength[-1]])
+    for idx0 in range(otherlength // 2):
+        
+        z = np.empty([length[-1]], dtype=complex)
+        for idx1 in range(length[-1]):
+            pp0 = np.unravel_index(np.ravel_multi_index((idx0*2, idx1), x0.shape), x.shape)
+            pp1 = np.unravel_index(np.ravel_multi_index((idx0*2 + 1, idx1), x0.shape), x.shape)
+            batch0 = pp0[0]
+            idx00 = pp0[1:]
+            batch1 = pp1[0]
+            idx11 = pp1[1:]
+            
+            if readop == None:
+                z[idx1] = complex(x0[idx0 * 2][idx1], x0[idx0 * 2 + 1][idx1])
+            else:
+                z[idx1] = readop(x0[idx0 * 2][idx1], batch0, idx00) \
+                    + 1j * readop(x0[idx0 * 2 + 1][idx1], batch1, idx11)
+        Z = np.fft.fft(z)
+        X[idx0 * 2], X[idx0 * 2 + 1] = unpackbatch(Z)
+        
+    X = np.reshape(X, np.append(batch, hlength))
+
+    for dim in range(len(hlength) - 1):
+        X = np.fft.fft(X, axis = dim + 1)
+           
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in hlength]))):
+                X[ibatch][idx] = writeop(X[ibatch][idx], ibatch, idx) 
+    return X
 
 def postkernel(Z):
     # Real-to-complex post kernel.
@@ -46,9 +273,9 @@ def postkernel(Z):
             X[p] = Z[p].conjugate()
         X[Nhalf] = complex(Z[0].real - Z[0].imag, 0)
         return X
-        
 
 def prekernel(X):
+    # Complex-to-real pre kernel
     Nhalf = len(X) - 1
     N = 2 * Nhalf
     Z = np.empty(Nhalf, dtype=complex)
@@ -175,3 +402,151 @@ def repackND(X, lengths):
         if even:
             Xplanar[idx][stop] = X[idxe][stop] + I * X[idxo][stop]
     return Xplanar
+
+def symmetrize_1d(hdata, nx):
+    sdata = np.empty([nx // 2 + 1], dtype=complex)
+    for i in range(nx // 2 + 1):
+        sdata[i] = hdata[i]
+        
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+        
+    for xval in xvals:
+        sdata[xval] = sdata[xval].real
+        
+    return sdata
+
+def symmetrize_2d(hdata, nx, ny):
+    sdata = np.empty([nx, ny // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny // 2 + 1):
+            sdata[i][j] = hdata[i][j]
+            
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
+
+    for yval in yvals:
+        # DY/Nyquists:
+        for xval in xvals:
+            sdata[xval][yval] = sdata[xval][yval].real
+        # x-axes:
+        for i in range(1, nx // 2):
+            sdata[nx - i][yval] = sdata[i][yval].conj()
+            
+    return sdata
+
+def symmetrize_3d(hdata, nx, ny, nz, only_conj=False):
+    sdata  = np.empty([nx, ny, nz // 2 + 1], dtype=complex)
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz // 2 + 1):
+                sdata[i][j][k] = hdata[i][j][k]
+    
+    xvals = [0]
+    if nx % 2 == 0:
+        xvals.append(nx // 2)
+    yvals = [0]
+    if ny % 2 == 0:
+        yvals.append(nx // 2)
+    zvals = [0]
+    if nz % 2 == 0:
+        zvals.append(nz // 2)
+        
+    for zval in zvals:
+        if not only_conj:
+            # DC/nyquists:
+            for xval in xvals:
+                for yval in yvals:
+                    sdata[xval][yval][zval] = sdata[xval][yval][zval].real
+
+        # x-axes:
+        for yval in yvals:
+            for i in range(1, nx // 2):
+                sdata[nx - i][yval][zval] = sdata[i][yval][zval].conj()
+        # y-axes:
+        for xval in xvals:
+            for j in range(1, ny // 2):
+                sdata[xval][ny - j][zval] = sdata[xval][j][zval].conj()
+        # xy-planes:
+        for i in range(1, nx // 2):
+            for j in range(1, ny):
+                sdata[nx - i][ny - j][zval] = sdata[i][j][zval].conj()
+
+    return sdata
+
+def fft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+
+    X0 = np.empty(shape=np.append(batch, length), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+            
+    
+    for ibatch in range(batch):
+        X0[ibatch] = np.fft.fftn(X0[ibatch])
+        
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = writeop(X0[ibatch][idx], ibatch, idx)
+
+    return X0
+
+                
+def ifft(X, length, batch, readop=None, writeop=None):
+    if len(length) == 0:
+        raise ValueError("No lengths were provided")
+
+    X0 = np.empty(shape=np.append(batch, length), dtype=complex)
+
+    if readop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = readop(X[ibatch][idx], ibatch, idx)
+    else:
+        X0 = copy.deepcopy(X)
+    
+    for ibatch in range(batch):
+        X0[ibatch] = np.fft.ifftn(X0[ibatch])
+        
+    if writeop != None:
+        for ibatch in range(batch):
+            for idx in (list(itertools.product(*[range(l) for l in length]))):
+                X0[ibatch][idx] = writeop(X0[ibatch][idx], ibatch, idx)
+
+    return X0
+
+
+# TODO: midop specifies the order of the convolution.
+
+def rfft_round(x, length, batch, readop=None, midop=None, writeop=None):
+    X = rcfft(x, length, batch, readop=readop, writeop=midop)
+    x0 = crfft(X, length, batch, readop=None, writeop=writeop)
+    return x0
+
+def hfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    x = crfft(X, length, batch, readop=readop, writeop=midop)
+    X0 = rcfft(x, length, batch, readop=None, writeop=writeop)
+    return X0
+
+def cfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    Y = fft(X, length, batch, readop=readop, writeop=midop)
+    X0 = ifft(Y, length, batch, readop=readop, writeop=midop)
+    return X0
+
+def icfft_round(X, length, batch, readop=None, midop=None, writeop=None):
+    Y = ifft(X, length, batch, readop=readop, writeop=midop)
+    X0 = fft(Y, length, batch, readop=readop, writeop=midop)
+    return X0
+

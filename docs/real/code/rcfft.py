@@ -1,10 +1,11 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import sys
 
 import math
 import cmath
 import numpy as np
+np.set_printoptions(suppress=True,linewidth=np.nan)
 
 from rckernels import postkernel, prekernel
 
@@ -27,10 +28,12 @@ x = np.empty([N])
 for i in range(0, N):
     x[i] = random.random()
 
-print("input:", x)
+print("input:")
+print(x)
 
 npX = np.fft.rfft(x)
-print("np rfft:", npX)
+print("np rfft:")
+print(npX)
 
 print("our rfft:")
 z = np.empty([Nhalf], dtype=complex)
@@ -53,14 +56,14 @@ print("maxerr: " + str(maxerr))
 print()
 
 npx = np.fft.irfft(np.fft.rfft(x))*(len(x))
-print("np irfft(rfft):", npx)
+print("np irfft(rfft):")
+print(npx)
 
-print("our irfft(rfft):", )
+print("our irfft(rfft):")
 Z = prekernel(X)
 #print(Z)
 z = np.fft.ifft(Z) * len(Z)
 #print(z)
-
 for i in range(0, Nhalf):
     x[2 * i] = z[i].real
     x[2 *i + 1] = z[i].imag

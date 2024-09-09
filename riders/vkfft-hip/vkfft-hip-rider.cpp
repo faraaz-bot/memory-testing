@@ -1,16 +1,15 @@
 #include <iostream>
 
-
 #ifndef __HIP_PLATFORM_HCC__
 #define __HIP_PLATFORM_HCC__
 #endif
-#include <hip/hip_runtime.h>
-#include <hip/hiprtc.h>
-#include <hip/hip_runtime_api.h>
 #include <hip/hip_complex.h>
+#include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
+#include <hip/hiprtc.h>
 
-#include "vkFFT.h"
 #include "benchmark_scripts/vkFFT_scripts/include/utils_VkFFT.h"
+#include "vkFFT.h"
 
 #include "vkfft_params.h"
 
@@ -40,13 +39,12 @@ inline void
 }
 #define HIP_V_THROW(_status, _message) hip_V_Throw(_status, _message, __LINE__, __FILE__)
 
-
 int main(int argc, char* argv[])
 {
     vkfft_params params;
 
     int verbose = 3;
-                 
+
     // hip Device number for running tests:
     int deviceId{};
 
@@ -55,44 +53,53 @@ int main(int argc, char* argv[])
 
     // Token string to fully specify fft params.
     std::string token;
-    
-    po::options_description opdesc("rocfft rider command line options");
-    opdesc.add_options()("help,h", "produces this help message")
-        ("device", po::value<int>(&deviceId)->default_value(0), "Select a specific device id")
-        ("verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")
-        ("ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")
-        ("notInPlace,o", "Not in-place FFT transform (default: in-place)")
-        ("double", "Double precision transform (default: single)")
-        ("transformType,t", po::value<fft_transform_type>(&params.transform_type)
-         ->default_value(fft_transform_type_complex_forward),
-         "Type of transform:\n0) complex forward\n1) complex inverse\n2) real "
-         "forward\n3) real inverse")
-        ( "batchSize,b", po::value<size_t>(&params.nbatch)->default_value(1),
-          "If this value is greater than one, arrays will be used ")
-        ( "itype", po::value<fft_array_type>(&params.itype)
-          ->default_value(fft_array_type_unset),
-          "Array type of input data:\n0) interleaved\n1) planar\n2) real\n3) "
-          "hermitian interleaved\n4) hermitian planar")
-        ( "otype", po::value<fft_array_type>(&params.otype)
-          ->default_value(fft_array_type_unset),
-          "Array type of output data:\n0) interleaved\n1) planar\n2) real\n3) "
-          "hermitian interleaved\n4) hermitian planar")
-        ("length",  po::value<std::vector<size_t>>(&params.length)->multitoken(), "Lengths.")
-        ("istride", po::value<std::vector<size_t>>(&params.istride)->multitoken(), "Input strides.")
-        ("ostride", po::value<std::vector<size_t>>(&params.ostride)->multitoken(), "Output strides.")
-        ("idist", po::value<size_t>(&params.idist)->default_value(0),
-         "Logical distance between input batches.")
-        ("odist", po::value<size_t>(&params.odist)->default_value(0),
-         "Logical distance between output batches.")
-        ("isize", po::value<std::vector<size_t>>(&params.isize)->multitoken(),
-         "Logical size of input buffer.")
-        ("osize", po::value<std::vector<size_t>>(&params.osize)->multitoken(),
-         "Logical size of output buffer.")
-        ("ioffset", po::value<std::vector<size_t>>(&params.ioffset)->multitoken(), "Input offsets.")
-        ("ooffset", po::value<std::vector<size_t>>(&params.ooffset)->multitoken(), "Output offsets.")
-        ("token", po::value<std::string>(&token));
 
-    
+    po::options_description opdesc("rocfft rider command line options");
+    opdesc.add_options()("help,h", "produces this help message")(
+        "device", po::value<int>(&deviceId)->default_value(0), "Select a specific device id")(
+        "verbose", po::value<int>(&verbose)->default_value(0), "Control output verbosity")(
+        "ntrial,N", po::value<int>(&ntrial)->default_value(1), "Trial size for the problem")(
+        "notInPlace,o", "Not in-place FFT transform (default: in-place)")(
+        "double", "Double precision transform (default: single)")(
+        "precision",
+        po::value<fft_precision>(&params.precision),
+        "Transform precision: single (default), double, half")(
+        "transformType,t",
+        po::value<fft_transform_type>(&params.transform_type)
+            ->default_value(fft_transform_type_complex_forward),
+        "Type of transform:\n0) complex forward\n1) complex inverse\n2) real "
+        "forward\n3) real inverse")("batchSize,b",
+                                    po::value<size_t>(&params.nbatch)->default_value(1),
+                                    "If this value is greater than one, arrays will be used ")(
+        "itype",
+        po::value<fft_array_type>(&params.itype)->default_value(fft_array_type_unset),
+        "Array type of input data:\n0) interleaved\n1) planar\n2) real\n3) "
+        "hermitian interleaved\n4) hermitian planar")(
+        "otype",
+        po::value<fft_array_type>(&params.otype)->default_value(fft_array_type_unset),
+        "Array type of output data:\n0) interleaved\n1) planar\n2) real\n3) "
+        "hermitian interleaved\n4) hermitian planar")(
+        "length", po::value<std::vector<size_t>>(&params.length)->multitoken(), "Lengths.")(
+        "istride", po::value<std::vector<size_t>>(&params.istride)->multitoken(), "Input strides.")(
+        "ostride",
+        po::value<std::vector<size_t>>(&params.ostride)->multitoken(),
+        "Output strides.")("idist",
+                           po::value<size_t>(&params.idist)->default_value(0),
+                           "Logical distance between input batches.")(
+        "odist",
+        po::value<size_t>(&params.odist)->default_value(0),
+        "Logical distance between output batches.")(
+        "isize",
+        po::value<std::vector<size_t>>(&params.isize)->multitoken(),
+        "Logical size of input buffer.")(
+        "osize",
+        po::value<std::vector<size_t>>(&params.osize)->multitoken(),
+        "Logical size of output buffer.")(
+        "ioffset", po::value<std::vector<size_t>>(&params.ioffset)->multitoken(), "Input offsets.")(
+        "ooffset",
+        po::value<std::vector<size_t>>(&params.ooffset)->multitoken(),
+        "Output offsets.")("token", po::value<std::string>(&token));
+
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, opdesc), vm);
     po::notify(vm);
@@ -107,7 +114,6 @@ int main(int argc, char* argv[])
     {
         std::cout << "Running profile with " << ntrial << " samples\n";
     }
-
 
     if(token != "")
     {
@@ -194,7 +200,7 @@ int main(int argc, char* argv[])
     }
 
     std::cout << std::flush;
-    
+
     params.validate();
     if(!params.valid(verbose))
     {
@@ -212,13 +218,6 @@ int main(int argc, char* argv[])
     {
         throw std::runtime_error("plan creation failed");
     }
-    
-
-
-
-
-
-
 
     // GPU input buffer:
     auto                ibuffer_sizes = params.ibuffer_sizes();
@@ -272,7 +271,6 @@ int main(int argc, char* argv[])
         pobuffer[i] = obuffer->at(i).data();
     }
 
-    
     if(params.execute(pibuffer.data(), pobuffer.data()) != fft_status_success)
     {
         throw std::runtime_error("FFT plan execution failed!");
@@ -282,11 +280,11 @@ int main(int argc, char* argv[])
     std::vector<double> gpu_time(ntrial);
 
     hipEvent_t start, stop;
-    if(hipEventCreate(&start)!=  hipSuccess)
+    if(hipEventCreate(&start) != hipSuccess)
     {
         throw std::runtime_error("hipEventCreate failed");
     }
-    if(hipEventCreate(&stop)!=  hipSuccess)
+    if(hipEventCreate(&stop) != hipSuccess)
     {
         throw std::runtime_error("hipEventCreate failed");
     }
@@ -296,19 +294,18 @@ int main(int argc, char* argv[])
         params.compute_input(ibuffer);
 
         HIP_V_THROW(hipEventRecord(start), "hipEventRecord failed");
-        
+
         params.execute(pibuffer.data(), pobuffer.data());
 
         HIP_V_THROW(hipEventRecord(stop), "hipEventRecord failed");
         HIP_V_THROW(hipEventSynchronize(stop), "hipEventSynchronize failed");
 
         float time;
-        if(hipEventElapsedTime(&time, start, stop) !=  hipSuccess)
+        if(hipEventElapsedTime(&time, start, stop) != hipSuccess)
         {
             throw std::runtime_error("hipEventElapsedTime failed");
         }
         gpu_time[itrial] = time;
-
     }
 
     std::cout << "\nExecution gpu time:";
@@ -317,6 +314,6 @@ int main(int argc, char* argv[])
         std::cout << " " << i;
     }
     std::cout << " ms" << std::endl;
-    
+
     return 0;
 }

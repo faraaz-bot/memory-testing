@@ -1,0 +1,453 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{cancel}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage{xcolor}
+\usepackage{listings}
+\definecolor{darkgreen}{rgb}{0.0, 0.2, 0.13}
+\lstset{language=C++,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+\usepackage{natbib}
+\usepackage{bibentry}
+\bibliographystyle{plain}
+
+
+\title{Multi-GPU peformance plan for rocFFT}
+\author{}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+These are notes on how to achieve performance for multi-device FFTs with
+rocFFT.
+
+\section{Strategy}
+
+The majority of user feedback for rocFFT is from users in a cluster
+environment.  As such, and particularly with introduction of cuFFTMp,
+NVIDIA's distributed FFT library, there is interest in developing a
+distributed version of rocFFT.
+
+Many cluster applications which use FFTs developed their own
+distributed version.  For example, GESTS and gromacs.  In order for a
+distributed rocFFT to be succesful, it needs to be faster / more
+reliable / simpler to use / more feature complete than the application
+implementation.  That said, we have had interest from several
+applications for an AMD version.
+
+cuFFTMp uses NVSHMEM for communication.  ROCSHMEM is an AMD research
+project which doesn't have release-level support.  As such, MPI is
+probably the best solution for a distributed rocFFT.
+
+Distributed FFTs need to have data transposed so that 1D FFTs can be
+computed with all the relevant data on a single device.  This
+transpose is very expensive, and distributed FFTs are severely
+bandwidth-limited.  Optimizing this stage is the key to producing a
+good distributed FFT.  In section~\ref{section_data_decomp}, we
+introduce the standard data decompositions and the associated
+transpose costs.
+
+In addition, we can look at using MPI sub-communicators, FFTW's
+various algorithms for transpose, and FFTW++'s recursive transpose.
+In addition, it may be possible to do some passes on distributed data
+in order to get as much work done as possible when the data is
+contiguous, as well as allowing us to separate data dependencies so as
+to allow for computation/communication overlap.  See
+section~\ref{subpasses}.
+
+Compressing data may be a useful strategy.  zfp is available on the
+GPU.  Lossy compression may also be appropriate if we can effectively
+control the loss of precision.  In addition, the fast multipole method
+may be worth considering, as this has generally better communication
+properties than a transpose.  However, this requires the user to
+specify a precision tolerance.
+
+Since one of the main uses of the FFT is for convolutions (eg GESTS,
+gromacs), we can design an distributed FFT that is faster for this
+operation.  At the most basic level, FFT-based convolutions need to be
+zero-padded.  For the normal $1/2$ padding case, a 3D convolution
+requires a buffer that is $87.5\%$ zeros; the first transpose can skip
+the $75\%$ of the buffer that is just zero.  Furthermore, implicitly
+dealiased convolutions can further reduce computation cost and allow
+for better communication patterns.
+
+
+\url{https://ontrack-internal.amd.com/browse/SWDEV-281944}
+
+\section{2D FFTs}
+
+A 2D complex FFT of sizee $N\times{}N$ over $P$ processors with 1D
+sub-transforms comprised of a single kernel. Using a row-major format,
+the data decomposition for device $p$ is
+\begin{dmath}
+  (i,j) \in \left\{0,\dots,N-1 \right\}
+  \times \left\{p\frac{N}{P},\dots{},(p+1)\frac{N}{P}-1\right\}
+\end{dmath}
+
+% TODO: ref 2dc2c.asy
+
+\section{Data Decompositions}
+\label{section_data_decomp}
+
+
+\subsection{2D Decompositions}
+
+There are basically two decompositions for 2D data of size $N^2$ over
+$P$ procs; either block or pencil.  Block decompositions have
+dimensions
+\begin{dmath}
+  \label{brick2d}
+  \left(\frac{N}{P^{1/2}}, \frac{N}{P^{1/2}} \right)
+\end{dmath}
+and pencil has dimensions
+\begin{dmath}
+  \label{pencil2d}
+  \left(N, \frac{N}{P} \right).
+\end{dmath}
+
+\subsubsection{Brick-pencil}
+Each of the $P$ procs has to send $\sqrt{P}-1$ messages with dimension
+\begin{dmath}
+  \left(\frac{N}{P^{1/2}}, \frac{N}{P} \right)
+\end{dmath}
+for a message size of $N^2/P^{3/2}$.  The total communication size is
+\begin{dmath}
+  P \(\sqrt{P}-1\) N^2/P^{3/2} \approx N^2
+\end{dmath}
+
+\subsubsection{Pencil-pencil}
+Each of the $P$ procs has to send $P-1$ messages with dimension
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P} \right)
+\end{dmath}
+for a message size of $N^2/P^2$.  The total communication size is
+\begin{dmath}
+  P \(P-1\) N^2/P^2\approx N^2.
+\end{dmath}
+
+
+\subsubsection{2D transform summary}
+
+\begin{centering}
+  \begin{table}[htbp]
+    \begin{tabular}{|l|l|l|}
+      \hline
+      Type          & Message size  & Messages per proc \\
+      \hline
+      Brick-pencil  & $N^3/P^{3/2}$ & $\sqrt{P}$          \\
+      Pencil-pencil & $N^3/P^2$ & $P$        \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{centering}
+
+
+
+
+\subsection{3D Decompositions}
+
+\url{https://www.osti.gov/servlets/purl/1483229}
+
+Given data of size $N^3$ with $P$ mpi procs, the brick layout has
+each process having
+\begin{dmath}
+  \label{brick3d}
+  \left(\frac{N}{P^{1/3}}, \frac{N}{P^{1/3}}, \frac{N}{P^{1/3}} \right)
+\end{dmath}
+and this must be transformed into either a pencil decomposition
+\begin{dmath}
+  \label{pencil3d}
+  \left(N, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+or a slab decomposition,
+\begin{dmath}
+  \label{slab3d}
+  \left(N, N, \frac{N}{P} \right)
+\end{dmath}
+
+\subsubsection{Brick-Pencil}
+Going from distribution~\eqref{brick3d} to~\eqref{pencil3d}, each of
+the $P$ procs need to receive $P^{1/3}-1$ messages of dimensions 
+\begin{dmath}
+  \left(\frac{N}{P^{1/3}}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+for message size of $\frac{N^3}{P^{4/3}}$.  There are therefore
+$P(P^{1/3}-1)$ messages, for a total communication size of
+\begin{dmath}
+  \frac{N^3}{P^{4/3}} P(P^{1/3}-1) \approx N^3.
+\end{dmath}
+
+\subsubsection{Brick-Slab}
+Going from distribution~\eqref{brick3d} to~\eqref{slab3d}, each of the
+$P$ procs needs to receive $P^{2/3}-1$ messages of dimension
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P^{1/3}}, \frac{N}{P^{1/3}} \right)
+\end{dmath}
+which has message size $\frac{N^2}{P^{5/3}}$.  The total communication
+  size is
+\begin{dmath}
+  P\(P^{2/3}-1\) \frac{N^2}{P^{5/3}} \approx N^3.
+\end{dmath}
+
+\subsubsection{Pencil-Pencil}
+A pencil-to-pencil transpose requires all $P$ procs to send
+$\sqrt{P}-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+which has message size $\frac{N^3}{P^{3/2}}$.  The total communication
+size is
+\begin{dmath}
+  P \(\sqrt{P}-1\) \frac{N^3}{P^{3/2}} \approx N^3.
+\end{dmath}
+
+\subsubsection{Pencil-Slab}
+All $P$ procs send $P-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{\sqrt{P}}, \frac{N}{\sqrt{P}} \right)
+\end{dmath}
+for a message size of $N^3/P^2$.  The total communication size is
+\begin{dmath}
+  P \(P-1\) \frac{N^3}{P^2} \approx N^3.
+\end{dmath}
+
+\subsubsection{Slab-Slab}
+All $P$ procs send $P-1$ messages of size
+\begin{dmath}
+  \left(\frac{N}{P}, \frac{N}{P}, N \right)
+\end{dmath}
+for a message size of $N^3/P^2$. The total communication size is
+\begin{dmath}
+  P \(P-1\) \frac{N^3}{P^2} \approx N^3.
+\end{dmath}
+
+\subsubsection{3D transform summary}
+
+\begin{centering}
+  \begin{table}[htbp]
+    \begin{tabular}{|l|l|l|}
+      \hline
+      Type          & Message size  & Messages per proc \\
+      \hline
+      Brick-pencil  & $N^3/P^{5/3}$ & $P^{1/3}$          \\
+      Brick-slab    & $N^3/P^{5/3}$ & $P^{1/3}$          \\
+      Pencil-pencil & $N^3/P^{3/2}$ & $P^{1/2}$        \\
+      Pencil-slab   & $N^3/P^2$    & $P$               \\
+      Slab-slab     & $N^3/P^2$    & $P$               \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{centering}
+
+\section{Performance Strategy}
+
+\subsection{Communication library}
+
+The choice of communication library is quite important here.  Major
+MPI libraries have been GPU-aware for some time now; these need to be
+benchmarked.  In particular, \texttt{MPI_Alltoall},
+\texttt{MPI_Alltoallv}, and \texttt{MPI_Alltoallw} (and there
+non-blocking versions).  In particular, it seems that
+\texttt{MPI_Alltoallw} lacks high-performance implementations.  In
+addition, the scheduling algorithm
+in~\cite{schreuder1980constructing}
+
+Different types of GPU-aware MPI:
+\begin{itemize}
+\item stream triggered
+\item kernel triggered
+\item kernel initiate
+\end{itemize}
+FIXME: explain and links to documentation.
+
+rocSHMEM is currently experimental; it needs users in order to be in
+an official release - being in an official release would really help
+increase the user base!  We also need to verify rocSHMEM support and
+how MPI interoperatbility works.
+
+RCCL is fully supported and offers some useful features such as
+\texttt{ncclAllToAll}, which can be used in at least single-node
+communications.
+
+Unknowns:
+\begin{itemize}
+\item nvSHMEM performance relative to MPI
+\item rocSHMEM release plan
+\item rocSHMEM/MPI interoperability
+\end{itemize}
+
+\subsection{1D/2D decomposition}
+
+Also known as slab and pencil.
+
+We need to
+\begin{itemize}
+\item support both
+\item Compute the communication cost for each of these (depending on
+  latency and bandwidth).
+\item be able to switch from one to another internally when
+  tuning/estimation indicates a performance gain.
+\end{itemize}
+
+
+\subsection{Compression / intermediary precision}
+
+We know, at the FFT-library level, a lot about our data.  It's an
+array of complex (or sometimes real) values, and we are willing to
+sacrifice some small amount of numerical error to gain performance -
+the FFT, while highly accurate, still has roundoff error.  We have
+opportunities to reduce transform time by compressing data before
+communication.  It may be possible to do this when the data is already
+in LDS, which would reduce the cost of compression.  Application-level
+kernels may also be able to consume compressed data, which would be an
+interesting addition to the API.
+
+In addition, we may be willing to use a lower precision when
+transferring over the network - FFTs could be done in double
+precision, but transferred in single, for example.
+
+All of this is fairly application-dependant.  Precision requirements,
+numerical ranges, and numerical accuracy requirements will be
+determined by the application developer and not the library developer.
+As such, any lossy method needs to be user-controlled, and therefore
+included in the API.
+
+\subsection{De-distributing the transform}
+
+FFTs are bandwidth-limited; distributed transforms even more so.  Some
+applications may distribute the data to optimize for other parts of
+the program; we are not necessarily given an FFT-optimized data
+layout.  This is particular when the size of the data is small
+relative to the size and number of devices.
+
+If the transform is really small, it may make more sense to gather the
+data onto one device and distribute the data via a scatter operation.
+In order to further remove a communication stage, we ould also
+all-gather, compute redundantly, and then just pass the relevant data
+to the local device.  This can also be done in an intermediate
+fashion, for example computing slabs from a pencil decomposition.
+
+We can compute the cost of these based on latency and bandwidth and
+compare with the slab/pencil decomposition costs.
+
+\subsection{Sub-passes}
+\label{subpasses}
+
+In the case where one of the distributed dimensions has the same
+number of values (in the dimension), we can perform partial passes in
+that direction.  This allows us to perform some more computation while
+we have the data locally, which may allow us to eliminate some MPI
+transposes entirely.  Also of interest is that this will allow us to
+de-couple the data dependance; for example, if we do a radix-2 pass,
+then we now have two different data sets on which we can compute the
+transform independently.  Then, we can send some data, start
+computing, and send the second data set while we work on the first.
+This will also allow for a non-blocking interface.  This is scoped in
+single-device ticket
+\href{https://ontrack-internal.amd.com/browse/SWDEV-392917}{SWDEV-392917}.
+
+
+
+\subsection{Latency/bandwidth tradeoff}
+
+Under a strong-scaling regime, transforms are eventually
+latency-bound.  At this point, bandwidth and flops are kind of free,
+and we can spend some of these to try and reduce the cost of latency.
+This is the idea behind the recursive MPI transpose
+in~\cite{bowmanroberts2015adaptive}.  This needs validation (and
+publication).
+
+
+\section{Spectral Operations}
+\label{spectralops}
+
+FFTs are generally used in a few operations such as convolution,
+Poisson solve, filtering, etc.  The combination of spectral ops with
+multi-device transforms allows for optimisation which would be quite
+cumbersome for the user.  For example, a Poisson solve can be done as
+a round-trip in the last FFT kernel, thus avoiding two global-memory
+round-trips.  Convolution/correlation are even more interesting
+possibilities, as the zero-padding increases the effective problem
+size and therefore communication costs.  Using implicit dealiasing
+(\cite{dealias2} allows for the overlapping of communication and
+computation.
+
+The spectral operations API should be developed in conjunction
+with the multi-device API.
+
+\section{Other libraries}
+
+\subsection{cuFFT and other back-ends}
+
+\texttt{cuFFTMp} is already available, and hipFFT should somehow wrap
+this, while also allowing users to call rocFFTMp.  We plan on adding
+new functionality to rocFFT/Mp; features not implemented in cuFFT will
+return a not-implemented error code.
+
+
+\subsection{Other ROCm libs}
+
+Also of note is that cuSolverMP is a thing; rocSolver developers may
+wish to participate in choices in rocFFTMp design so that the ROCm libraries
+have some sort of coherence.
+
+
+\section{Implimentation plan}
+
+First, get it working.  Just move everything to pencil/slab, send/receive
+to whatever crazy data distribution that they specify.
+
+Optimizations:
+\begin{itemize}
+\item gather/scatter
+\item sub-passes in discontiguous direction
+\item Do not use \texttt{MPI_Alltoallw} until there is a reasonable
+  implementation.  It might be worth just using \texttt{MPI_Alltoallv}
+  and handling the data formatting on our own.
+\item Can we do \texttt{MPI_Alltoallw} via \texttt{MPI_Alltoallv} +
+  extra isend/irecv?
+\item \dots
+\end{itemize}
+
+
+
+\bibliography{../refs}
+
+\end{document}

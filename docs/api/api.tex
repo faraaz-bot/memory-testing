@@ -1,0 +1,951 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+
+\usepackage{graphicx}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage[dvipsnames]{xcolor}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+
+\usepackage{listings}
+\lstset{language=C++,
+  basicstyle=\fontsize{8}{13}\ttfamily,
+  keywordstyle=\color{blue}\ttfamily,
+  stringstyle=\color{red}\ttfamily,
+  commentstyle=\color{BrickRed}\ttfamily,
+  morecomment=[l][\color{magenta}]{\#},
+  showstringspaces=false
+}
+
+\usepackage{breqn}
+\usepackage[]{algorithm2e}
+\usepackage{physics}
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\newcommand{\Four}{\mathcal{F}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+%% \renewcommand{\{}{\left{}
+%% \renewcommand{\}}{\right}}
+
+
+\title{API design for rocFFT/hipFFT}
+\author{The rocFFT Team}
+
+
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+FIXME
+
+\noindent
+\texttt{rocFFT}.
+
+\noindent
+\texttt{hipFFT}: obligatory XKCD: \url{https://xkcd.com/927/}
+
+\section{DAG}
+
+
+\begin{center}
+  \includegraphics[width=0.9\textwidth]{implementdag.pdf}
+\end{center}
+
+\newpage
+\subsection{Fields}
+\label{ssfields}
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    None & Experimental implementation in ROCm 6.0  & None \\
+    \hline
+  \end{tabular}
+\end{center}
+
+\subsubsection{rocFFT API change}
+
+\noindent
+rocFFT API change:
+\begin{itemize}
+\item
+  \begin{lstlisting}
+typedef struct rocfft_field_t* rocfft_field;
+rocfft_status rocfft_field_create(rocfft_field* field);
+rocfft_status rocfft_field_destroy(rocfft_field field);
+  \end{lstlisting}
+  \begin{lstlisting}
+rocfft_status rocfft_plan_description_add_infield(
+                  rocfft_plan_description description,
+                  rocfft_field            field);
+rocfft_status rocfft_plan_description_add_outfield(
+                  rocfft_plan_description description,
+                  rocfft_field field);
+  \end{lstlisting}
+\item The field-adding functions can be called once per plan.
+\end{itemize}
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+No changes.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+
+\newpage
+\subsection{Bricks}
+\label{ssbricks}
+
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Field (\ref{ssfields}) & Experimental implementation in ROCm 6.0  & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
+
+
+\subsubsection{rocFFT API change}
+rocFFT API additions:
+\begin{lstlisting}
+typedef struct rocfft_brick_t* rocfft_brick;
+rocfft_status rocfft_brick_create(rocfft_brick* brick,
+                                  const size_t* field_lower,
+                                  const size_t* field_upper,
+                                  const size_t* brick_stride,
+                                  size_t        dim,
+                                  int           deviceID);
+rocfft_status rocfft_brick_destroy(rocfft_brick brick);
+rocfft_status rocfft_field_add_brick(rocfft_field field, rocfft_brick brick);
+\end{lstlisting}
+
+\subsubsection{hipFFT API }
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Single-Process Multi-GPU}
+
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Experimental implementation in ROCm 6.0 & Specifying the list of GPUs \\
+    \hline
+  \end{tabular}
+\end{center}
+
+Notes:
+\begin{itemize}
+\item We are not handling the shuffled case from cuFFTXt; it's silly
+  and no one uses it.  We could come up with some general equivalent
+  in arbitrary dimensions, but we'd have to see someone that would
+  actually use it.
+\end{itemize}
+
+   
+
+
+
+\subsubsection{rocFFT API change}
+\begin{itemize}
+\item implied by brick-device association.
+\end{itemize}
+Optional rocFFT API change:
+\begin{lstlisting}
+rocfft_status
+rocfft_plan_description_set_devices(rocfft_plan_description description,
+                                   void *devices,
+                                   size_t number_of_devices);
+\end{lstlisting}
+Also note that the decomposition dimension has be lower than the
+transform dimension.
+
+\noindent
+\subsubsection{Sample application}
+\begin{lstlisting}
+// Transform parameters
+std::vector<size_t> length = {8, 8};
+std::vector<size_t> devices = {0, 1};
+std::vector<std::vector<size_t>> ilower = {{0,0},{0,4}};
+std::vector<std::vector<size_t>> iupper = {{4,8},{8,8}};
+std::vector<size_t> istride = {1,8};
+std::vector<std::vector<size_t>> olower = {{0,0},{4,0}};
+std::vector<std::vector<size_t>> oupper = {{8,4},{8,8}};
+std::vector<size_t> ostride = {8,1};
+
+// Set up field and for input:
+rocfft_field ifield = nullptr;
+rocfft_field_create(&ifield);
+std::vector<rocfft_brick> iwall(devices.size());
+for(int idx = 0; idx < devices.size(); ++idx) {
+  rocfft_brick_create(&iwall[idx],
+                      ilower[idx].data(), iupper[idx].data(),
+                      istride.data(),   istride.size();
+                      devices[idx]);
+  rocfft_field_add_brick(infield, iwall[idx]);
+  rocfft_brick_destroy(iwall[idx]);
+}
+
+// Set up field and bricks for output:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ofield);
+std::vector<rocfft_brick> owall(devices.size());
+for(int idx = 0; idx < devices.size(); ++idx) {
+  rocfft_brick_create(&owall[idx],
+                      olower[idx].data(), oupper[idx].data(),
+                      istride.data(),   ostride.size();
+                      devices[idx]);
+                      rocfft_field_add_brick(outfield, owall[idx]);
+  rocfft_brick_destroy(owall[idx]);
+}
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+// TODO: set data layout needed?
+rocfft_plan_description_add_infield(description, ifield);
+rocfft_plan_description_add_outfield(description, ofield);
+rocfft_plan gpu_plan = nullptr;
+rocfft_plan_create(&gpu_plan,
+                  rocfft_placement_notinplace,
+                  rocfft_transform_type_complex_forward,
+                  rocfft_precision_double,
+                  length.size(),
+                  length.data(),
+                  1,
+                  description);
+
+//Execution stage
+std::vector<void*> ibuf(devices.size());
+std::vector<void*> obuf(devices.size());
+const size_t bufsize = sizeof(std::complex<double> * 4 * 8);
+for(int idx = 0; idx < devices.size(); ++idx) {
+  hipmalloc(&ibuf[idx], bufsize);
+  hipmalloc(&obuf[idx], bufsize);
+}
+rocfft_execute(gpu_plan, (void**)ibuf.data(), (void**)obuf.data(), null);
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for cuFFT parity}
+\texttt{hipfftXt.h}
+\begin{lstlisting}
+hipfftResult hipfftXtSetGPUs(hipfftHandle plan, int count, int* gpus);
+typedef enum hipfftXtSubFormat_t
+{
+    HIPFFT_XT_FORMAT_INPUT             = 0x00,
+    HIPFFT_XT_FORMAT_OUTPUT            = 0x01,
+    HIPFFT_XT_FORMAT_INPLACE           = 0x02,
+    HIPFFT_XT_FORMAT_INPLACE_SHUFFLED  = 0x03,
+    HIPFFT_XT_FORMAT_1D_INPUT_SHUFFLED = 0x04,
+    HIPFFT_FORMAT_UNDEFINED            = 0x05
+} hipfftXtSubFormat;
+hipfftResult hipfftXtMalloc(hipfftHandle      plan,
+                            hipLibXtDesc**    desc,
+                            hipfftXtSubFormat format)
+hipfftResult hipfftXtMemcpy(hipfftHandle     plan,
+                            void*            dest,
+                            void*            src,
+                            hipfftXtCopyType type);
+hipfftResult hipfftXtFree(hipLibXtDesc* desc);
+// C2C, R2C, ...
+hipfftResult hipfftXtExecDescriptorC2C(hipfftHandle  plan,
+                                       hipLibXtDesc* input,
+                                       hipLibXtDesc* output,
+                                       int           direction)
+                            
+\end{lstlisting}
+
+\texttt{hipfftlibxt.h}
+\begin{lstlisting}
+typedef struct hipXtDesc_t
+{
+    int version;
+    int nGPUs;
+    int GPUs[MAX_HIP_DESCRIPTOR_GPUS];
+    void* data[MAX_HIP_DESCRIPTOR_GPUS];
+    size_t size[MAX_HIP_DESCRIPTOR_GPUS];
+    void* hipXtState;
+} hipXtDesc;
+typedef enum hiplibFormat_t
+{
+    HIPLIB_FORMAT_HIPFFT    = 0x0,
+    HIPLIB_FORMAT_UNDEFINED = 0x1
+} hiplibFormat;
+typedef struct hipLibXtDesc_t
+{
+    int version;
+    hipXtDesc* descriptor;
+    hiplibFormat library;
+    int subFormat;
+    void* libDescriptor;
+} hipLibXtDesc;
+typedef enum hipfftXtCopyType_t
+{
+    HIPFFT_COPY_HOST_TO_DEVICE   = 0x00,
+    HIPFFT_COPY_DEVICE_TO_HOST   = 0x01,
+    HIPFFT_COPY_DEVICE_TO_DEVICE = 0x02,
+    HIPFFT_COPY_UNDEFINED        = 0x03
+} hipfftXtCopyType;
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for rocFFT parity}
+We would have to add bricks.
+\begin{lstlisting}
+FIXME
+\end{lstlisting}
+
+\newpage
+\subsubsection{Multi-Process Multi-GPU}
+\label{ssmpmgpu}
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Scoped for development starting in 6.2  & None \\
+    \hline
+  \end{tabular}
+\end{center}
+
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+} rocfft_comm_type;
+rocfft_status rocfft_plan_description_set_comm(
+    rocfft_plan_description description,
+    const enum_type_for_mpi_or_schmem comm_type,
+    void* comm_handle);
+\end{lstlisting}
+
+ There are a few cuFFT
+features that seem unimportant:
+\begin{itemize}
+\item Reshape API: it seems that \texttt{cufftMpCreateReshape} isn't
+  used anywhere on github except in CUDA library samples.
+\end{itemize}
+
+\subsubsection{hipFFT API change}
+\noindent
+hipFFT API additions:
+\texttt{hipFFTMp.h}
+\begin{lstlisting}
+typedef enum hipfftMpCommType_t {
+    HIPUFFT_COMM_MPI = 0x00,
+    HIPFFT_COMM_NONE = 0x01
+} hipfftMpCommType;
+hipfftResult hipfftMpAttachComm(hipfftHandle plan,
+                                hipfftMpCommType comm_type,
+                                void *comm_handle);
+\end{lstlisting}
+\texttt{cufftXt.h}
+\begin{lstlisting}
+cufftResult cufftXtSetDistribution(cufftHandle plan, 
+                                   int rank, 
+                                   const long long int* lower_input,  
+                                   const long long int* upper_input,
+                                   const long long int* lower_output,
+                                   const long long int* upper_output,
+                                   const long long int* strides_input, 
+                                   const long long int* strides_output);
+typedef enum hipfftXtSubFormat_t
+{
+  // other enums...
+  CUFFT_XT_FORMAT_DISTRIBUTED_INPUT = 0x05,
+  CUFFT_XT_FORMAT_DISTRIBUTED_OUTPUT = 0x06,
+  CUFFT_FORMAT_UNDEFINED = 0x07 // NB: valued changed
+} hipfftXtSubFormat;
+\end{lstlisting}
+
+
+\newpage
+\subsection{Multi-Process Multi-GPU with MPI}
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-proc (\ref{ssmpmgpu}) & Scoped for development starting in 6.2    & None \\
+    \hline
+  \end{tabular}
+\end{center}
+
+
+Notes: we will have a huge problem with the MPI ABI.  CF:
+\url{https://www.youtube.com/watch?v=kNk9efs4m-c}. 
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+  rocfft_comm_mpi = 0,
+} rocfft_comm_type;
+\end{lstlisting}
+
+\subsubsection{Sample code}
+
+\begin{lstlisting}
+// Transform parameters
+std::vector<size_t> length = {8, 8};
+// MPI rank is assumed to be 2 for this sample, all on device 0.
+std::vector<std::vector<size_t>> ilower = {{0,0},{0,4}};
+std::vector<std::vector<size_t>> iupper = {{4,8},{8,8}};
+std::vector<size_t> istride = {1,8};
+std::vector<std::vector<size_t>> olower = {{0,0},{4,0}};
+std::vector<std::vector<size_t>> oupper = {{8,4},{8,8}};
+std::vector<size_t> ostride = {8,1};
+
+
+// Set up field and bricks for input:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ifield);
+rocfft_brick ibrick;
+rocfft_brick_create(&ibrick,
+                   ilower[mpirank].data(), iupper[mpirank].data(),
+                   istride.data(),   istride.size();
+                   0);
+rocfft_field_add_brick(outfield, obrick);
+rocfft_brick_destroy(obrick);
+
+// Set up field and bricks for output:
+rocfft_field ofield = nullptr;
+rocfft_field_create(&ofield);
+rocfft_brick obrick;
+rocfft_brick_create(&obrick,
+                   olower[mpirank].data(), oupper[mpirank].data(),
+                   ostride.data(),   ostride.size();
+                   0);
+rocfft_field_add_brick(outfield, obrick);
+rocfft_brick_destroy(obrick);
+
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+// TODO: set data layout needed?
+rocfft_plan_description_add_infield(description, ifield);
+rocfft_plan_description_add_outfield(description, ofield);
+rocfft_plan gpu_plan = nullptr;
+rocfft_plan_create(&gpu_plan,
+                  rocfft_placement_notinplace,
+                  rocfft_transform_type_complex_forward,
+                  rocfft_precision_double,
+                  length.size(),
+                  length.data(),
+                  1,
+                  description);
+
+//Execution stage
+void* ibuf;
+void* obuf;
+const size_t bufsize = sizeof(std::complex<double> * 4 * 8);
+hipmalloc(&ibuf, bufsize);
+hipmalloc(&obuf, bufsize);
+
+rocfft_execute(gpu_plan, ibuf, obuf, null);
+\end{lstlisting}
+
+\subsubsection{hipFFT API change}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+typedef enum cufftMpCommType_t {
+  CUFFT_COMM_MPI = 0x00,
+} cufftMpCommType;
+\end{lstlisting}
+
+\newpage
+\subsection{Multi-Process Multi-GPU with rocSHMEM}
+
+\begin{center}
+  \begin{tabular}{|l|p{4cm}|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-proc (\ref{ssmpmgpu}) & Unscoped.   Working on performance model for BU justification.    & None \\
+    \hline
+  \end{tabular}
+\end{center}
+
+\subsubsection{rocFFT API change}
+\noindent
+rocFFT API additions:
+\begin{lstlisting}
+typedef enum rocfft_comm_type_t {
+    rocfft_comm_shmem = 1,
+} rocfft_comm_type;
+\end{lstlisting}
+
+\subsubsection{hipFFT API change}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+typedef enum cufftMpCommType_t {
+  CUFFT_COMM_NONE = 0x01
+} cufftMpCommType;
+\end{lstlisting}
+
+\newpage
+\subsection{Sparse Data}
+
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Bricks (\ref{ssbricks}) & Unscoped   & Explicitly specify zero-bricks \\
+    \hline
+  \end{tabular}
+\end{center}
+
+\subsubsection{rocFFT API change}
+\begin{itemize}
+\item Behaviour change: Non-specified bricks are treated as zero.
+\end{itemize} 
+
+\subsubsection{hipFFT API change for cuFFT parity}
+\noindent
+hipFFT API changes for cuFFT parity: None
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API changes for rocFFT parity: 
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+
+
+\newpage
+\subsection{One-Way Scalar Spectral Ops}
+\label{sss1wayspecops}
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    None & Unscoped   & Shared data size \\
+    \hline
+  \end{tabular}
+\end{center}
+\noindent
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+typedef struct rocfft_specop_t* rocfft_specop;
+rocfft_status rocfft_specop_create(rocfft_specop* specop);
+rocfft_status rocfft_specop_destroy(rocfft_specop specop);
+rocfft_status rocfft_specop_set_op(rocfft_specop specop, char* opstring);
+rocfft_status rocfft_plan_description_set_readop(
+                                  rocfft_plan_description description,
+                                  const rocfft_specop specop);
+rocfft_status rocfft_plan_description_set_writeop(
+                                  rocfft_plan_description description,
+                                  const rocfft_specop specop);
+\end{lstlisting}
+API option:
+\begin{lstlisting}
+rocfft_status rocfft_specop_set_shared_size(rocfft_specop specop, size_t bytes);
+\end{lstlisting}
+
+\subsubsection{Sample application}
+
+Appply a Hann function to the input:
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8};
+
+// Set up a spectral operation on input:
+rocfft_specop readop;
+rocfft_specop_create(&specop);
+std::string readop_str ="
+const double twopi = 6.283185307179586;
+const double factor = (1.0 / 8.0)* (0.5 + 0.5  * cos(twopi * idx0 / 8);
+out0 = factor * in0;
+";
+rocfft_specop_set_op(readop, readop_str.c_str());
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_readop(description, readop);
+
+// Execute as normal (buffer allocation not shown)
+rocfft_execute(gpu_plan, (void**)ibuf.data(), (void**)obuf.data(), null);
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{One-Way Multi-valued Spectral Ops}
+\label{ssvecspecops}
+
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    One-way specops (~\ref{sss1wayspecops}) & Unscoped   & Fine-grained field specification \\
+    \hline
+  \end{tabular}
+\end{center}
+\noindent
+
+\subsubsection{rocFFT API change}
+\begin{itemize}
+\item The add-field functions can be called multiple times without error.
+\end{itemize}
+\begin{lstlisting}
+rocfft_status rocfft_specop_set_fields(rocfft_specop specop,
+                                      size_t ninputs,
+                                      size_t outputs);
+\end{lstlisting}
+API options: specify multiple ops and have each op work on a subset of
+inputs/outputs.  Or detect this by whether the op string uses
+\lstinline{outX}, etc?
+
+
+\subsubsection{Sample Application}
+
+Compute a gradient in Fourier space form a single input:
+\begin{equation}
+  u \in \mathbb{R}^2 \rightarrow \(ik_x \hat{u}, ik_y \hat{u}\).
+\end{equation}
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8, 8};
+
+// Set up description and plan with one input and two outputs:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_field ifield = nullptr;
+rocfft_field_create(&ifield);
+rocfft_plan_description_add_outfield(description, ifield);
+// We can add the same field twice, or create two fields and add both.
+rocfft_plan_description_add_outfield(description, ifield);
+
+// Set up a spectral operation on output:
+rocfft_specop op;
+rocfft_specop_create(&op);
+std::string op_str = "
+const int N0 = 8;
+const double Lx = 2.0, Ly = 2.0; // Physical constants
+const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
+const double ky = 2 * pi * idx1 / L1;
+const hipComplexDouble I(0,1);
+out0 = in0 * I * kx * in0;
+out1 = in0 * I * ky * in0;
+";
+rocfft_status rocfft_specop_set_fields(op, 1, 2);
+rocfft_specop_set_op(op, op_str.c_str());
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_writep(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace,
+                   rocfft_transform_type_real_forward,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
+
+
+// Execute
+std::vector<void *> obuf(2);
+void* ibuf; // We 
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
+\end{lstlisting}
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions: FIXME
+
+\newpage
+\subsection{Round Trip Multi Spectral Ops Without Padding}
+\label{ssroundspecops}
+
+
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-valued specops (~\ref{ssvecspecops}) & Unscoped   & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
+\noindent
+
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+rocfft_transform_type_complex_forward_roundtrip,
+    rocfft_transform_type_complex_inverse_roundtrip,
+    rocfft_transform_type_real_forward_roundtrip,
+    rocfft_transform_type_real_inverse_roundtrip,
+    FIXME
+rocfft_status rocfft_plan_description_set_midop(
+               rocfft_plan_description description,
+               const rocfft_specop specop);
+\end{lstlisting}
+
+
+\subsubsection{Sample Application}
+
+
+Poisson solve: given $\varphi\in\mathbb{R}^2$, find $u\in\mathbb{R}^2$ such
+that
+\begin{equation}
+  \nabla^2 u = \varphi.
+\end{equation}
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8, 8};
+
+// Set up a spectral operation on in the middle:
+rocfft_specop op;
+rocfft_specop_create(&op);
+std::string op_str = "
+const int N0 = 8;
+const double Lx = 2.0, Ly = 2.0; // Physical constants
+const double kx = 2 * pi * (idx0 < N0/2 ? idx0 : N0 - idx0) / Lx;
+const double ky = 2 * pi * idx1 / L1;
+const double denom = (kx == 0 && ky ==0 ) ? 1.0 : 1.0 / (kx*kx + ky*ky);
+out0 = in0 * denom;
+";
+rocfft_specop_set_op(op, op_str.c_str());
+rocfft_status rocfft_specop_set_fields(op, 1, 2);
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_midop(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace, // or in-place
+                   rocfft_transform_type_real_forward_roundtrip,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
+
+// Execute
+std::vector<void *> obuf(2);
+void* ibuf; // We skip allocation and input generation in this sample
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf.data(), null);
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\newpage
+\subsection{Round Trip Multi Spectral Ops With Padding}
+
+
+
+\begin{center}
+  \begin{tabular}{|l|l|p{5cm}|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Multi-valued specops (~\ref{ssvecspecops}) & Unscoped   & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
+\noindent
+
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+rocfft_status rocfft_specop_set_conv_params(rocfft_specop specop,
+                                            size_t conv_order,
+                                            conv_enum_type conv_type);
+typedef enum rocfft_convolution_type_e
+{
+  rocfft_convolution_uncentered,
+  rocfft_convolution_centered,
+} rocfft_convolution_type;
+
+\end{lstlisting}
+Notes:
+\begin{enumerate}
+\item NB: convolution midops do not get the index information because
+  padding will mess with array dimensions.
+\item Normally real and non-Hermitian complex data has strictly
+  positive indices, so the padding is 1/2.  Hermitian-complex data, on
+  the other hand, typically has negative and positive indices, and one
+  can use 2/3 padding.  However, maybe the nonlinear Schroedinger
+  equation is just complex (I think?), and probably has negative
+  indices, so we would have to add the convolution type to sepecify
+  what's happening here.
+\end{enumerate}
+
+\subsubsection{Sample application}
+
+Compute the convolution of the two real inputs $f$ and $g$.
+
+\begin{lstlisting}
+// Transform parameters:  
+std::vector<size_t> length = {8};
+
+// Set up a spectral operation on in the middle:
+rocfft_specop op;
+rocfft_specop_create(&op);
+std::string op_str = "out0 = in0 * in1;";
+rocfft_specop_set_op(op, op_str.c_str());
+rocfft_status rocfft_specop_set_fields(op, 2, 1);
+// Since the transform is rocfft_transform_type_real_forward_roundtrip, a
+// second-order convolution implies 1/2 padding.
+rocfft_specop_set_conv_params(op, 2); 
+
+// Set up description and plan:
+rocfft_plan_description description = nullptr;
+rocfft_plan_description_create(&description);
+rocfft_plan_description_set_midop(description, op);
+rocfft_plan plan;
+rocfft_plan_create(&plan,
+                   rocfft_placement_notinplace, // or in-place
+                   rocfft_transform_type_real_forward_roundtrip,
+                   rocfft_precision_double,
+                   lengths.size(),
+                   lengths.data(),
+                   1,
+                   description);
+
+// Execute
+void* ibuf;
+void* obuf;
+rocfft_execute(gpu_plan, (void**)ibuf, (void**)obuf, null);
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: none.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+
+\newpage
+\subsection{Multi-precision and multi-resolution}
+
+
+\begin{center}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    Dependencies & Status & Options \\
+    \hline
+    Various (TODO) & Unscoped  & FIXME \\
+    \hline
+  \end{tabular}
+\end{center}
+
+\subsubsection{rocFFT API change}
+\begin{lstlisting}
+rocfft_status rocfft_field_set_type(rocfft_field field, char* data_type);
+ROCFFT_EXPORT rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   field_type_enum data_types);
+ROCFFT_EXPORT rocfft_status rocfft_specop_set_types(rocfft_specop specop,
+                                                   size_t data_size);
+rocfft_status rocfft_field_set_properties(rocfft_field field,
+                                          rocfft_precision precisions,
+                                          bool isconst);
+rocfft_status rocfft_field_dims(rocfft_field field,
+                                size_t* dims,
+                                size_t dim,
+                                field_type_enum field_type);
+
+rocfft_status rocfft_desc_set_communication_precision(rocfft_plan_description description,
+                                                      size_t numprecision,
+                                                      rocfft_precision* precisions);
+\end{lstlisting}
+
+\begin{lstlisting}
+rocfft_status rocfft_desc_set_precision_roundtrip(
+                   rocfft_plan_description description,
+                   size_t numprecision_in,
+                   rocfft_precision* precision_in,
+                   size_t numprecision_out,
+                   rocfft_precision* precision_out);
+\end{lstlisting}
+
+
+\subsubsection{hipFFT API change for cuFFT parity}
+
+hipFFT API additions: FIXME.
+
+\subsubsection{hipFFT API change for rocFFT parity}
+\noindent
+hipFFT API additions:
+\begin{lstlisting}
+  FIXME
+\end{lstlisting}
+
+\end{document}

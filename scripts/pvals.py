@@ -62,14 +62,14 @@ def main(argv):
     vals0 = None
     for row in data0:
         if row[0] == token:
-            vals0 = row[1]
+            vals0 = row[1][1:]
             break
     #print(vals0)
     
     vals1 = None
     for row in data1:
         if row[0] == token:
-            vals1 = row[1]
+            vals1 = row[1][1:]
             break
     #print(vals1)
     
