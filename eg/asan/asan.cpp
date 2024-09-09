@@ -14,18 +14,21 @@ int
 main(int argc, char **argv)
 {
     // Number of ints allocated on device:
-    int m = 16;//std::atoi(argv[1]);
+    int m = 32;//std::atoi(argv[1]);
 
     // grid dim:
-    int n1 = 1; //std::atoi(argv[2]);
+    int n1 = 2; //std::atoi(argv[2]);
 
     // blocksize: 
     int n2 = 16; //std::atoi(argv[3]);
 
     // Number of ints allocated on host:
-    int c = m;//std::atoi(argv[4]);
+    int c = 32;//std::atoi(argv[4]);
 
-    std::cout << "running  " << n1 << " blocks of " << n2 << " threads\n";
+    std::cout << "device size m: " << m << "\n";
+    std::cout << "host size c:   " << c << "\n";
+    std::cout << "running " << n1 << " blocks of " << n2 << " threads\n";
+
     
     // Device pointers
     int *dp = nullptr;
