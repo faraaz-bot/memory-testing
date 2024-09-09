@@ -12,7 +12,7 @@ namespace po = boost::program_options;
 #define XSTR(x) STR(x)
 #define STR(x) #x
 
-static constexpr auto kernel{
+static constexpr auto kernelstr{
     R"(
 #define XSTR(x) STR(x)
 #define STR(x) #x
@@ -99,28 +99,27 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
+    auto rtc_ret = HIPRTC_SUCCESS;
+    
     hiprtcProgram prog;
-  
     int num_headers = 0;
-  
     std::vector<const char*> header_names;
     std::vector<const char*> header_sources;
-  
     hiprtcCreateProgram(&prog,                 // hiprtc program
-                        kernel,                // kernel string
+                        kernelstr,                // kernel string
                         "gpu_kernel.cu",       // Name of the file
                         num_headers,           // Number of headers
                         &header_sources[0],    // Header sources
                         &header_names[0]);     // Name of header files
+    if(rtc_ret != HIPRTC_SUCCESS) {
+        std::cout << "create failed" << std::endl;
+        throw std::runtime_error("hiprtcCreateProgram");
+    }
 
     const char* options[] = {};
-
-    auto rtc_ret = HIPRTC_SUCCESS;
-  
     rtc_ret = hiprtcCompileProgram(prog,  
                                    0,        
                                    options);
-  
     if(rtc_ret != HIPRTC_SUCCESS) {
       std::stringstream ss;
       ss << "hiprtcCompileProgram failed with code ";
@@ -152,9 +151,6 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hiprtcGetCodeSize");
     }
   
-    hipModule_t module;
-    hipFunction_t kernel;
-
     std::vector<char> kernel_binary(codeSize);
     rtc_ret = hiprtcGetCode(prog, kernel_binary.data());
     if(rtc_ret != HIPRTC_SUCCESS) {
@@ -170,13 +166,14 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hipSetDevice");
     }
   
-    
+    hipModule_t module;
     auto hip_ret = hipModuleLoadData(&module, kernel_binary.data());
     if(hip_ret != hipSuccess) {
         throw std::runtime_error("hipModuleLoadData");
     }
-  
-    hip_ret = hipModuleGetFunction(&kernel, module, "cosine_kernel");
+    
+    hipFunction_t kernel_function;  
+    hip_ret = hipModuleGetFunction(&kernel_function, module, "cosine_kernel");
     if(hip_ret != hipSuccess) {
         throw std::runtime_error("hipModuleGetFunction");
     }
@@ -229,7 +226,7 @@ int main(int argc, char* argv[])
         size_t nblocks = (n + nthreads) / nthreads;
 
         for(size_t irepeat = 0; irepeat < nrepeat; ++irepeat) {
-            hip_ret = hipModuleLaunchKernel(kernel, nblocks, 1, 1, nthreads, 1, 1,
+            hip_ret = hipModuleLaunchKernel(kernel_function, nblocks, 1, 1, nthreads, 1, 1,
                                             0, nullptr, nullptr, config);
             if(hip_ret != hipSuccess) {
                 throw std::runtime_error("hipModuleLaunchKernel");

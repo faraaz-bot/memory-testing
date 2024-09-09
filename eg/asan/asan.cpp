@@ -13,6 +13,8 @@ set1(int *p)
 int
 main(int argc, char **argv)
 {
+    std::cout << "address sanitizer example\n";
+    
     // Number of ints allocated on device:
     int m = 32;//std::atoi(argv[1]);
 
