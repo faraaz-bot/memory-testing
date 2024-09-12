@@ -78,8 +78,8 @@ int main(int argc, char **argv)
     }
     
     std::vector<const char*> options;
-    //options.push_back("-O3");
-    //options.push_back("-g");
+    options.push_back("-O3");
+    options.push_back("-g");
     //options.push_back("-std=c++14");
 
     // NB: "gfx90a:xnack-" gives 
