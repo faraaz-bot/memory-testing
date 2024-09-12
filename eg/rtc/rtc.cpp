@@ -134,12 +134,10 @@ int main(int argc, char* argv[])
         size_t logSize;
         hiprtcGetProgramLogSize(prog, &logSize);
         std::cout << "compilation log:\n";
-        
         if (logSize) {
             std::string log(logSize, '\0');
             hiprtcGetProgramLog(prog, &log[0]);
             std::cout << log << std::endl;
-
         }
     }
 

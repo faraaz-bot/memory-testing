@@ -12,7 +12,10 @@ static constexpr auto kernelstr{
     R"(
 #define XSTR(x) STR(x)
 #define STR(x) #x
-#pragma message "__clang_version__: " XSTR(__clang_version__)
+//#pragma message "__clang_version__: " XSTR(__clang_version__)
+#warning ("hip arch: " XSTR(__HIP_ARCH__))
+//#message ("__HIP_DEVICE_COMPILE__: " XSTR(__HIP_DEVICE_COMPILE__))
+#pragma message ( STR(__amdgcn_target_id__))
 extern "C"
 __global__
 void set1(int* p)
@@ -75,12 +78,13 @@ int main(int argc, char **argv)
     }
     
     std::vector<const char*> options;
-    options.push_back("-O3");
-    options.push_back("-g");
-    options.push_back("-std=c++14");
+    //options.push_back("-O3");
+    //options.push_back("-g");
+    //options.push_back("-std=c++14");
 
     // NB: "gfx90a:xnack-" gives 
-    std::string gpu_arch = "gfx90a:xnack-";
+    //std::string gpu_arch = "gfx90a:xnack-";
+    std::string gpu_arch = "gfx90a:sramecc+:xnack+";
     std::string gpu_arch_arg = "--gpu-architecture=" + gpu_arch;
     options.push_back(gpu_arch_arg.c_str());
 
@@ -89,9 +93,18 @@ int main(int argc, char **argv)
     rtc_ret = hiprtcCompileProgram(prog,
                                    options.size(),
                                    options.data());
+    size_t logSize = 0;
+    hiprtcGetProgramLogSize(prog, &logSize);
+    std::cout << "compilation log:\n";
+    if (logSize) {
+        std::string log(logSize, '\0');
+        hiprtcGetProgramLog(prog, &log[0]);
+        std::cout << log << std::endl;
+    }
     if(rtc_ret != HIPRTC_SUCCESS) {
       throw std::runtime_error("compile failed");
     }
+
     
     size_t codeSize = 0;
     rtc_ret = hiprtcGetCodeSize(prog, &codeSize);
@@ -123,7 +136,9 @@ int main(int argc, char **argv)
     hipFunction_t kernel_function;
     hip_ret = hipModuleGetFunction(&kernel_function, kernel_module, "set1");
     if(hip_ret != hipSuccess) {
-        throw std::runtime_error("hipModuleGetFunction");
+        std::stringstream ss;
+        ss << "hipModuleGetFunction error: " << hip_ret << " " << hipGetErrorString(hip_ret);
+        throw std::runtime_error(ss.str().c_str());
     }
    
     // Device pointers
