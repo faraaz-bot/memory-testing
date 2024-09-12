@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
     
     po::options_description opdesc("rtc sample command line options");
     opdesc.add_options()("help,h", "produces this help message")
-      ("n", po::value<size_t>(&n)->default_value(1<<20), "data laneght")
+      ("n", po::value<size_t>(&n)->default_value(1<<20), "data lanegth")
       ("nthread", po::value<size_t>(&nthread)->default_value(1), "Number of omp threads")
       ("nrepeat", po::value<size_t>(&nrepeat)->default_value(1), "Number of omp threads")
       ("d", po::value<int>(&deviceId)->default_value(0), "HIP device ID.");

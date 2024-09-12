@@ -2,6 +2,8 @@
 
 #include <hip/hip_runtime.h>
 
+#include <boost/program_options.hpp>
+namespace po = boost::program_options;
 
 __global__ void
 set1(int *p)
@@ -13,20 +15,30 @@ set1(int *p)
 int
 main(int argc, char **argv)
 {
-    std::cout << "address sanitizer example\n";
+    std::cout << "Address sanitizer example\n";
     
-    // Number of ints allocated on device:
-    int m = 32;//std::atoi(argv[1]);
+    int m{};
+    int n1{};
+    int n2{};
+    int c{};
+    
+    po::options_description opdesc("asan sample command line options");
+        opdesc.add_options()("help,h", "produces this help message")
+        ("m", po::value<int>(&m)->default_value(32), "device buffer allocation length")
+        ("n1", po::value<int>(&n1)->default_value(2), "grid dim")
+        ("n2", po::value<int>(&n2)->default_value(16), "thread block dim")
+        ("c", po::value<int>(&c)->default_value(32), "host buffer allocation length");
 
-    // grid dim:
-    int n1 = 2; //std::atoi(argv[2]);
-
-    // blocksize: 
-    int n2 = 16; //std::atoi(argv[3]);
-
-    // Number of ints allocated on host:
-    int c = 32;//std::atoi(argv[4]);
-
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, opdesc), vm);
+    po::notify(vm);
+    
+    if(vm.count("help"))
+    {
+        std::cout << opdesc << std::endl;
+        return EXIT_SUCCESS;
+    }
+    
     std::cout << "device size m: " << m << "\n";
     std::cout << "host size c:   " << c << "\n";
     std::cout << "running " << n1 << " blocks of " << n2 << " threads\n";
@@ -35,28 +47,34 @@ main(int argc, char **argv)
     // Device pointers
     int *dp = nullptr;
 
-    if(hipMalloc(&dp, m*sizeof(int)) != hipSuccess)
+    if(hipMalloc(&dp, m * sizeof(int)) != hipSuccess)
     {
         throw std::runtime_error("hipMalloc failed");
     }
     
     hipLaunchKernelGGL(set1, dim3(n1), dim3(n2), 0, 0, dp);
-    int *hp = (int*)malloc(c * sizeof(int));
-    
-    if( hipMemcpy(hp, dp, m*sizeof(int), hipMemcpyDeviceToHost) != hipSuccess)
+
+
+    std::vector<int> hp(c);
+    if( hipMemcpy(hp.data(), dp, m * sizeof(int), hipMemcpyDeviceToHost) != hipSuccess)
     {
         throw std::runtime_error("hipMemcpy failed");
     }
+    for(const auto & i : hp) {
+        std::cout << i << " ";
+    }
+    std::cout << "\n";
     
     if(hipDeviceSynchronize() != hipSuccess)
     {
         throw std::runtime_error("hipDeviceSynchronize failed");
     }
+    
     if(hipFree(dp) != hipSuccess)
     {
         throw std::runtime_error("hipFree failed");
     }
-    free(hp);
+
     std::puts("Done.");
     return 0;
 }

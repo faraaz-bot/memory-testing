@@ -8,7 +8,9 @@ set( CMAKE_CXX_EXTENSIONS OFF )
 add_executable( asan  asan.cpp )
 set_source_files_properties(asan.cpp PROPERTIES LANGUAGE HIP)
 
-add_executable( rtcasan  rtcasan.cpp )
+add_executable( rtcasan rtcasan.cpp )
+
+find_package( Boost COMPONENTS program_options REQUIRED)
 
 find_package( hip REQUIRED )
 
@@ -33,6 +35,8 @@ set_property(TARGET asan PROPERTY HIP_ARCHITECTURES ${CMAKE_HIP_ARCHITECTURES})
 
 target_compile_options(asan PRIVATE -fsanitize=address -shared-libasan)
 target_link_options(asan PRIVATE -fsanitize=address)
+target_link_libraries( asan hip::device hip::host Boost::program_options)
 
-target_link_libraries( asan hip::device hip::host )
-target_link_libraries( rtcasan hip::host )
+target_compile_options(rtcasan PRIVATE -fsanitize=address -shared-libasan)
+target_link_options(rtcasan PRIVATE -fsanitize=address)
+target_link_libraries( rtcasan hip::host Boost::program_options)
