@@ -116,10 +116,11 @@ int main(int argc, char* argv[])
         throw std::runtime_error("hiprtcCreateProgram");
     }
 
-    const char* options[] = {};
+    std::vector<const char*> options;
+    options.push_back("-ffast-math");
     rtc_ret = hiprtcCompileProgram(prog,  
-                                   0,        
-                                   options);
+                                   options.size(),        
+                                   options.data());
     if(rtc_ret != HIPRTC_SUCCESS) {
       std::stringstream ss;
       ss << "hiprtcCompileProgram failed with code ";

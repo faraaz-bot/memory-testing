@@ -12,16 +12,18 @@ static constexpr auto kernelstr{
     R"(
 #define XSTR(x) STR(x)
 #define STR(x) #x
-//#pragma message "__clang_version__: " XSTR(__clang_version__)
-#warning ("hip arch: " XSTR(__HIP_ARCH__))
-//#message ("__HIP_DEVICE_COMPILE__: " XSTR(__HIP_DEVICE_COMPILE__))
-#pragma message ( STR(__amdgcn_target_id__))
+#pragma message ( __amdgcn_target_id__)
+#pragma message (XSTR(__amdgcn_feature_xnack__))
 extern "C"
 __global__
 void set1(int* p)
 {
-     const int i = blockDim.x*blockIdx.x + threadIdx.x;
-     p[i] = 1;
+     const int tid = blockDim.x*blockIdx.x + threadIdx.x;
+     p[tid] = 1;
+if(tid == 0) {
+printf(__amdgcn_target_id__);
+printf("\n");
+}
 }
 )"};
 
@@ -82,12 +84,12 @@ int main(int argc, char **argv)
     options.push_back("-g");
     //options.push_back("-std=c++14");
 
-    // NB: "gfx90a:xnack-" gives 
-    //std::string gpu_arch = "gfx90a:xnack-";
-    std::string gpu_arch = "gfx90a:sramecc+:xnack+";
-    std::string gpu_arch_arg = "--gpu-architecture=" + gpu_arch;
-    options.push_back(gpu_arch_arg.c_str());
+    //std::string gpu_arch = "gfx90a:xnack+";
+    // std::string gpu_arch = "gfx90a:sramecc+:xnack+";
+    // std::string gpu_arch_arg = "--gpu-architecture=" + gpu_arch;
+    // options.push_back(gpu_arch_arg.c_str());
 
+    //options.push_back("-W#pragma-messages");
     options.push_back("-fsanitize=address");
     
     rtc_ret = hiprtcCompileProgram(prog,
