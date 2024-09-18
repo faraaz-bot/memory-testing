@@ -26,3 +26,18 @@ Out-of-bounds memory access in the GPU kernel:
 
 Out-of-bounds memory access when copying back to the host:
 ./aotasan --c 31
+
+
+
+I'm getting an error at the end of execution with 6.2.0 on MI250X:
+
+AddressSanitizer: CHECK failed: sanitizer_allocator_device.h:214 "((h)) != ((nullptr))" (0x0, 0x0) (tid=2031078)
+Tracer caught signal 11: addr=0x82000 pc=0x7f1eb5e2a83e sp=0x7f1ea8c22060
+==2031072==LeakSanitizer has encountered a fatal error.
+==2031072==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==2031072==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+
+This can be removed by running
+
+ASAN_OPTIONS=detect_leaks=0 
