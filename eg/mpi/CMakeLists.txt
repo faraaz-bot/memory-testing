@@ -14,6 +14,7 @@ add_executable( gpu-aware gpu-aware.cpp )
 
 set_source_files_properties(gpu-aware.cpp PROPERTIES LANGUAGE HIP)
 
+
 message("ok, how about: ${MPI_CXX_LIB_NAMES}")
 
 # get_cmake_property(_variableNames VARIABLES)
