@@ -28,12 +28,23 @@ int main(int argc, char **argv) {
     MPI_Status status;
     MPI_Request request;
 
+    auto hipret = hipSuccess;
+    
     hipStream_t stream;
-    hipStreamCreate (&stream);
+    hipret = hipStreamCreate (&stream);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipStreamCreate failed");
 
     hipEvent_t mpi_event, h2d_event;
-    hipEventCreateWithFlags(&mpi_event, hipEventDisableTiming);
-    hipEventCreateWithFlags(&h2d_event, hipEventDisableTiming);
+
+    
+    
+    hipret = hipEventCreateWithFlags(&mpi_event, hipEventDisableTiming);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipEventCreateWithFlags failed");
+    hipret = hipEventCreateWithFlags(&h2d_event, hipEventDisableTiming);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipEventCreateWithFlags failed");
     
     //hipEventRecord(mpi_event, stream);
     
@@ -51,7 +62,9 @@ int main(int argc, char **argv) {
     const size_t buf_size = h_buf.size() * sizeof(decltype(h_buf)::value_type);
     int *d_buf = nullptr;
     if(mpi_rank == 0 || mpi_rank == 1) {
-        hipMalloc(&d_buf, buf_size);
+        hipret = hipMalloc(&d_buf, buf_size);
+        if(hipret != hipSuccess)
+            throw std::runtime_error("hipMalloc failed");
     }
     
     //initialize buffers
@@ -70,14 +83,21 @@ int main(int argc, char **argv) {
     }
 
     if(mpi_rank == 0 || mpi_rank == 1) {
-        hipMemcpyAsync(d_buf, h_buf.data(), buf_size, hipMemcpyHostToDevice, stream);
+        hipret = hipMemcpyAsync(d_buf, h_buf.data(), buf_size, hipMemcpyHostToDevice, stream);
+        if(hipret != hipSuccess)
+            throw std::runtime_error("hipMemcpyAsync failed");
         
     }
     
-    hipEventRecord(h2d_event, stream);
+    hipret = hipEventRecord(h2d_event, stream);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipEventRecord failed");
+    
+    hipret = hipEventSynchronize(h2d_event);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipEventSynchronize failed");
 
-    hipEventSynchronize(h2d_event);
-        
+    
     //communication
     switch(mpi_rank) {
     case 0:
@@ -99,7 +119,9 @@ int main(int argc, char **argv) {
         const int gridSize    = ceildiv(N, blockSize);
         multby2<<<dim3(gridSize), dim3(blockSize), 0, stream>>>(d_buf, N);
         
-        hipMemcpyAsync(h_buf.data(), d_buf, buf_size, hipMemcpyDeviceToHost, stream);
+        hipret = hipMemcpyAsync(h_buf.data(), d_buf, buf_size, hipMemcpyDeviceToHost, stream);
+        if(hipret != hipSuccess)
+            throw std::runtime_error("hipMemcpyAsync failed");
         int nerror = 0;
         for(int i = 0; i < N; ++i) {
             if(h_buf[i] != 2 * i) {
@@ -116,10 +138,16 @@ int main(int argc, char **argv) {
 
     //free buffers
     if(mpi_rank == 0 || mpi_rank == 1) {
-        hipFree(d_buf);
+        hipret = hipFree(d_buf);
+        if(hipret != hipSuccess)
+            throw std::runtime_error("hipFree failed");
     }
-    hipStreamSynchronize(stream);
-    hipStreamDestroy(stream);
+    hipret = hipStreamSynchronize(stream);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipStreamSynchronize failed");
+    hipret = hipStreamDestroy(stream);
+    if(hipret != hipSuccess)
+        throw std::runtime_error("hipStreamDestroy failed");
         
     MPI_Finalize();
 }

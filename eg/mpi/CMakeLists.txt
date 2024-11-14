@@ -22,7 +22,9 @@ message("ok, how about: ${MPI_CXX_LIB_NAMES}")
 #   message(STATUS "${_variableName} : ${${_variableName}}")
 # endforeach()
 
-if ( MPI_CXX_LIB_NAMES STREQUAL "mpi_cray")
+option(CRAY_MPI_ENABLE "Cray MPI" OFF)
+
+if ( CRAY_MPI_ENABLE )
   message("cray mpi it is!")
   #export MPICH_GPU_SUPPORT_ENABLED=1
   add_link_options( gpu-aware "-L${CRAYLIBS_X86_64}")
