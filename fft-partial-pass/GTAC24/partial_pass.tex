@@ -4,8 +4,10 @@
 %\documentclass{gtac}
 
 % To enable the double-blind submission format for the review process, use the following line
-\documentclass[blind]{gtac}
+\documentclass{gtac}
 
+\usepackage{tikz}
+\usepackage{pgfplots}
 \usepackage{cite}
 \usepackage{bm}
 \usepackage{url}
@@ -23,6 +25,15 @@
 \usepackage{flushend}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{soul}
+\usepackage{subfig}
+
+\newcommand{\defaultheight}{5cm}
+\newcommand{\defaultwidth}{9cm}
+
+% Used in the matlab2tikz package
+\newlength\figureheight 
+\newlength\figurewidth 
 
 \newtheoremstyle{problemstyle}  % <name>
         {3pt}                                               % <space above>
@@ -40,19 +51,17 @@
 % This is the watermark text. 
 \SetWatermarkText{
   \shortstack{
-        AMD Internal Use Only  \\[1em]  GTAC 2024 
+         \textsf{\textbf{AMD Internal Use Only}}  \\[1em]   \textsf{\textbf{GTAC 2024}}
   }
 }
 \SetWatermarkScale{0.3}
 \SetWatermarkAngle{30}
 \SetWatermarkColor{gray!20}
 
-\title{\vspace{-1em} Partial Radix Passes for Improved Performance in rocFFT\subtitle{Submitted Anonymously for Double-Blind Review}}
-
-
+\title{Partial Radix Passes for Improved Performance in rocFFT \vspace{-0.7em}}
 \author{Flavio Teixeira, Malcolm Roberts \\
 AI GPU Software (AGS) \\
-flavio.teixeira@amd.com, malcolm.roberts@amd.com \vspace{-5em}} % Adjust the author names here
+flavio.teixeira@amd.com, malcolm.roberts@amd.com} % Adjust the author names here
 
 
 \begin{document}
@@ -66,7 +75,7 @@ flavio.teixeira@amd.com, malcolm.roberts@amd.com \vspace{-5em}} % Adjust the aut
 \cfoot{\thepage} % put the page number in the center of the footer
 \renewcommand{\headrulewidth}{0pt} % Remove the horizontal line from header
 %\chead{\textcolor{gray}{Proceedings of the 2024 AMD Global Technical Authors Conference – AMD Internal Use Only}}
-\chead{{\sffamily\textcolor{red}{\fontsize{10}{12}\selectfont\textbf{DO NOT FORWARD – FOR GTAC’24 REVIEW COMMITTEE ONLY}}}}
+\chead{{\sffamily\textcolor{black}{\fontsize{10}{12}\selectfont Proceedings of the 2024 AMD Global Technical Authors Conference – \textbf{AMD Internal Use Only}}}}
 
 \thispagestyle{fancy}
 \begin{abstract}
@@ -83,7 +92,7 @@ technique is novel, and is not observed in other FFT libraries.
 
 \end{abstract}
 
-\keywords{FFTs, HPC, GPU memory hierarchy, Speeding-up algorithms, Numerical optimization, Numerical complexity}
+\keywords{Fast Fourier Transforms, High Performance Computing, GPU Algorithms, Numerical Optimization}
 
 \section{Introduction}
 
@@ -115,6 +124,7 @@ round-trips to global memory can be reduced by up to one-third. The
 reduction in global memory transactions directly translates to
 improved performance in rocFFT for many HPC customers critical
 workloads.
+%TODO: Add numerical results here.
 
 \section{Background}
 
@@ -141,7 +151,7 @@ More generally, if $N$ is highly composite, e.g., $N=q_1 \times q_2 \times \cdot
 
 \subsection{Computing FFTs with GPUs}
 
-Each DFT in a given stage is completely independent from each other, thus the entire FFT work of a stage is parallelizable. Each stage requires writing intermediate results back to memory. Since global memory bandwidth is significantly lower than the GPU compute units bandwidth, the FFT passes or stages are performed entirely in shared memory. With this approach, only a single trip to global memory is required. The amount of available shared memory is, therefore, a determining factor for the performance of FFTs in GPUs. FFTs are clearly memory bound workloads on these devices, since each DFT in an FFT stage typically has low arithmetic intensity.
+Each DFT in a given stage is completely independent from each other, thus the entire FFT work of a stage is parallelizable. Each stage requires writing intermediate results back to memory. Since global memory bandwidth is significantly lower than the GPU compute units bandwidth, the FFT passes or stages are performed entirely in shared memory. With this approach, only a single round-trip to global memory is required. The amount of available shared memory is, therefore, a determining factor for FFT performance in GPUs. FFTs are clearly memory bound workloads on these devices, since each DFT in an FFT stage typically has low arithmetic intensity.
 
 The splitting rule in the C-T algorithm with even and odd entries of the input sequence requires an index-shuffling stage, which is equivalent to a bit-reversal of the input sequence indices in binary form, and that leads to incoherent memory accesses patterns. GPU implementations typically use a variation of C-T called the Stockham algorithm \cite{gonabrdoyusmma08}, which is similar to C-T with the exception of how the indices are arranged in each stage, leading to more favourable access patterns for GPUs.
 
@@ -171,7 +181,7 @@ In terms of the GPU implementation of this decomposition, multiple round-trips t
 \section{Proposed FFT Work Distribution}
 
 In rocFFT, we are constrained by an addressable shared-memory size of
-$64$KiB on AMD's MI accelerator series. Compute kernels in rocFFT use
+$64$KiB on AMD's instinct accelerator series. Compute kernels in rocFFT use
 a little over $32$KiB bytes of shared memory, due to additional
 implementation constraints. For single-precision numbers, $4$ bytes
 are used and since we are dealing with complex-valued arithmetic, we
@@ -188,7 +198,7 @@ For example, consider the case where a one-dimensional length-$N$ FFT with $N \n
 
 Similarly, consider now the case where a three-dimensional length-$(N_1,N_2,N_3)$ needs to be computed. Assume that the dimensions are large enough, such that any of the two-dimensional lengths $(N_1,N2)$, $(N_1,N_3)$, or $(N_2,N_3)$ cannot fit into shared-memory and, therefore, be computed by a single two-dimensional FFT compute kernel. In such a case, rocFFT will compute the three-dimensional length-$(N_1,N_2,N_3)$ with three compute kernels. Each compute kernel is assigned to one of the FFTs of lengths $N_1$, $N_2$, and $N_3$, and these kernels are also fused with the appropriate transpositions.
 
-In the two examples described above, a recurrent fact is that the compute kernels in those FFT schemes will often have some amount of available shared memory left not being fully utilized. It should, therefore, be possible in some cases to ``split'' the FFT computation of one the compute kernels even further and distribute it amongst the other two compute kernels, such that the split one is no longer needed. The main goal with this method is to reduce the total number of global memory transactions. Splitting the FFT work can be achieved with the decomposition in \Cref{alg:4_step_fft}. The two remaining compute kernels will not only be performing an FFT on its designated dimension, but also performing ``partial'' FFT passes from the split kernel dimension, plus the required Hadamard products and data transpositions. The key for this method to work is to choose a suitable length factorization for the split kernel, such that the FFT work of such kernel can be optimally distributed amongst the other two, while the shared memory utilization in these remaining kernels is maximized. We now formalize these ideas for the three-dimensional FFT case. The very-large one-dimensional case is somewhat similar, but we leave the derivation and results for these problems as future work.
+In the two examples described above, a recurrent fact is that the compute kernels in those FFT schemes will often have some amount of available shared memory left not being fully utilized. It should, therefore, be possible in some cases to ``split'' the FFT computation of one the compute kernels even further and distribute it amongst the other two compute kernels, such that the split one is no longer needed. The main goal with this method is to reduce the total number of global memory transactions. Splitting the FFT work can be achieved with the decomposition in \Cref{alg:4_step_fft}. The two remaining compute kernels will not only be performing an FFT on its designated dimension, but also performing ``partial'' FFT passes from the split kernel dimension, plus the required Hadamard products and data transpositions. The key for this method to work is to choose a suitable length factorization for the split kernel, such that the FFT work of such kernel can be distributed amongst the other two, and the shared memory utilization in these remaining kernels is maximized. We now formalize these ideas for the three-dimensional FFT case. The large one-dimensional case is somewhat similar, but we leave the derivation and results for these problems as future work.
 
 \subsection{Three-Dimensional FFTs in rocFFT}
 
@@ -198,9 +208,7 @@ For the analysis, we considered the AMD MI250X accelerators. This GPU has a tota
 
 Next, we focused on problems in the dataset that can be solved with two compute kernels. We first exclude the trivial case where two dimensions can fit entirely in shared memory, e.g, a single compute kernel can solve a $(N_1,N_2)$ two-dimensional subproblem for the $(N_1,N_2,N_3)$ three-dimensional problem. Let us now formalize this condition. Let $M(N_i,N_j)$ for $N_i,N_j \in \mathcal{N}$ denote the total amount of memory required in shared memory to compute an FFT of length $(N_i,N_j)$, which is equivalent to $N_i \times N_j$ times the size in bytes per complex-valued element. Also, let $K$ denote the maximum allocatable memory size in shared-memory. For $(i,j) \in \bigl \{ (1,2), (1,3), (2,3) \bigr \}$, if $(N_1,N_2,N_3)$ satisfies $M(N_i, N_j) \leq K$, then $(N_1,N_2,N_3)$ can be solved with only two compute kernels, i.e., a two-dimensional FFT compute kernel plus a one-dimensional FFT kernel and fused data transpositions. The analysis shows that $33.35 \%$ of the problems in the dataset for single precision, and $23.68 \%$ of the problems for double precision fit those constraints.
 
-We are now in a position to address our proposed method for FFT work distribution. The goal is to address the remaining problems in the dataset where the two-dimensional plus one-dimensional compute scheme is not applicable. 
-
-As an example, suppose we would like to fuse the FFT work of the first dimension into the second and third dimensions. By FFT work, here we mean performing partial radix passes from the first dimension into the second and third dimensions. In this particular case, solving the three-dimensional problem with only two compute kernels can be posed as the problem of partitioning the set of radices in the first dimension into two new sets; each one of these new sets being a superset of the set of radices of the second and third dimensions. For this method to work, the set partitioning has to follow a specific set of rules and constraints, while the total amount of shared memory required to execute the two FFT compute kernels along the second and third dimensions, plus partial FFT work from the first dimension, must not exceed the maximum allocatable size in shared memory.
+We are now in a position to address our proposed method for FFT work distribution. The goal is to address the remaining problems in the dataset where the two-dimensional plus one-dimensional compute scheme is not applicable. As an example, suppose we would like to fuse the FFT work of the first dimension into the second and third dimensions. By FFT work, here we mean performing partial radix passes from the first dimension into the second and third dimensions. In this particular case, solving the three-dimensional problem with only two compute kernels can be posed as the problem of partitioning the set of radices in the first dimension into two new sets; each one of these new sets being a superset of the set of radices of the second and third dimensions. For this method to work, the set partitioning has to follow a specific set of rules and constraints, while the total amount of shared memory required to execute the two FFT compute kernels along the second and third dimensions, plus partial FFT work from the first dimension, must not exceed the maximum allocatable size in shared memory.
 
 Let us now formalize those ideas. For $i \in \{1,2,3\}$, assume that each compute kernel along a dimension in rocFFT has a mixed-radix FFT implementation, with a fixed set of radices $\mathcal{Q}_i=\begin{Bmatrix} q_{i1}, q_{i2}, & \cdots, & q_{im_i} \end{Bmatrix}$, such that $N_i = \prod_{l=1}^{m_i} q_{il}$. Further, consider the prime factorization set of $N_i$ as $\mathcal{P}_i=\begin{Bmatrix} p_{i1}, p_{i2}, & \cdots, & p_{im_i} \end{Bmatrix}$ also with $N_i = \prod_{l=1}^{m_i} p_{il}$. Now, for $\{i,j\} \in \bigl \{ \{1,2\}, \{1,3\}, \{2,3\} \bigr \}$ and $k = \{i,j\} - \{1,2,3\}$, let $\mathcal{P}_{k1}$ and $\mathcal{P}_{k2}$ denote partitions of set $\mathcal{P}_k$, such that $\mathcal{P}_k = \mathcal{P}_{k1} \cup \mathcal{P}_{k2}$. Lastly, let $\mathcal{Q}_i^* = \mathcal{Q}_i \cup \mathcal{P}_{k1}$ and $\mathcal{Q}_j^* = \mathcal{Q}_j \cup \mathcal{P}_{k2}$ denote two supersets of $\mathcal{Q}_i$ and $Q_j$. Each superset $\mathcal{Q}_i^\star$ for $i \in \{1,2,3\}$ is of the form $\mathcal{Q}^{\star}_i=\begin{Bmatrix} q_{i1}^{\star}, q_{i2}^{\star}, & \cdots, & q_{im^{\star}_1}^{\star} \end{Bmatrix}$ with $N_i^\star = \prod_{l=1}^{m_i^\star} q_{il}^\star$. 
 
@@ -213,12 +221,41 @@ For $(i,j) \in \bigl \{ \{1,2\}, \{1,3\}, \{2,3\} \bigr \}$ and $k = \{i,j\} - \
 \end{problem}
 \Cref{prob:set_partitioning} is a variation of the ``partition problem'' in number theory \cite{mertens03}. This problem and their variations are generally NP hard, but algorithms that are practically usable for their solution do exist. We used a greedy implementation of such an algorithm. With the new sets $\mathcal{Q}_i^\star$ and $\mathcal{Q}_j^\star$ obtained, we can then check if the shared memory constraints are satisfied. If so, we have a two compute kernel solution, otherwise, another $(i,j)$ combination is then verified. Note that in addition to the partial passes, the Hadamard product and data transposition are also fused in the two new compute kernels, following the decomposition in \Cref{alg:4_step_fft}. There are a total $195,970$ problems for single precision, and $135,328$ problems for double precision, or equivalently $16.10\%$ and $11.12\%$ of the problems in the dataset, respectively, that can be solved with the proposed method.
 
-We have used the proposed method to speed-up the computation of HPC
-molecular dynamics simulations with rocFFT. A critical workload in
-GROMACS \cite{gromacs20} involves the computation of a
-three-dimensional FFT of length $(64,64,64)$. This workload has
-been previously carried out with three compute kernels, but now with
-the proposed method we are able to use a two kernel solution.
+\section{Results}
+% We have used the proposed method to speed-up the computation of HPC
+% molecular dynamics simulations with rocFFT. A critical workload in
+% GROMACS \cite{gromacs20} involves the computation of a
+% three-dimensional FFT of length $(64,64,64)$. This workload has
+% been previously carried out with three compute kernels, but now with
+% the proposed method we are able to use two compute kernels. 
+
+% The performance improvements of the proposed 2 kernel partial-pass algorithm compared to the default 3 kernel algorithm have been evaluated with AMD's Instinct accelerator series (MI100, MI250X, MI300A, and MI300X). The proposed partial-pass algorithm will be publicly available in the upcoming ROCm 6.4 release for the three-dimensional length $(64,64,64)$ FFT. The default algorithm is currently available on ROCm 6.3. Both algorithms have been run $50$ times on each Instinct card, and the execution time in miliseconds was recorded for each run. 
+
+% \Cref{fig:execution_time} compares the median execution time of partial-pass and default algorithms over $50$ runs with the Instinct accelerators. \Cref{subfig:single_precision_time} and \Cref{subfig:double_precision_time} show results single and double-precision FFTs, respectively. In both figures, we vary the batch size from $1$ to $10,000$. This is equivalent to datasets of size $$ %TODO: mention out place and temp buffers in the total memory calculation. Explain batch meaning as well.
+
+\begin{figure}[h]  
+  \setlength\figureheight{\defaultheight} 
+  \setlength\figurewidth{\defaultwidth}
+  \centering  
+  
+  \captionsetup[sub]{singlelinecheck=off}
+  \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \input{single_precision_time.tikz}} \quad \quad
+  \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_time} \input{double_precision_time.tikz}}
+  \caption{Median Execution Time.}
+  \label{fig:execution_time}
+  \end{figure}
+
+\begin{figure}[h]  
+    \setlength\figureheight{\defaultheight} 
+    \setlength\figurewidth{\defaultwidth}
+    \centering  
+    
+    \captionsetup[sub]{singlelinecheck=off}
+    \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_speedup} \input{single_precision_speedup.tikz}} \quad \quad
+    \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_speedup} \input{double_precision_speedup.tikz}}
+    \caption{Speedup.}
+    \label{fig:speed_up}
+  \end{figure}
 
 \section{Conclusions}
 

@@ -6,8 +6,9 @@
 \usepackage{xcolor}
 \usepackage{fancyhdr}
 \usepackage{lipsum} % for dummy text
-\usepackage{fancyhdr}
 \usepackage{soul}
+\usepackage{perpage} % Load the perpage package
+\MakePerPage{footnote} % Reset the footnote counter on each page
 
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{gtac}[Custom gtac class]
@@ -22,7 +23,7 @@
 \ProcessOptions\relax
 
 % Load IEEEtran class
-\LoadClass{Mod_IEEEtran}
+\LoadClass{mod_IEEEtran}
 
 \usepackage{soul}
 
@@ -103,7 +104,7 @@
     \begingroup
     \let\and\\ % Handle line breaks
     \par
-	\noindent\textbf{\fontsize{9}{11}\selectfont Keywords:}    #1 % Body of the header
+	\noindent\textbf{\fontsize{9}{11}\selectfont Keywords:} \fontsize{9}{11}\selectfont #1 % Body of the header
     \par
     \endgroup
 }
