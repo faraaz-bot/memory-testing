@@ -1,7 +1,7 @@
 https://rocm.docs.amd.com/en/docs-6.1.0/conceptual/using-gpu-sanitizer.html
 
 # Install needed packages:
-sudo apt install hsa-rocr-asan hip-runtime-amd-asan hsakmt-roct-asan openmp-extras-asan rocm-hip-runtime-asan rocm-language-runtime-asan rocm-smi-lib-asan
+sudo apt install hsa-rocr-asan hip-runtime-amd-asan openmp-extras-asan rocm-hip-runtime-asan rocm-language-runtime-asan rocm-smi-lib-asan
 
 # Set up environment and compile:
 export HSA_XNACK=1

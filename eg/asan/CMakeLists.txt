@@ -12,7 +12,7 @@ add_executable( rtcasan rtcasan.cpp )
 
 find_package( Boost COMPONENTS program_options REQUIRED)
 
-find_package( hip REQUIRED )
+find_package( hip REQUIRED PATHS /opt/rocm/lib/cmake/hip )
 
 # cmake doesn't add the xnack option to the architectures (and seems
 # to add an architecture for each device, which doesn't make sense),
