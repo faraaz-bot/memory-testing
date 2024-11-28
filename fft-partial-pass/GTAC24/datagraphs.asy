@@ -41,6 +41,8 @@ bool dobars = true;
 bool dolegend = true;
 real Ncut = inf;
 
+bool times = true;
+
 int ngroup = 2;
 
 string ivariable = "lengths";
@@ -98,7 +100,8 @@ for(int ridx = 0; ridx < datapoints.length; ++ridx) {
     datapoints[ridx][idx].mklabel(ivariable);
 
     // Rescale by batch size:
-    datapoints[ridx][idx].y /= datapoints[ridx][idx].x;
+    if(times)
+        datapoints[ridx][idx].y /= datapoints[ridx][idx].x;
   }
 }
 
@@ -140,7 +143,7 @@ scale(xlog ? Log : Linear, ylog ? Log : Linear);
 // Plot the primary graph:
 for(int n = 0; n < xyval.length; ++n)
 {
-  int halflength = xyval.length # 2;
+  int halflength = 4;
   
     pen graphpen = Pen(n % halflength);
     if(n % halflength == 2) {
@@ -156,8 +159,13 @@ for(int n = 0; n < xyval.length; ++n)
         pair[] dp; // high
         pair[] dm; // low
         for(int i = 0; i < xyval[n].length; ++i) {
-            dp.push((0, -xyval[n][i].y + ylowhigh[n][i].y / xyval[n][i].x));
-            dm.push((0, -xyval[n][i].y + ylowhigh[n][i].x / xyval[n][i].x));
+            if(times) {
+                dp.push((0, -xyval[n][i].y + ylowhigh[n][i].y / xyval[n][i].x));
+                dm.push((0, -xyval[n][i].y + ylowhigh[n][i].x / xyval[n][i].x));
+            } else {
+                dp.push((0, -xyval[n][i].y + ylowhigh[n][i].y));
+                dm.push((0, -xyval[n][i].y + ylowhigh[n][i].x));
+            }
         }
         //write(dp);
         //write(dm);
@@ -168,7 +176,7 @@ for(int n = 0; n < xyval.length; ++n)
     if(n < halflength)  {
       draw(graph(xyval[n]), graphpen, legend=Label(s=legend), mark);
     } else {
-      if(n% halflength < 2) 
+      if(n % halflength < 2) 
 	draw(graph(xyval[n]), p=graphpen, marker=mark, legend=Label(s=legend, p=black));
       else
 	draw(graph(xyval[n]), graphpen, mark);
@@ -205,16 +213,21 @@ yaxis(ylabel, (secondary_filenames != "") ? Left : LeftRight,RightTicks);
 //                                 : 20*plain.E)  );
 //attach(legend(),point(plain.S), N);
 if(dolegend) {
-  write(currentpicture.legend.length);
-  currentpicture.legend[4].p=invisible;
-  marker mark0 = marker(scale(0.7mm) * unitcircle, Draw(black + solid));
-  currentpicture.legend[4].mark=mark0.f;
+    if(currentpicture.legend.length >= 6) {
+        write(currentpicture.legend.length);
+        currentpicture.legend[4].p=invisible;
+        marker mark0 = marker(scale(0.7mm) * unitcircle, Draw(black + solid));
+        currentpicture.legend[4].mark=mark0.f;
 
-  currentpicture.legend[5].p=invisible;
-  marker mark1 = marker(scale(0.7mm) * diamond, Draw(black + solid));
-  currentpicture.legend[5].mark=mark1.f;
-  
-  attach(legend(p=black, perline=1), point(S), 70*E + 163N);
+        currentpicture.legend[5].p=invisible;
+        marker mark1 = marker(scale(0.7mm) * diamond, Draw(black + solid));
+        currentpicture.legend[5].mark=mark1.f;
+        attach(legend(p=black, perline=1), point(S), 70*E + 163N);
+    } else {
+        attach(legend(p=black, perline=1), point(S), 70*E + 170N);
+    }
+
+ 
 }
     
 if(secondary_filenames != "")

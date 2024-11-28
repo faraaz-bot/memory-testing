@@ -262,7 +262,7 @@ internal temporary buffer to operate.
   \captionsetup[sub]{singlelinecheck=off}
   \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \includegraphics[width=0.45\textwidth]{singletime.pdf}}
   \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_time} \input{double_precision_time.tikz}}
-  \caption{Median Execution Time.}
+  \caption{Median execution time for single-precision (left) and double-precisoin (right).}
   \label{fig:execution_time}
   \end{figure*}
 As can be seen in \Cref{fig:execution_time}, the partial-pass algorithm performs significantly faster than the default algorithm. For example, in single- and double-precision, the partial-pass algorithm on MI100 runs as fast as the default algorithm on MI250X. On double-precision, MI300A with partial-pass runs as fast as MI300X with the default algorithm. 
@@ -274,9 +274,9 @@ As can be seen in \Cref{fig:execution_time}, the partial-pass algorithm performs
     \centering  
     
     \captionsetup[sub]{singlelinecheck=off}
-    \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_speedup} \input{single_precision_speedup.tikz}}
+    \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_speedup} \includegraphics[width=0.45\textwidth]{singlespeedup.pdf}}
     \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_speedup} \input{double_precision_speedup.tikz}}
-    \caption{Speedup.}
+    \caption{Speedup for single-precision (left) and double-precisoin (right).}
     \label{fig:speed_up}
   \end{figure*}
 As can be seen from the results, a significant performance uplift is achieved with the partial-pass algorithm compared to the default algorithm. For example, the maximum achievable speedups in single-precision for MI100, MI250X, MI300A, and MI300X were $1.36$x, $1.13$x, $1.36$x, and $1.43$x, respectively in \Cref{subfig:single_precision_speedup}. For double-precision in \Cref{subfig:double_precision_speedup}, the results were up to $1.42$x, $1.25$x, $1.48$x, and $1.62$x faster on MI100, MI250X, MI300A, and MI300X, respectively.
@@ -295,6 +295,7 @@ As can be seen from the results, a significant performance uplift is achieved wi
 
 % asy -f pdf datagraphs.asy  -u'ivariable="batch"' -u 'filenames="data/single/times/mi100dev.mdat,data/single/times/mi100pp.mdat,data/single/times/mi250xdev.mdat,data/single/times/mi250xpp.mdat,data/single/times/mi300adev.mdat,data/single/times/mi300app.mdat,data/single/times/mi300xdev.mdat,data/single/times/mi300xpp.mdat"' -u 'legendlist="MI100,MI250X,MI300A,MI300X,Default,Partial pass"' -o singletime.pdf
 
+% asy -f pdf datagraphs.asy  -u'ivariable="batch"' -u 'filenames="data/single/speedup/mi100.sdat,data/single/speedup/mi250x.sdat,data/single/speedup/mi300a.sdat,data/single/speedup/mi300x.sdat"' -u 'legendlist="MI100,MI250X,MI300A,MI300X"' -u"times=false" -o singlespeedup.pdf
 
 \section{Conclusions and Future Work}
 
