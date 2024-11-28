@@ -214,6 +214,10 @@ yaxis(ylabel, (secondary_filenames != "") ? Left : LeftRight,RightTicks);
 //attach(legend(),point(plain.S), N);
 if(dolegend) {
     if(currentpicture.legend.length >= 6) {
+        for(int idx = 0; idx < 4; ++idx) {
+            marker nomark = marker(scale(0.7mm) * unitcircle, Draw(invisible));
+            currentpicture.legend[idx].mark=nomark.f;
+        }
         write(currentpicture.legend.length);
         currentpicture.legend[4].p=invisible;
         marker mark0 = marker(scale(0.7mm) * unitcircle, Draw(black + solid));
