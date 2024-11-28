@@ -6,6 +6,7 @@
 % To enable the double-blind submission format for the review process, use the following line
 \documentclass{gtac}
 
+\usepackage{graphicx}
 \usepackage{tikz}
 \usepackage{pgfplots}
 \usepackage{cite}
@@ -226,19 +227,40 @@ For $(i,j) \in \bigl \{ \{1,2\}, \{1,3\}, \{2,3\} \bigr \}$ and $k = \{i,j\} - \
 \section{Results}
 We have used the proposed method to speed-up the computation of HPC
 molecular dynamics simulations with rocFFT. A critical workload in
-GROMACS \cite{gromacs20} involves the computation of a
-3D FFT of length $(64,64,64)$. This workload has
-been previously carried out with 3 compute kernels, but now with
-the proposed method we are able to use 2 compute kernels instead. The performance improvements of the 2-kernel partial-pass algorithm compared to the default 3-kernel algorithm have been evaluated with AMD's Instinct accelerator series: MI100, MI250X, MI300A, and MI300X. The partial-pass algorithm will be publicly available in the upcoming ROCm 6.4 release. The default algorithm is currently available on ROCm 6.3. Both algorithms have been run $50$ times on each Instinct card, and the execution time in miliseconds was recorded for each run. 
+GROMACS \cite{gromacs20} involves the computation of a 3D FFT of
+length $(64,64,64)$. This workload has been previously carried out
+with 3 compute kernels, but now with the proposed method we are able
+to use 2 compute kernels instead. The performance improvements of the
+2-kernel partial-pass algorithm compared to the default 3-kernel
+algorithm have been evaluated with AMD's Instinct accelerator series:
+MI100, MI250X, MI300A, and MI300X. The partial-pass algorithm will be
+publicly available in the upcoming ROCm 6.4 release. The default
+algorithm is currently available on ROCm 6.3. Both algorithms have
+been run $50$ times on each Instinct card, and the execution time in
+miliseconds was recorded for each run.
 
-\Cref{fig:execution_time} compares the median execution time of partial-pass and default algorithms over $50$ runs with the Instinct accelerators. \Cref{subfig:single_precision_time} and \Cref{subfig:double_precision_time} show results for single- and double-precision FFTs, respectively. We performed the transforms in batches, from $1$ to $10,000$ transforms. The reason for using batched transforms is that larger amounts of data are moved in memory, and we can fully see the performance benefits of removing a round-trip to global memory. For single-precision transforms, the dataset sizes vary from roughly $4$ megabytes to $42$ gigabytes, while double-precision datasets are twice those sizes. In these memory size calculations, we take into account the fact that the partial-pass algorithm requires an internal temporary buffer to operate.
+% TODO: mention that in-place transforms don't quite have the same speedup.
+
+\Cref{fig:execution_time} compares the median execution time of
+partial-pass and default algorithms over $50$ runs with the Instinct
+accelerators. \Cref{subfig:single_precision_time} and
+\Cref{subfig:double_precision_time} show results for single- and
+double-precision FFTs, respectively. We performed the transforms in
+batches, from $1$ to $10,000$ transforms. The reason for using batched
+transforms is that larger amounts of data are moved in memory, and we
+can fully see the performance benefits of removing a round-trip to
+global memory. For single-precision transforms, the dataset sizes vary
+from roughly $4$ megabytes to $42$ gigabytes, while double-precision
+datasets are twice those sizes. In these memory size calculations, we
+take into account the fact that the partial-pass algorithm requires an
+internal temporary buffer to operate.
 \begin{figure*}[h]  
   \setlength\figureheight{\defaultheight} 
   \setlength\figurewidth{\defaultwidth}
   \centering  
   
   \captionsetup[sub]{singlelinecheck=off}
-  \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \input{single_precision_time.tikz}}
+  \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \includegraphics[width=0.45\textwidth]{singletime.pdf}}
   \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_time} \input{double_precision_time.tikz}}
   \caption{Median Execution Time.}
   \label{fig:execution_time}
@@ -270,6 +292,9 @@ As can be seen from the results, a significant performance uplift is achieved wi
 % compute-artifactory.amd.com:5000/rocm-plus-docker/compute-rocm-dkms-no-npi-hipclang:15012-ubuntu-22.04-stg1
 %
 % ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench --lib ~/repo/rocfft/a/library/src/librocfft.so --lib ~/repo/rocfft1/a/library/src/librocfft.so -S partial_pass -o pp/dev -o pp/pp
+
+% asy -f pdf datagraphs.asy  -u'ivariable="batch"' -u 'filenames="data/single/times/mi100dev.mdat,data/single/times/mi100pp.mdat,data/single/times/mi250xdev.mdat,data/single/times/mi250xpp.mdat,data/single/times/mi300adev.mdat,data/single/times/mi300app.mdat,data/single/times/mi300xdev.mdat,data/single/times/mi300xpp.mdat"' -u 'legendlist="MI100,MI250X,MI300A,MI300X,Partial pass,Default"' -o singletime.pdf
+
 
 \section{Conclusions and Future Work}
 
