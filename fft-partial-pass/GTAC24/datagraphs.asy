@@ -127,7 +127,7 @@ bool xlog = true;
 if(bounds[1] / bounds[0] < 10) {
     xlog = false;
 }
-bool ylog = true;
+bool ylog = false;
 if(bounds[3] / bounds[2] < 10) {
     ylog = false;
 }
