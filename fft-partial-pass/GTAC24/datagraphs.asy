@@ -52,6 +52,10 @@ string scaling = "";
 
 usersetting();
 
+if(!times) {
+    ylabel = "Speedup ";
+}
+ 
 if(ivariable == "ndev") {
     xlabel = "Number of devices";
 }
@@ -217,7 +221,7 @@ if(!times) {
 //                                 : 20*plain.E)  );
 //attach(legend(),point(plain.S), N);
 if(dolegend) {
-    if(currentpicture.legend.length >= 6) {
+    if(times) {
         for(int idx = 0; idx < 4; ++idx) {
             marker nomark = marker(scale(0.7mm) * unitcircle, Draw(invisible));
             currentpicture.legend[idx].mark=nomark.f;
@@ -230,9 +234,9 @@ if(dolegend) {
         currentpicture.legend[5].p=invisible;
         marker mark1 = marker(scale(0.7mm) * diamond, Draw(black + solid));
         currentpicture.legend[5].mark=mark1.f;
-        attach(legend(p=black, perline=1), point(S), 70*E + 163N);
+        attach(legend(p=black, perline=1), point(S), 60*E + 145N);
     } else {
-        attach(legend(p=black, perline=1), point(S), 70*E + 170N);
+        attach(legend(p=black, perline=1), point(S), 70*E + 180N);
     }
 
  
