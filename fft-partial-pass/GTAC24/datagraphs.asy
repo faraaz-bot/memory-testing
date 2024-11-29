@@ -208,6 +208,10 @@ xaxis(xlabel, BottomTop, LeftTicks);
 
 yaxis(ylabel, (secondary_filenames != "") ? Left : LeftRight,RightTicks);
 
+if(!times) {
+    yequals(1.0, lightgrey);
+}
+
 // attach(legend(),point(plain.E),(((secondary_filenames != ""))
 //                                ? 60*plain.E + 40 *plain.N
 //                                 : 20*plain.E)  );

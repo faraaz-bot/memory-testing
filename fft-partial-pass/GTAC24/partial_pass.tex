@@ -293,6 +293,8 @@ As can be seen from the results, a significant performance uplift is achieved wi
 %
 % ./rocfft-perf run --bench ../../a/clients/staging/dyna-rocfft-bench --lib ~/repo/rocfft/a/library/src/librocfft.so --lib ~/repo/rocfft1/a/library/src/librocfft.so -S partial_pass -o pp/dev -o pp/pp
 
+% 
+
 % asy -f pdf datagraphs.asy  -u'ivariable="batch"' -u 'filenames="data/single/times/mi100dev.mdat,data/single/times/mi100pp.mdat,data/single/times/mi250xdev.mdat,data/single/times/mi250xpp.mdat,data/single/times/mi300adev.mdat,data/single/times/mi300app.mdat,data/single/times/mi300xdev.mdat,data/single/times/mi300xpp.mdat"' -u 'legendlist="MI100,MI250X,MI300A,MI300X,Default,Partial pass"' -o singletime.pdf
 
 % asy -f pdf datagraphs.asy  -u'ivariable="batch"' -u 'filenames="data/single/speedup/mi100.sdat,data/single/speedup/mi250x.sdat,data/single/speedup/mi300a.sdat,data/single/speedup/mi300x.sdat"' -u 'legendlist="MI100,MI250X,MI300A,MI300X"' -u"times=false" -o singlespeedup.pdf
