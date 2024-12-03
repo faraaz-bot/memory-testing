@@ -27,10 +27,19 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{soul}
+\usepackage[export]{adjustbox}
 \usepackage{subfig}
 
-\newcommand{\defaultheight}{3.8cm}
-\newcommand{\defaultwidth}{9cm}
+\makeatletter
+\renewcommand{\@maketitle}{%
+    \newpage\null%
+    \begin{center}%
+        \let\footnote\thanks{\LARGE\@title\par}%
+        \vskip2.5em{\large\lineskip.5em\begin{tabular}[t]{c}\@author\end{tabular}\par }%
+    \end{center}%
+    \par}
+\makeatother
+
 
 % Used in the matlab2tikz package
 \newlength\figureheight 
@@ -121,10 +130,7 @@ GPU-based FFT compute schemes, including large one-dimensional and
 multidimensional FFTs. We then focus on the multidimensional case, and
 show that by performing partial radix passes in a compute kernel
 off-dimension in 3D FFTs, the total number of
-round-trips to global memory can be reduced by up to one-third. The
-reduction in global memory transactions directly translates to
-improved performance in rocFFT for many HPC customers critical
-workloads.
+round-trips to global memory is reduce by one-third. Theoretical results are complemented with numerical experiments, which demonstrate significantly improved performance of the proposed method on molecular dynamics simulation workloads.
 %TODO: Add numerical results here.
 
 \section{Background}
@@ -242,52 +248,43 @@ miliseconds was recorded for each run.
 % TODO: mention that in-place transforms don't quite have the same speedup.
 
 \Cref{fig:execution_time} compares the median execution time of
-partial-pass and default algorithms over $50$ runs with the Instinct
-accelerators. \Cref{subfig:single_precision_time} and
+partial-pass and default algorithms over $50$ runs with 95\% confidence intervals computed by boot-strap resampling. \Cref{subfig:single_precision_time} and
 \Cref{subfig:double_precision_time} show results for single- and
 double-precision FFTs, respectively. We performed the transforms in
-batches, from $1$ to $10,000$ transforms. The reason for using batched
-transforms is that larger amounts of data are moved in memory, and we
-can fully see the performance benefits of removing a round-trip to
+batches, from $1$ to $10,000$ transforms, so that larger amounts of data are moved in memory, and we can fully see the performance benefits of removing a round-trip to
 global memory. For single-precision transforms, the dataset sizes vary
 from roughly $4$ megabytes to $42$ gigabytes, while double-precision
 datasets are twice those sizes. In these memory size calculations, we
 take into account the fact that the partial-pass algorithm requires an
 internal temporary buffer to operate.
-\begin{figure*}[h]  
-  \setlength\figureheight{\defaultheight} 
-  \setlength\figurewidth{\defaultwidth}
+\begin{figure}[h]  
   \centering  
   
   \captionsetup[sub]{singlelinecheck=off}
-  \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \includegraphics[width=0.43\textwidth]{singletime.pdf}}
-  \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_time} \includegraphics[width=0.43\textwidth]{doubletime.pdf}}
-  \caption{Median execution time per batch for single-precision (left) and double-precision (right).}
+  \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_time} \includegraphics[width=0.42\textwidth]{singletime.pdf}}\\
+  \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_time} \includegraphics[width=0.42\textwidth]{doubletime.pdf}}
+  \caption{Median execution time per batch for single-precision (top) and double-precision (bottom).}
   \label{fig:execution_time}
-  \end{figure*}
+  \end{figure}
 As can be seen in \Cref{fig:execution_time}, the partial-pass
 algorithm performs significantly faster than the default
 algorithm. For example, in single- and double-precision, the
-partial-pass algorithm on MI100 runs as fast as the default algorithm
-on MI250X. On double-precision, MI300A with partial-pass runs as fast
-as MI300X with the default algorithm.
+partial-pass algorithm on MI100, the slower of the tested Instinct accelerators, runs faster than the default algorithm on MI250X, MI300A, and MI300X.
 
 \Cref{fig:speed_up} shows the speedup of partial-pass compared to
 default, in single- and double-precision, and batch sizes varying from
 $1$ to $10,000$. To compute the speedup, the median execution time
 over $50$ runs were used, with 95\% confidence intervals computed by
 boot-strap resampling.
-\begin{figure*}[h]  
-    \setlength\figureheight{\defaultheight} 
-    \setlength\figurewidth{\defaultwidth}
+\begin{figure}[h]  
     \centering  
     
     \captionsetup[sub]{singlelinecheck=off}
-    \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_speedup} \includegraphics[width=0.43\textwidth]{singlespeedup.pdf}}
-    \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_speedup} \includegraphics[width=0.43\textwidth]{doublespeedup.pdf}}
-    \caption{Speedup for single-precision (left) and double-precision (right).}
+    \subfloat[$\mkern-90mu$]{\label{subfig:single_precision_speedup} \includegraphics[width=0.42\textwidth]{singlespeedup.pdf}}\\
+    \subfloat[$\mkern-90mu$]{\label{subfig:double_precision_speedup} \includegraphics[width=0.42\textwidth]{doublespeedup.pdf}}
+    \caption{Speedup for single-precision (top) and double-precision (bottom).}
     \label{fig:speed_up}
-  \end{figure*}
+  \end{figure}
 As can be seen from the results, a significant performance uplift is
 achieved with the partial-pass algorithm compared to the default
 algorithm. For example, the maximum achievable speedups in
@@ -319,17 +316,12 @@ $1.43$, $1.92$, $1.36$, and $1.25$ times faster, respectively.
 
 \section{Conclusions and Future Work}
 
-This article presents a new technique for optimizing cache use for
-computing 3D complex FFTs which require at least three passes.  This
-technique involves splitting the middle calculation into two passes;
+This article presents a new technique for optimizing cache use in multidimensional complex FFTs which require at least three passes.  This
+technique involves splitting the calculations along a dimension into two passes;
 this allows for the possibility of fitting more calculation into
 cache-sized chunks.  For 3D FFTs, this can entirely eliminate a
-round-trip to global memory, which could reduce the execution time by
-33\%.  While the results presented here are for 3D complex FFTs, we
-hope to extend this work to multi-kernel 1D and 2D kernels, as well as
+round-trip to global memory, which results in significantly improved performance in HPC workloads.  While the results presented here are for 3D complex FFTs, we hope to extend this work to multi-kernel 1D and 2D kernels, as well as
 real/complex transforms.
-
-
 
 \begingroup
 \let\itshape\upshape
