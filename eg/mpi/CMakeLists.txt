@@ -9,33 +9,29 @@ set( CMAKE_CXX_EXTENSIONS OFF )
 find_package( hip REQUIRED )
 
 find_package( MPI REQUIRED )
-
-add_executable( gpu-aware gpu-aware.cpp )
-
-set_source_files_properties(gpu-aware.cpp PROPERTIES LANGUAGE HIP)
-
-
-message("ok, how about: ${MPI_CXX_LIB_NAMES}")
-
-# get_cmake_property(_variableNames VARIABLES)
-# foreach(_variableName ${_variableNames})
-#   message(STATUS "${_variableName} : ${${_variableName}}")
-# endforeach()
-
 option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
-if ( CRAY_MPI_ENABLE )
-  message("cray mpi it is!")
-  #export MPICH_GPU_SUPPORT_ENABLED=1
-  add_link_options( gpu-aware "-L${CRAYLIBS_X86_64}")
-  message("CRAYLIBS_X86_64: ${CRAYLIBS_X86_64}")
-  message("manual L: /opt/cray/pe/mpich/8.1.28/gtl/lib")
-  message("${MPI_LIBRARY}")
-  get_filename_component(BASEDIR ${MPI_LIBRARY} DIRECTORY)
-  message("BASEDIR: ${BASEDIR}")
-  target_link_directories(gpu-aware PRIVATE ${BASEDIR}/../../../../gtl/lib)
-  #target_link_directories(gpu-aware PRIVATE /opt/cray/pe/mpich/8.1.28/gtl/lib)
-  target_link_libraries( gpu-aware mpi_gtl_hsa)
-endif()
+set( sample_list gpu-aware isendrcv )
 
-target_link_libraries( gpu-aware hip::host hip::device MPI::MPI_CXX)
+
+foreach( sample ${sample_list} )
+
+  add_executable( ${sample} ${sample}.cpp )
+
+  set_source_files_properties(${sample}.cpp PROPERTIES LANGUAGE HIP)
+
+  #set_property( TARGET ${sample} PROPERTY HIP_ARCHITECTURES gfx90a)
+
+  if ( CRAY_MPI_ENABLE )
+    get_filename_component( MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
+    target_link_directories( ${sample}
+	PRIVATE
+	${MPI_LIBDIR}/../../../../gtl/lib )
+    target_link_libraries( ${sample} hip::host hip::device mpi_gtl_hsa MPI::MPI_CXX )
+  else()
+    target_link_libraries( ${sample} hip::host hip::device MPI::MPI_CXX)    
+  endif()
+
+
+
+endforeach( )
