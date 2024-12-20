@@ -11,15 +11,14 @@ find_package( hip REQUIRED )
 find_package( MPI REQUIRED )
 option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
-set( sample_list gpu-aware isendrcv )
+set( hip_list gpu-aware isendrcv )
+set( host_list isendrcv_cpu )
 
 
-foreach( sample ${sample_list} )
-
+foreach( sample ${hip_list} )
   add_executable( ${sample} ${sample}.cpp )
 
   set_source_files_properties(${sample}.cpp PROPERTIES LANGUAGE HIP)
-
   #set_property( TARGET ${sample} PROPERTY HIP_ARCHITECTURES gfx90a)
 
   if ( CRAY_MPI_ENABLE )
@@ -31,7 +30,10 @@ foreach( sample ${sample_list} )
   else()
     target_link_libraries( ${sample} hip::host hip::device MPI::MPI_CXX)    
   endif()
+endforeach( )
 
 
-
+foreach( sample ${host_list} )
+  add_executable( ${sample} ${sample}.cpp )
+  target_link_libraries( ${sample} MPI::MPI_CXX )
 endforeach( )

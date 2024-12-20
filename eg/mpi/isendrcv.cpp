@@ -113,16 +113,13 @@ int main(int argc, char **argv) {
     //validate results
     if(mpi_rank == 1) {
 
-          MPI_Status status;
-    MPI_Request request;
+        std::vector<MPI_Status> vstatus;
+        std::vector<MPI_Request> vrequest;
 
-    std::vector<MPI_Status> vstatus;
-    std::vector<MPI_Request> vrequest;
-
-    vstatus.push_back(status);
-    vrequest.push_back(request);
+        vstatus.push_back(status);
+        vrequest.push_back(request);
     
-    MPI_Waitall(1, vrequest.data(), vstatus.data());
+        MPI_Waitall(1, vrequest.data(), vstatus.data());
         
         int blockSize = 512;
         const int gridSize    = ceildiv(N, blockSize);
