@@ -49,9 +49,6 @@ hsa_status_t populate_device_type(hsa_agent_t agent, void* data)
 
 int main()
 {
-    hsa_status_t hsa_status;
-    uint32_t     agent_ind = 0;
-
     int device_id = 0;
     HIP_CHECK(hipGetDevice(&device_id));
     std::cout << "Current device: " << device_id << "\n";
