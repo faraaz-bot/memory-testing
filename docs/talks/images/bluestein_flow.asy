@@ -61,7 +61,7 @@ a += (0, -dy);
 
 draw(box(a, a + dbox), blue);
 label("$x_n \omega_{2N}^{n^2} * \omega_{2N}^{-k^2}$ ", plabel(a, dbox));
-draw((a + bbox)..(a + tbox_short), EndArrow);
+draw((a + bbox)..(a + tbox_short), EndArrow, L="asdf");
 
 a += (0, -dy);
 draw(box(a, a + dbox_short), red);

@@ -240,9 +240,10 @@ Hermitian symmetry, in that
 Figure~\ref{hermitian2d} shows Hermitian symmetry for a 2D array.
 Figure~\ref{hermitian2ddiff} shows two possible choices for data
 formats which make use of this symmetry.  The standard algorithm for
-computing a $D$-dimensional real-to-complex FFT when $N_D$ is odd
-is given in algorithm~\ref{DFFTold}.
-\begin{figure}
+computing a $D$-dimensional real-to-complex FFT when $N_D$ is odd is
+given in algorithm~\ref{DFFTold}.  A flowchart for an example 2D
+computation is given in Figure~\ref{old2dflow}.
+\begin{figure}[h]
   \centering
   \includegraphics{hermitian2d}
   \caption{Demonstration of Hermitian-symmetry for a 2D array.  Red
@@ -250,7 +251,7 @@ is given in algorithm~\ref{DFFTold}.
     each-other.}
   \label{hermitian2d}
 \end{figure}
-\begin{figure}
+\begin{figure}[h]
   \centering
   \includegraphics{hermitian2ddiff}
   \caption{Two possible choices for which part of a 2D
@@ -259,8 +260,7 @@ is given in algorithm~\ref{DFFTold}.
     redundant data in the second dimension.}
   \label{hermitian2ddiff}
 \end{figure}
-
-\begin{algorithm}
+\begin{algorithm}[h]
   \caption{Standard $D$-dimensional real-to-complex FFT}\label{DFFTold}
   \begin{algorithmic}[1]
     \For{$\left(n_1,\dots,N_{D-1}\right) \in \left(0,\dots,N_1-1\right) \times \left(0,\dots,N_{D-1}-1\right) $}
@@ -284,6 +284,14 @@ is given in algorithm~\ref{DFFTold}.
     \State \textbf{return} $X$
   \end{algorithmic}
 \end{algorithm}
+\begin{figure}[h]
+  \centering
+  \includegraphics{old2dflow.pdf}
+  \caption{Flow chart showing the conventional complex-embedding
+    method for 2D real-to-complex FFTs when the contiguous dimension
+    ($y$) is odd, and the other dimension ($x$) is even.}
+  \label{old2dflow}
+\end{figure}
 
 \subsection{Even-resymmetrize multi-dimensional transforms}
 
@@ -324,7 +332,7 @@ directions.  The Hermitian symmetry is then re-imposed by re-indexing
 the data and taking the complex conjugate as appropriate, which
 produces the desired output.  This algorithm is detailed in
 algorithm~\ref{symeven}.
-\begin{algorithm}
+\begin{algorithm}[h]
   \caption{$D$-dimensional real-to-complex FFT using the symmetrize-to-even method}\label{symeven}
   \begin{algorithmic}[1]
     \For{$\left(n_1,\dots,n_{e-1},n_{e+1}, \dots, n_{D}\right) \in \prod_{d\neq{}e}\left(0,\dots,N_d-1\right)$}
@@ -362,7 +370,15 @@ algorithm~\ref{symeven}.
     \State \textbf{return} $X$
   \end{algorithmic}
 \end{algorithm}
-  
+\begin{figure}[h]
+  \centering
+  \includegraphics{new2dflow.pdf}
+  \caption{Flow chart showing the net method for 2D real-to-complex
+    FFTs when the contiguous dimension ($y$) is odd, and the other
+    dimension ($x$) is even.}
+  \label{new2dflow}
+\end{figure}
+
 If all of the dimensions are roughly equal in magnitude, then the
 symmetrize-to-even method has computational cost
 \begin{dmath}
