@@ -77,6 +77,8 @@ int main(int argc, char **argv)
     MPI_Ialltoall(devdata, sendsize, MPI_FLOAT,
                  devdata, sendsize, MPI_FLOAT,
                   MPI_COMM_WORLD, &req_ata);
+
+    MPI_Wait(&req_ata, MPI_STATUS_IGNORE);
     
     // Verify the result:
     std::vector<float> localoutput(localsize);
