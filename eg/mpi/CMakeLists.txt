@@ -11,7 +11,7 @@ find_package( hip REQUIRED )
 find_package( MPI REQUIRED )
 option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
-set( hip_list gpu-aware isendrcv alltoall)
+set( hip_list gpu-aware isendrcv alltoall alltoallv)
 set( host_list isendrcv_cpu )
 
 

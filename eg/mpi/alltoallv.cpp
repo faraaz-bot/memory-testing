@@ -80,21 +80,60 @@ int main(int argc, char **argv)
     MPI_Status status_ata;
     
     const int sendsize = localsize / mpi_size;
-    MPI_Ialltoall(devin, sendsize, MPI_FLOAT,
-                 devout, sendsize, MPI_FLOAT,
-                 MPI_COMM_WORLD, &req_ata);
+
+    std::vector<int> sendcounts(mpi_size);
+    std::fill(sendcounts.begin(), sendcounts.end(), sendsize);
+    std::vector<int> sendoffset(mpi_size);
+    sendoffset[0] = 0;
+    for(int idx = 1; idx < sendoffset.size(); ++idx) {
+        sendoffset[idx] = sendoffset[idx - 1] + sendcounts[idx - 1];
+    }
+    
+    
+    std::vector<int> recvcounts(mpi_size);
+    std::fill(recvcounts.begin(), recvcounts.end(), sendsize);
+    std::vector<int> recvoffset(mpi_size);
+    recvoffset[0] = 0;
+    for(int idx = 1; idx < recvoffset.size(); ++idx) {
+        recvoffset[idx] = recvoffset[idx - 1] + recvcounts[idx - 1];
+    }
+
+    for(int irank = 0; irank < mpi_size; ++irank) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        if(irank == mpi_rank) {
+            std::cout << "rank " << mpi_rank 
+                      << "\n\tsendcount:";
+            for(const auto val : sendcounts)
+                std::cout << " " << val;
+            std::cout << "\n\tsendoffset:";
+            for(const auto val : sendoffset)
+                std::cout << " " << val;
+            std::cout << "\n\trecvcount:";
+            for(const auto val : recvcounts)
+                std::cout << " " << val;
+            std::cout << "\n\trecvoffset:";
+            for(const auto val : recvoffset)
+                std::cout << " " << val;
+            std::cout << "\n" << std::flush;
+        }
+    }
+
+    MPI_Ialltoallv(devin, sendcounts.data(), sendoffset.data(), MPI_FLOAT,
+                   devout, recvcounts.data(), recvoffset.data(),  MPI_FLOAT,
+                   MPI_COMM_WORLD, &req_ata);
     std::vector<MPI_Request> vreq;
     std::vector<MPI_Status> vstatus;
 
-    vreq.push_back(req_ata);
-    vstatus.push_back(status_ata);
-    
-    if(MPI_Waitall(vreq.size(), vreq.data(), vstatus.data()) != MPI_SUCCESS)
-    {
-        throw std::runtime_error("waitall failed");
+    if(false) {
+        vreq.push_back(req_ata);
+        vstatus.push_back(status_ata);
+        if(MPI_Waitall(vreq.size(), vreq.data(), vstatus.data()) != MPI_SUCCESS)
+        {
+            throw std::runtime_error("waitall failed");
+        }
+    } else {
+        MPI_Wait(&req_ata, MPI_STATUS_IGNORE);
     }
-    
-    //MPI_Wait(&req_ata, MPI_STATUS_IGNORE);
     
     
     // Verify the result:
