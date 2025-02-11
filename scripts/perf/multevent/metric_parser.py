@@ -53,46 +53,48 @@ groups = [
 def plot(dataframes):
     pass
 
-def parse(filepath):
-    starting_lines = []
+def parse_csv(filepath, num_columns):
+    with open(filepath, 'r') as f:
+        lines = [l.split('\n')[0] for l in f] 
+
+    csvs = []
+    
+    start = False
+    curr_csv = ''
+    num = -1
+    for l in lines:
+        if 'Data Fabric - MALL' in l:
+            if start:
+                csvs.append(curr_csv)
+                curr_csv = ''
+            start = True
+            num = int(l.split('L')[-1]) # Track which MALL # we are on
+            # Add in column headers
+            curr_csv += l + f', GPUDF_0, GPUDF_1, GPUDF_2, GPUDF_3, GPUDF_4, GPUDF_5, GPUDF_6, GPUDF_7, GPUDF_8, GPUDF_9, GPUDF_10, GPUDF_11, GPUDF_12, GPUDF_13, GPUDF_14, GPUDF_15, GPUDF_16, GPUDF_17, GPUDF_18, GPUDF_19, GPUDF_20, GPUDF_21, GPUDF_22, GPUDF_23, GPUDF_24, GPUDF_25, GPUDF_26, GPUDF_27, GPUDF_28, GPUDF_29, GPUDF_30, GPUDF_31\n'
+            continue
+    
+        if start:
+            if f'MALL{num}' in l:
+                curr_csv += f'{l}\n'
+    csvs.append(curr_csv) # Catch last CSV
+
+    # Extract csvs into their own dataframes, including only 5 columns (for MI300X)
     dataframes = []
-    # Get starting lines to parse MALL metrics from
-    with open(filepath, 'r', newline='') as f:
-        for line_no, line in enumerate(f):
-            if "Data Fabric - MALL" in line:
-                starting_lines.append(line_no)
-                
-    offset = starting_lines[1] - starting_lines[0] # Both *should* exist now 
-    
-    f = open(filepath, 'r')
-    lines = f.readlines() # Exclude '\n' chars
-
-    # Extract each "MALL section", with number of columns and ignoring empty data
-    for start in [line+2 for line in starting_lines]: # Exclude section title and blank line
-        section_str = ''.join(lines[start:start+offset])
-        # print(StringIO(section_str).read())
-        df = pd.read_csv(
-                StringIO(section_str),
-                ).iloc[:,:5].dropna()
+    print(num_columns)
+    for csv in csvs:
+        df = pd.read_csv(StringIO(csv)).iloc[:,:num_columns]
         dataframes.append(df)
-        print(df, '\n')
-
-    # Merge together dataframes, after adjusting df keys to match each other
+        # print(df,'\n')
     
-    # Parse as one large df or as 32 dfs, one per MALL section? Seems easier to take each as a separate df
-    # , and then 
-    # Read in csv starting from MALL metrics, only keep 5 columns for MI300X, and exclude missing vals
-    # df = pd.read_csv(
-    #         filepath,
-    #         header=starting_line
-    #         ).iloc[:,:5].dropna()
-    # print(df)
+    print(dataframes[0], '\n')
+    # Adjust df keys to match each other, for merging dfs later
 
+
+    
 
 if __name__ == '__main__':
-    """Command line interface..."""
     parser = argparse.ArgumentParser(prog='metric_parser')
-    parser.add_argument("df_file", nargs=argparse.REMAINDER)
+    parser.add_argument("df_file")
     # parser.add_argument('-s',
     #                     '--start_line',
     #                     default=18,
@@ -104,12 +106,24 @@ if __name__ == '__main__':
     #                     help='Path to csv file to read from.',
     #                     default="GPUDF.csv")
     
+    parser.add_argument('-n', '--num_columns', 
+                        default=5, 
+                        type=int, 
+                        help='Number of columns to take out of 32 (default 5 for MI300X)')
+
     args = parser.parse_args()
-    parse(args.df_file[0])
+    parse_csv(args.df_file, args.num_columns)
+
+    """
+    TODO:
+    - Print average metrics for key values
+    - Allow comparison against multiple files (either multiple args, or a filepath to glob)
+    """
+
 
     # if args.command == 'list':
     #     scprint(set(['function_pool.cpp'] + list_generated_kernels(kernels)))
-    #
+#
     # if args.command == 'generate':
     #     cpu_functions = generate_kernels(kernels, precisions,
     #                                      args.stockham_gen)
