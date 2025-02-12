@@ -9,7 +9,7 @@ from io import StringIO
 
 """
 Tested by running MultEvent profiler with mi300x all .ini file config, with only MALL metrics enabled.
-Extract blocks of following format from within output csv:
+Extract blocks of following format from within output csv (note: script looks for int in filename for x-axis):
 '
 Data Fabric - MALL0
 
@@ -34,30 +34,23 @@ hit_rate_fields = [
         "Total Read Hit Rate"
         ]
 
- 
-# c = next(color)
-# plt.scatter(x_axis, y_axis, color=c, s=10, zorder=2, label='')
-# plt.plot(x_axis, y_axis, color=c)
-
-
-def plot(results, output_path):
+def plot(results, output_path, use_linear_scale_x, use_log_scale_y):
     x_axis = sorted(results.keys()) # Batch sizes
-    
-    # Setup colours to use for arbitrary # of metrics
-    color = iter(plt.cm.rainbow(np.linspace(0, 1, len(bw_fields) + len(hit_rate_fields))))
 
     plt.clf()
 
     # For each metric, get y-axis data per file given
     for field in bw_fields:
         y_axis = [results[batch][field] for batch in x_axis]
-        c = next(color)
-        plt.scatter(x_axis, y_axis, color=c, s=10, label=f'{field}')
-        plt.plot(x_axis, y_axis, color=c)
+        plt.scatter(x_axis, y_axis, s=10, label=f'{field}')
+        plt.plot(x_axis, y_axis)
 
     plt.grid()
     plt.xlabel('Batch Size (N)')
-    plt.xscale('log', base=2)
+    if not use_linear_scale_x:
+        plt.xscale('log', base=2)
+    if use_log_scale_y:
+        plt.yscale('log', base=2)
     plt.ylabel("Bandwidth (GB/s)")
     plt.title("MALL Bandwidth Metrics")
     plt.legend()
@@ -67,13 +60,15 @@ def plot(results, output_path):
 
     for field in hit_rate_fields:
         y_axis = [results[batch][field] for batch in x_axis]
-        c = next(color)
-        plt.scatter(x_axis, y_axis, color=c, s=10, label=f'{field}')
-        plt.plot(x_axis, y_axis, color=c)
+        plt.scatter(x_axis, y_axis, s=10, label=f'{field}')
+        plt.plot(x_axis, y_axis)
 
     plt.grid()
     plt.xlabel('Batch Size (N)')
-    plt.xscale('log', base=2)
+    if not use_linear_scale_x:
+        plt.xscale('log', base=2)
+    if use_log_scale_y:
+        plt.yscale('log', base=2)
     plt.ylabel("Hit Rate (%)")
     plt.title("MALL Hit Rate Metrics")
     plt.legend()
@@ -82,6 +77,11 @@ def plot(results, output_path):
 
 
 def parse_csv(filepath, num_columns):
+    # Options for debugging
+    # pd.set_option('display.max_columns', None)
+    # pd.set_option('display.max_rows', None)
+
+
     with open(filepath, 'r') as f:
         lines = [l.split('\n')[0] for l in f] 
 
@@ -155,10 +155,20 @@ if __name__ == '__main__':
                         action="store_true",
                         help="Flag to enable result output via text")
 
-    parser.add_argument('-g', '--graph_output',
-                        default=True,
+    parser.add_argument('-g', '--disable_graph_output',
+                        default=False,
                         action="store_true",
-                        help="Flag to enable disable output via graph")
+                        help="Flag to disable output via graph")
+
+    parser.add_argument('--linear_scale_x',
+                        default=False,
+                        action="store_true",
+                        help="Flag to enable linear scaling on x-axis (if disabled, then log base 2)")
+
+    parser.add_argument('--log_scale_y',
+                        default=False,
+                        action="store_true",
+                        help="Flag to enable log base 2 scaling on y-axis (if disabled, then linear)")
 
     args = parser.parse_args()
     results = {} # Map batch size to metrics dict
@@ -175,5 +185,5 @@ if __name__ == '__main__':
                 print(f'  {k}\t{v}')
             print()
     
-    if args.graph_output:
-        plot(results, args.output_path)
+    if not args.disable_graph_output:
+        plot(results, args.output_path, args.linear_scale_x, args.log_scale_y)
