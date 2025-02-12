@@ -24,51 +24,61 @@ Data Fabric - MALL31
 '
 """
 
-# Metrics of interest
-# fields = {
-#     # Ignore % time metrics, full vs partial hit rate
-#     "Total Read bandwidth": {"unit": "GB/s", "label": "Read"},
-#     "Total Write bandwidth": {"unit": "GB/s", "label": "Write"},
-#     "Total Hit Rate": {"unit": "%", "label": "Total"},
-#     "Total Write Hit Rate": {"unit": "%", "label": "Write"},
-#     "Total Read Hit Rate": {"unit": "%", "label": "Read"},
-# }
-
 # Store key metrics of interest, as well as filename for metric
-fields = {
-    # Ignore % time metrics, full vs partial hit rate
-    "Total Read bandwidth": "read_bandwidth",
-    "Total Write bandwidth": "write_bandwidth",
-    "Total Hit Rate": "total_hit_rate",
-    "Total Write Hit Rate": "total_write_hit_rate",
-    "Total Read Hit Rate": "total_read_hit_rate",
-}
+# Ignore % time metrics, full vs partial hit rate
+bw_fields = ["Total Read bandwidth", "Total Write bandwidth"]
+
+hit_rate_fields = [
+        "Total Hit Rate",
+        "Total Write Hit Rate",
+        "Total Read Hit Rate"
+        ]
+
+ 
+# c = next(color)
+# plt.scatter(x_axis, y_axis, color=c, s=10, zorder=2, label='')
+# plt.plot(x_axis, y_axis, color=c)
+
 
 def plot(results, output_path):
     x_axis = sorted(results.keys()) # Batch sizes
+    
+    # Setup colours to use for arbitrary # of metrics
+    color = iter(plt.cm.rainbow(np.linspace(0, 1, len(bw_fields) + len(hit_rate_fields))))
+
+    plt.clf()
 
     # For each metric, get y-axis data per file given
-    for field in fields.keys():
+    for field in bw_fields:
         y_axis = [results[batch][field] for batch in x_axis]
-         
-        plt.clf()
+        c = next(color)
+        plt.scatter(x_axis, y_axis, color=c, s=10, label=f'{field}')
+        plt.plot(x_axis, y_axis, color=c)
 
-        plt.scatter(x_axis, y_axis, color='blue', s=10, zorder=2, label='')
-        plt.plot(x_axis, y_axis, color='blue')
+    plt.grid()
+    plt.xlabel('Batch Size (N)')
+    plt.xscale('log', base=2)
+    plt.ylabel("Bandwidth (GB/s)")
+    plt.title("MALL Bandwidth Metrics")
+    plt.legend()
+    plt.savefig(output_path + 'bandwidth.png')
 
-        # plt.scatter(x_axis, y_axis, color='red', s=10, zorder=3, label='')
-        # plt.plot(x_axis, y_axis, color='red')
+    plt.clf()
 
-        # plt.xscale('log', base=2)
-        # plt.yscale('log', base=2)
+    for field in hit_rate_fields:
+        y_axis = [results[batch][field] for batch in x_axis]
+        c = next(color)
+        plt.scatter(x_axis, y_axis, color=c, s=10, label=f'{field}')
+        plt.plot(x_axis, y_axis, color=c)
 
-        plt.xlabel('Batch Size')
-        y_label = "GB/s" if "bandwidth" in field else "%"
-        plt.ylabel(y_label)
-        plt.title(field)
-        plt.grid()
-        plt.legend()
-        plt.savefig(output_path + f'{fields[field]}.png')  # save the figure
+    plt.grid()
+    plt.xlabel('Batch Size (N)')
+    plt.xscale('log', base=2)
+    plt.ylabel("Hit Rate (%)")
+    plt.title("MALL Hit Rate Metrics")
+    plt.legend()
+    plt.savefig(output_path + 'hit_rate.png')
+
 
 
 def parse_csv(filepath, num_columns):
@@ -117,12 +127,12 @@ def parse_csv(filepath, num_columns):
 
     field_data = {}
     # Extract desired metrics
-    for k in fields.keys():
-        field_df = df[df['metrics'].str.contains(k)]
+    for field in bw_fields + hit_rate_fields:
+        field_df = df[df['metrics'].str.contains(field)]
         field_df.reset_index(drop=True, inplace=True)
         del field_df['metrics']
         field_df = field_df.astype(float)
-        field_data[k] = field_df.mean().mean()
+        field_data[field] = field_df.mean().mean()
 
     return field_data
 
