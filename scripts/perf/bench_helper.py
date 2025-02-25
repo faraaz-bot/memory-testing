@@ -8,6 +8,8 @@ import re
 from io import StringIO
 
 
+# Plots bench outputs by averaging time and gflops separately
+# Currently plots multiple files against each other, expecting batch size as metric
 def plot(results, output_path, use_log_x, use_log_y):
     x_axis = sorted(results.keys())  # Batch sizes, sorted
 
