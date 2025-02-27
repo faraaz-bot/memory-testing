@@ -12,7 +12,7 @@ find_package( MPI REQUIRED )
 option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
 set( hip_list gpu-aware isendrcv alltoall alltoallv)
-set( host_list isendrcv_cpu )
+set( host_list isendrcv_cpu mpihello )
 
 
 foreach( sample ${hip_list} )
@@ -35,5 +35,14 @@ endforeach( )
 
 foreach( sample ${host_list} )
   add_executable( ${sample} ${sample}.cpp )
-  target_link_libraries( ${sample} MPI::MPI_CXX )
+
+  if ( CRAY_MPI_ENABLE )
+    get_filename_component( MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
+    target_link_directories( ${sample}
+	PRIVATE
+	${MPI_LIBDIR}/../../../../gtl/lib )
+    target_link_libraries( ${sample} mpi_gtl_hsa MPI::MPI_CXX )
+  else()
+    target_link_libraries( ${sample} MPI::MPI_CXX )
+  endif()
 endforeach( )
