@@ -1,0 +1,368 @@
+\documentclass[10pt,aspectratio=169]{beamer}
+%\documentclass[12pt,aspectratio=169]{beamer}
+
+%\mode<presentation>
+
+\usepackage{natbib}
+\usepackage{bibentry}
+\bibliographystyle{plain}
+
+\usepackage{graphicx}
+\usepackage{breqn}
+\usepackage{bm}
+\usepackage{color}
+\usepackage{tabularx}
+
+\usepackage{listings}
+\lstset{language=C++}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage{animate}
+
+\definecolor{radeonruby}{rgb}{0.87, 0, 0.19}
+
+
+\usepackage{listings}
+
+
+
+%\usepackage[utf8]{inputenc}
+\definecolor{bluekeywords}{rgb}{0.63, 0.79, 0.95}
+\definecolor{greencomments}{rgb}{0,0.5,0}
+\definecolor{redstrings}{rgb}{0.64,0.08,0.08}
+\definecolor{xmlcomments}{rgb}{0.5,0.5,0.5}
+\definecolor{types}{rgb}{0.17,0.57,0.68}
+\lstset{language=C++,
+captionpos=b,
+%numbers=left,
+%numberstyle=\tiny,
+frame=single,
+showspaces=false,
+showtabs=false,
+breaklines=true,
+showstringspaces=false,
+breakatwhitespace=true,
+escapeinside={(*@}{@*)},
+commentstyle=\color{greencomments},
+morekeywords={partial, var, value, get, set},
+keywordstyle=\color{bluekeywords},
+stringstyle=\color{redstrings},
+basicstyle=\ttfamily\small,
+}
+
+\usepackage[yyyymmdd]{datetime}
+\renewcommand{\dateseparator}{--}
+
+%\usepackage[inline]{asymptote}
+\usepackage{asymptote}
+\def\asylatexdir{}
+\def\asydir{}
+
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+
+\def\clap#1{\hbox to 0pt{\hss#1\hss}}
+\def\mathllap{\mathpalette\mathllapinternal}
+\def\mathrlap{\mathpalette\mathrlapinternal}
+\def\mathclap{\mathpalette\mathclapinternal}
+\def\mathllapinternal#1#2{\llap{$\mathsurround=0pt#1{#2}$}}
+\def\mathrlapinternal#1#2{\rlap{$\mathsurround=0pt#1{#2}$}}
+\def\mathclapinternal#1#2{\clap{$\mathsurround=0pt#1{#2}$}}
+
+\def\p{\pause}
+
+\def\({\left(}
+\def\){\right)}
+\def\[{\left[}
+\def\]{\right]}
+
+\def\no#1{\nobreak{#1}} % stop equation breaking in dmath
+
+\begin{asydef}
+  // Global Asymptote definitions can be put here.
+  import three;
+  usepackage("bm");
+  texpreamble("\def\V#1{\bm{#1}}");
+  // One can globally override the default toolbar settings here:
+  // settings.toolbar=true;
+\end{asydef}
+
+%\useinnertheme{rectangles} %specifies itemize points to be rectangles
+\useoutertheme{default}
+
+\definecolor{darkgreen}{RGB}{0, 100, 0}
+\definecolor{brightpurple}{RGB}{160,32,240}
+
+% fg specifies foreground color
+% bg specifies background color
+% the notation color!x!white mixes the color with 1-x amount of white
+%\setbeamercolor{frametitle}{fg=darkgreen!90!black, bg=darkgreen!10!white}
+\setbeamercolor{normal text}{fg=white,bg=black}
+% defines color of structure elements, e.g., color of text in the
+% outline, block titles many more definitions possible. Each element
+% predefined by the theme can be overwritten individually
+
+\setbeamerfont{author}{size=\small,series=\bfseries,parent=structure}
+
+\setbeamercolor{background canvas}{bg=white}
+%% \usebackgroundtemplate
+%% {
+%%   \includegraphics[width=\paperwidth,height=\paperheight]{gpu_background_black.png}
+%% }
+\pgfdeclareimage[width=\paperwidth]{mybackground}{../../../templates/texslides/title.png}
+\setbeamertemplate{title page}{
+  \begin{picture}(0,0)
+    \put(-30,-163){%
+      \pgfuseimage{mybackground}
+    }
+    \put(250,-70){%
+      \begin{minipage}[b][45mm][t]{226mm}
+        \usebeamerfont{title}{\inserttitle\par}
+        \ifx\insertsubtitle\@empty%
+        \else%
+        {\vskip0.25em%
+        \usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}%
+        \fi%
+        \vskip1cm%              
+        \usebeamerfont{author}{\insertauthor\par}
+        \usebeamerfont{date}\url{malcolm.roberts@amd.com}\par
+        \usebeamerfont{date}\insertdate
+      \end{minipage}
+    }
+  \end{picture}
+}
+
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+
+
+
+\def\thetitle{rocFFT Check-In}
+\def\thesubtitle{Multi-GPU Transforms with rocFFT}
+\def\theauthor{rocFFT group}
+\def\theauthorinstitute{AMD}
+
+\def\presdate{2025-02-03}
+
+\hypersetup{
+  pdftitle=\thetitle{} \thesubtitle{},
+  pdfauthor=\theauthor{}
+}
+
+\title{\thetitle{}}
+\subtitle{\thesubtitle{}}
+\author{\theauthor{}}
+\institute{\theauthorinstitute}
+\date{\presdate}
+
+\setbeamertemplate{frametitle}[default][center]
+%\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{navigation symbols}{} 
+
+\begin{document}
+
+\nobibliography{../../../refs.bib}
+
+\setbeamertemplate{headline}{}
+%\setbeamertemplate{footline}{}
+
+{
+  \setbeamercolor{background canvas}{bg=black}
+  \setbeamercolor{normal text}{fg=white,bg=black}
+  \setbeamercolor{frametitle}{fg=white}
+  \setbeamercolor{title}{fg=white}
+  \setbeamercolor{alerted text}{fg=white}
+  \setbeamercolor{structure}{fg=white}
+  \usebeamercolor[fg]{normal text}
+  \begin{frame}
+    \titlepage
+  \end{frame}
+}
+
+
+\setbeamercolor{normal text}{fg=black,bg=white}
+\usebeamercolor[fg]{normal text}
+
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+\setbeamertemplate{footline}{
+   \leavevmode%
+   \hbox{%
+     \begin{beamercolorbox}[wd=\paperwidth,ht=1ex,dp=1.125ex]{author in head/foot}%
+  \begin{tabularx}{\paperwidth}{lR}
+    \hfill\insertframenumber/\inserttotalframenumber\hfill\phantom{.}%
+    & %
+    \includegraphics[width=0.05\textwidth]{../../../templates/texslides/footerlogo} \textcolor{black}{Together We Advance\begin{animateinline}[autoplay,loop]{1}{\_}\newframe\end{animateinline}}%
+    \\%
+  \end{tabularx}%
+  \end{beamercolorbox}%
+  }%
+}
+
+
+
+
+\begin{frame}
+  \frametitle{\thetitle{}}
+
+  \begin{center}
+    \thesubtitle{}
+  \end{center}
+
+  \bigskip
+
+  \begin{itemize}
+  \item rocFFT multi-GPU/multi-proc API
+  \item Communication Library Support
+  \item Current Status
+  \item Preliminary Scaling Results
+  \item Current and Future Work
+  \end{itemize}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{rocFFT multi-GPU/multi-node API}
+
+  \begin{center}
+    Same API for single-proc/multi-proc
+  \end{center}
+
+  \bigskip
+  
+  \begin{itemize}
+  \item Divide the input space into \lstinline{rocfft_brick}s using
+    \lstinline{rocfft_brick_create}
+    \begin{itemize}
+    \item Bricks are explicitly associated to devices
+    \item Bricks are implicitly associated to an MPI rank
+    \end{itemize}
+  \item Add the bricks to a \lstinline{rocfft_field} using
+    \lstinline{rocfft_field_add_brick}
+  \item Add the field to a \lstinline{rocfft_plan_description} using
+    \lstinline{rocfft_plan_description_add_infield} or
+    \lstinline{rocfft_plan_description_add_outfield}
+  \item Add the description to the plan as usual and execute the plan.
+  \end{itemize}
+  
+  \bigskip
+
+  \begin{center}
+    Single-GPU/multi-gpu/multi-process transforms use the same library.
+  \end{center}
+  
+\end{frame}
+  
+\begin{frame}
+  \frametitle{Communication Library Support}
+
+  Compiling rocFFT should work with any GPU-aware MPI library.
+
+  \medskip
+  
+  Tested with OpenMPI and Cray-MPI
+
+  \bigskip
+  
+  Release plan:
+  \begin{itemize}
+  \item Source is always available:
+    \begin{itemize}
+    \item cmake option \lstinline{ROCFFT_MPI_ENABLE}
+      \begin{itemize}
+        \item \lstinline{ROCFFT_CRAY_MPI_ENABLE} for cray-mpi to link
+          \lstinline{rtl}
+      \end{itemize}
+    \end{itemize}
+  \item Planned OS packages: rocfft, rocfft-openmpi, rocfft-mpich
+    \begin{itemize}
+    \item rocFFT packages can only support MPI libraries libraries
+      which also have OS packages
+    \end{itemize}
+  \end{itemize}
+  \medskip
+
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Current Status}
+
+  \begin{center}
+    Source-only early release
+  \end{center}
+  \begin{itemize}
+  \item Initial implementation in 6.3
+  \item Performance improvements in 6.4
+  \end{itemize}
+
+  
+  \bigskip
+  
+  Algorithms:
+  \begin{itemize}
+  \item Gather/Scatter
+  \item 1D regular decomposition (slab)
+  \item 2D regular decomposition (pencil)
+    \begin{itemize}
+    \item Performance verification in progress
+    \end{itemize}
+  \end{itemize}
+
+  \bigskip
+  
+  GROMACS is implementing rocfft-mpi in their backend.
+  
+\end{frame}
+  
+\begin{frame}
+  \frametitle{Preliminary Scaling Results}
+
+  \begin{center}
+    \includegraphics{m1024.pdf}
+    %% asy -f pdf datagraphs.asy  -o m1024.pdf -u 'legendlist="single,double";filenames="1024sp.dat,1024dp.dat"' 
+    
+    Execution time for a $1024^3$ complex FFT on Frontier with slab
+    decomposition
+  \end{center}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Preliminary Scaling Results}
+
+  \begin{center}
+    \includegraphics{m2048.pdf}
+    %% asy -f pdf datagraphs.asy  -o m2048.pdf -u 'legendlist="single,double";filenames="2048sp.dat,2048dp.dat"' 
+    
+    Execution time for a $2048^3$ complex FFT on Frontier with slab
+    decomposition
+  \end{center}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Current and Future Work}
+
+  \begin{itemize}
+  \item Ramping-up CI
+  \item Scaling up accuracy and performance tests
+  \item Improved algorithmic performance
+    \begin{itemize}
+    \item \lstinline{alltoall} instead of \lstinline{alltoallv}
+    \item Optimizing multi-proc with multiple GPUs per rank
+    \item Stream- and Kernel-triggered communication
+    \item Overcoming latency
+    \end{itemize}
+  \item First binary release after ROCm-enable OpenMPI is release
+  \end{itemize}
+  
+\end{frame}
+
+\end{document}
+
+
+% LocalWords:  bg fg frametitle footline lR rocFFT proc rocfft MPI
+% LocalWords:  OpenMPI cmake openmpi mpich GROMACS mpi backend FFT
+% LocalWords:  alltoall alltoallv ROCm rtl

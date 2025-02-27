@@ -1,0 +1,1 @@
+MultEvent gpu gpu-df --ini df_mi300_all.ini -t 7 -O /home/AMD/ktran102/logs/ 
