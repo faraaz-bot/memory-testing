@@ -20,8 +20,14 @@
  * - Display/write output timings/other metrics
 */
 
-// (1) hipMemcpy2D between two devices
-void run_memcpy(const int N, const std::vector<float*>&)
+// (1.1) hipMemcpy2D between two devices
+void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs)
+{
+    return;
+}
+
+// (1.2) hipMemcpy2D between two devices, using streams
+void run_memcpy_async(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs, const std::vector<hipStream_t>& streams)
 {
     return;
 }
@@ -38,7 +44,14 @@ __global__ void copy(const int N, const float* input, float* output)
 
 
 // Check equality of matrices
-bool is_same_matrix()
+bool is_same_matrix(const int N, float* input1, float* input2)
+{
+    for (auto i = 0; i < N; i++)
+    {
+        if(input1[i] != input2[i]) return false;
+    }
+    return true;
+}
 
 // Reference impl (out-of-place)
 void host_transpose(const std::vector<std::vector<float>>& input, std::vector<std::vector<float>>& output)
@@ -82,21 +95,38 @@ int main(int argc, char* argv[])
     std::mt19937                          m_engine(rd()); // Mersenne Twister, rd as seed
     std::uniform_real_distribution<float> dist{-0.5, 0.5};
 
-    std::vector<std::vector<float>> input(N);
+    std::vector<std::vector<float>> input(N, std::vector<float>(N));
     for(size_t i = 0; i < N; ++i)
         for(size_t j = 0; j < N; ++j)
         input[i][j] = dist(m_engine);
 
     // Split input and transfer it
+    // Assume inputs are evenly divisible :)
+    std::vector<float*> gpubufs_input(ngpus);
+    std::vector<float*> gpubufs_output(ngpus);
+    std::vector<hipStream_t> streams(ngpus);
+
+    const size_t buf_height = N / ngpus;
+    const size_t buf_size = N * buf_height;
+    // Allocate and init bufs, streams
+    for(size_t i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(float) * buf_size)); 
+        HIP_CHECK(hipMemcpy2D(&gpubufs_input[i], 1, &(input.data() + ngpus * buf_size), 1, N, buf_height, hipMemcpyHostToDevice));
+        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(float) * buf_size));
+    }
 
     // -- Run stuff --
-    // hipMemcpy2D
-
+    std::vector<std::vector<float>> reference_matrix(N, std::vector<float>(N));
+    host_transpose(input, reference_matrix);
+    
+    bool res;
+    run_memcpy(N, gpubufs_input, gpubufs_output);
+    res = is_same_matrix();
 
     // Copy kernel
     // MPI alltoall
     // RCCL alltoall
     
 
-    // Check for correctness of result(s)
 }
