@@ -16,6 +16,7 @@
  * TODO list:
  * - Implement basic implementations for each method
  * - Optimize stuff after
+ *     - Experiment with async, hipDeviceEnablePeerAccess, LDS optimization, bank conflicts
  * - Perform local transpose on data as well
  * - Display/write output timings/other metrics
 */
@@ -23,6 +24,17 @@
 // (1.1) hipMemcpy2D between two devices
 void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs)
 {
+    const size_t buf_height = N / in_bufs.size();
+    const size_t buf_size = N * buf_height;
+
+    for(auto i = 0; i < N; i++)
+    {
+        for(auto j = 0; j < N; j++)
+        {
+            // Copy from in[i] to out[j]
+            HIP_CHECK(hipMemcpy2D(out_bufs[j],  , in_bufs[i]));
+        }
+    }
     return;
 }
 
@@ -35,13 +47,28 @@ void run_memcpy_async(const int N, const std::vector<float*>& in_bufs, std::vect
 // (2) Copy kernel
 __global__ void copy(const int N, const float* input, float* output) 
 {
-    
+   return; 
 }
 
-// (3) MPI alltoall
+// (3.1) MPI alltoall
+// (3.2) MPI alltoallv
 
 // (4) RCCL alltoall
 
+/* Helpers for verifying correctness */
+
+// Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
+void assemble_output_to_host(const int N, const std::vector<float*>& gpubufs, float* hostbuf_result)
+{
+    const size_t buf_height = N / in_bufs.size();
+    const size_t buf_size = N * buf_height;
+
+    for(auto i = 0; i < N; i++)
+    {
+        HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeiceToHost));
+    }
+
+}
 
 // Check equality of matrices
 bool is_same_matrix(const int N, float* input1, float* input2)
@@ -108,21 +135,27 @@ int main(int argc, char* argv[])
 
     const size_t buf_height = N / ngpus;
     const size_t buf_size = N * buf_height;
+    const size_t pitch_bytes = N * sizeof(float); // Size of a column in bytes incl. padding (which is 0)
+
     // Allocate and init bufs, streams
     for(size_t i = 0; i < ngpus; i++)
     {
+        HIP_CHECK(hipSetDevice(i));
         HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(float) * buf_size)); 
-        HIP_CHECK(hipMemcpy2D(&gpubufs_input[i], 1, &(input.data() + ngpus * buf_size), 1, N, buf_height, hipMemcpyHostToDevice));
+        HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
         HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(float) * buf_size));
+        // Assign streams to gpus...
     }
 
     // -- Run stuff --
     std::vector<std::vector<float>> reference_matrix(N, std::vector<float>(N));
     host_transpose(input, reference_matrix);
     
-    bool res;
+    // bool res;
+    float* h_assembled_output = (float*)malloc(N*N*sizeof(float));
     run_memcpy(N, gpubufs_input, gpubufs_output);
-    res = is_same_matrix();
+    assemble_output_to_host(gpubufs_output, )
+    res = is_same_matrix(reference_matrix, );
 
     // Copy kernel
     // MPI alltoall
