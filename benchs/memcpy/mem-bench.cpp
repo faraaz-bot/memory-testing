@@ -3,7 +3,8 @@
 
 #include <hip/hip_runtime.h>
 #include <iostream>
-#include <mpi.h>
+#include <iomanip>
+// #include <mpi.h>
 #include <random>
 #include <stdio.h>
 #include <vector>
@@ -22,21 +23,21 @@
 */
 
 // (1.1) hipMemcpy2D between two devices
-void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs)
-{
-    const size_t buf_height = N / in_bufs.size();
-    const size_t buf_size = N * buf_height;
-
-    for(auto i = 0; i < N; i++)
-    {
-        for(auto j = 0; j < N; j++)
-        {
-            // Copy from in[i] to out[j]
-            HIP_CHECK(hipMemcpy2D(out_bufs[j],  , in_bufs[i]));
-        }
-    }
-    return;
-}
+// void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs)
+// {
+//     const size_t buf_height = N / in_bufs.size();
+//     const size_t buf_size = N * buf_height;
+//
+//     for(auto i = 0; i < N; i++)
+//     {
+//         for(auto j = 0; j < N; j++)
+//         {
+//             // Copy from in[i] to out[j]
+//             HIP_CHECK(hipMemcpy2D(out_bufs[j],  , in_bufs[i]));
+//         }
+//     }
+//     return;
+// }
 
 // (1.2) hipMemcpy2D between two devices, using streams
 void run_memcpy_async(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs, const std::vector<hipStream_t>& streams)
@@ -58,38 +59,76 @@ __global__ void copy(const int N, const float* input, float* output)
 /* Helpers for verifying correctness */
 
 // Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
-void assemble_output_to_host(const int N, const std::vector<float*>& gpubufs, float* hostbuf_result)
+// void assemble_output_to_host(const int N, const std::vector<float*>& gpubufs, float* hostbuf_result)
+// {
+//     const size_t buf_height = N / in_bufs.size();
+//     const size_t buf_size = N * buf_height;
+//
+//     for(auto i = 0; i < N; i++)
+//     {
+//         HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeiceToHost));
+//     }
+//
+// }
+
+// Helper just to print N consecutive values in gpubuf
+__global__ void print(const int N, const float* input)
 {
-    const size_t buf_height = N / in_bufs.size();
-    const size_t buf_size = N * buf_height;
+    printf("[ ");
+    for(int i = 0; i < N; i++)
+        printf("%.f ", input[i]);
+    printf("]\n");
+}
 
-    for(auto i = 0; i < N; i++)
-    {
-        HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeiceToHost));
-    }
-
+// TODO
+// Helper just to print N consecutive values in gpubuf
+__global__ void print2d(const int N, const int M, const float* input)
+{
+    printf("[ ");
+    for(int i = 0; i < N; i++)
+        printf("%.f ", input[i]);
+    printf("]");
 }
 
 // Check equality of matrices
 bool is_same_matrix(const int N, float* input1, float* input2)
 {
-    for (auto i = 0; i < N; i++)
-    {
+    for (auto i = 0; i < N*N; i++)
         if(input1[i] != input2[i]) return false;
-    }
+
     return true;
 }
 
-// Reference impl (out-of-place)
-void host_transpose(const std::vector<std::vector<float>>& input, std::vector<std::vector<float>>& output)
+// Helper to print initial host matrix and transposed matrix
+void print_host_2d(const int N, const int M, const std::vector<float>& input)
 {
-    const size_t N = input[0].size();
+    std::cout << "[\n";
+    for(int i = 0; i < N; i++)
+    {
+        std::cout << "\t[ ";
+        for(int j = 0; j < M; j++)
+        {
+            auto idx = i * N + j;
+            std::cout << std::setw(4) << input[idx] << " ";
+        }
+        std::cout << " ]\n";
+    }
+    std::cout << "]" << std::endl;
+}
+
+// Reference impl (out-of-place)
+void host_transpose(const int N, const std::vector<float>& input, std::vector<float>& output)
+{
     output.reserve(N*N);
+#pragma omp parallel for
     for(size_t i = 0; i < N; i++)
     {
         for(size_t j = 0; j < N; j++)
         {
-            output[j][i] = input[i][j];
+            // Get curr index and send data to opposing location across diagonal
+            auto idx1 = i * N + j;
+            auto idx2 = j * N + i;
+            output[idx2] = input[idx1];
         }
     }
 }
@@ -122,10 +161,17 @@ int main(int argc, char* argv[])
     std::mt19937                          m_engine(rd()); // Mersenne Twister, rd as seed
     std::uniform_real_distribution<float> dist{-0.5, 0.5};
 
-    std::vector<std::vector<float>> input(N, std::vector<float>(N));
-    for(size_t i = 0; i < N; ++i)
-        for(size_t j = 0; j < N; ++j)
-        input[i][j] = dist(m_engine);
+    std::vector<float> input(N*N);
+    for(size_t i = 0; i < N*N; ++i)
+        input[i] = dist(m_engine);
+
+    std::cout << "Generated Input Matrix:\n";
+    print_host_2d(N, N, input);
+
+    std::vector<float> reference_matrix(N*N);
+    host_transpose(N, input, reference_matrix);
+    std::cout << "Host Transposed Matrix:\n";
+    print_host_2d(N,N,reference_matrix);
 
     // Split input and transfer it
     // Assume inputs are evenly divisible :)
@@ -141,25 +187,33 @@ int main(int argc, char* argv[])
     for(size_t i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
+
         HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(float) * buf_size)); 
         HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
         HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(float) * buf_size));
-        // Assign streams to gpus...
+        std::cout << "GPU Buffer " << i << ":\n";
+        print<<<1,1>>>(buf_size, gpubufs_input[i]);
+
+        // Assign streams to current gpu
+        HIP_CHECK(hipStreamCreate(&streams[i]));
     }
 
     // -- Run stuff --
-    std::vector<std::vector<float>> reference_matrix(N, std::vector<float>(N));
-    host_transpose(input, reference_matrix);
+
     
-    // bool res;
-    float* h_assembled_output = (float*)malloc(N*N*sizeof(float));
-    run_memcpy(N, gpubufs_input, gpubufs_output);
-    assemble_output_to_host(gpubufs_output, )
-    res = is_same_matrix(reference_matrix, );
+    // std::vector<float> h_assembled_output(N*N);
+    // run_memcpy(N, gpubufs_input, gpubufs_output);
+    // assemble_output_to_host(gpubufs_output, h_assembled_output.data());
+    // bool res = is_same_matrix(reference_matrix, h_assembled_output.data());
 
     // Copy kernel
     // MPI alltoall
     // RCCL alltoall
     
-
+    // Free up buffers, streams
+    for(auto i = 0; i < ngpus; i++){
+        HIP_CHECK(hipFree(gpubufs_input[i]));
+        HIP_CHECK(hipFree(gpubufs_output[i]));
+        HIP_CHECK(hipStreamDestroy(streams[i])); 
+    }
 }
