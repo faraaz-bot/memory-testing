@@ -31,6 +31,12 @@ void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<flo
     const size_t bytes_to_copy_per_row = sub_block_size * sizeof(float); // Bytes per row in transfer
     const size_t pitch_bytes = N * sizeof(float); // Width of buf
 
+    // TODO replace with macros or struct for handling timing -- ex. check tflops/main.cpp
+    float ms;
+    hipEvent_t start, end;
+    HIP_CHECK(hipEventCreate(&start));
+    HIP_CHECK(hipEventCreate(&end));
+    HIP_CHECK(hipEventRecord(start, 0));
     for(auto i = 0; i < ngpus; i++) // Src GPU
     {
         for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA Dst GPU
@@ -41,6 +47,10 @@ void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<flo
             // HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
         }
     }
+
+    HIP_CHECK(hipEventRecord(end, 0));
+    HIP_CHECK(hipEventSynchronize(end));
+    HIP_CHECK(hipEventElapsedTime(&ms, start, end));
     return;
 }
 
@@ -169,6 +179,7 @@ int main(int argc, char* argv[])
     std::uniform_real_distribution<float> dist{-0.5, 0.5};
 
     // std::vector<float> input(N*N);
+// # pragma omp parallel for
     // for(size_t i = 0; i < N*N; ++i)
     //     input[i] = dist(m_engine);
     
@@ -217,7 +228,6 @@ int main(int argc, char* argv[])
 
     // -- Run stuff --
 
-    
     std::vector<float> h_assembled_output(N*N);
     run_memcpy(N, gpubufs_input, gpubufs_output);
     assemble_output_to_host(N, gpubufs_output, h_assembled_output.data());
