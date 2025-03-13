@@ -18,6 +18,7 @@
  * - Implement basic implementations for each method
  * - Optimize stuff after
  *     - Experiment with async, hipDeviceEnablePeerAccess, LDS optimization, bank conflicts
+ *     - Toggling SDMA
  * - Perform local transpose on data as well
  * - Display/write output timings/other metrics
 */
@@ -66,7 +67,7 @@ __global__ void copy(const int N, const float* input, float* output)
 //
 //     for(auto i = 0; i < N; i++)
 //     {
-//         HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeiceToHost));
+//         HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeviceToHost));
 //     }
 //
 // }
@@ -76,7 +77,7 @@ __global__ void print(const int N, const float* input)
 {
     printf("[ ");
     for(int i = 0; i < N; i++)
-        printf("%.f ", input[i]);
+        printf("%.6f ", input[i]);
     printf("]\n");
 }
 
@@ -86,7 +87,7 @@ __global__ void print2d(const int N, const int M, const float* input)
 {
     printf("[ ");
     for(int i = 0; i < N; i++)
-        printf("%.f ", input[i]);
+        printf("%.6f ", input[i]);
     printf("]");
 }
 
@@ -143,8 +144,6 @@ int main(int argc, char* argv[])
     app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
     // Could restrict which methods to compare
 
-    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus << " gpus.\n";
-
     app.allow_extras();
     try
     {
@@ -154,6 +153,8 @@ int main(int argc, char* argv[])
     {
         return app.exit(e);
     }
+
+    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus << " gpus.\n";
 
     // Generate random input
     // Can consider adding in option to use rocRAND for faster device generation
@@ -180,8 +181,10 @@ int main(int argc, char* argv[])
     std::vector<hipStream_t> streams(ngpus);
 
     const size_t buf_height = N / ngpus;
-    const size_t buf_size = N * buf_height;
+    const size_t buf_size = N * buf_height; // Number of elements in buf
     const size_t pitch_bytes = N * sizeof(float); // Size of a column in bytes incl. padding (which is 0)
+    
+    std::cout << "buf_height = " << buf_height << "\nbuf_size = " << buf_size << "\npitch_bytes = " << pitch_bytes << std::endl;
 
     // Allocate and init bufs, streams
     for(size_t i = 0; i < ngpus; i++)
@@ -189,8 +192,11 @@ int main(int argc, char* argv[])
         HIP_CHECK(hipSetDevice(i));
 
         HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(float) * buf_size)); 
+        HIP_CHECK(hipMemcpy(gpubufs_input[i], input.data() + i * buf_size, buf_size * sizeof(float), hipMemcpyHostToDevice));
         HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
+        
         HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(float) * buf_size));
+        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(float) * buf_size));
         std::cout << "GPU Buffer " << i << ":\n";
         print<<<1,1>>>(buf_size, gpubufs_input[i]);
 
