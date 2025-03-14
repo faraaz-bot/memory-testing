@@ -1,3 +1,5 @@
+#include <benchmark/benchmark.h>
+
 #include "mem-bench.hpp"
 
 int main(int argc, char* argv[])
