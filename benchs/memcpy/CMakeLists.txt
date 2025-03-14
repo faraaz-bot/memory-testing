@@ -1,4 +1,4 @@
-cmake_minimum_required( VERSION 3.22 )
+cmake_minimum_required( VERSION 3.19 )
 
 project(membench LANGUAGES CXX HIP)
 
@@ -11,6 +11,16 @@ find_package( hip REQUIRED )
 
 # find_package( MPI REQUIRED )
 # option(CRAY_MPI_ENABLE "Cray MPI" OFF)
+
+
+if (NOT DEFINED ENV{ROCM_PATH})
+    set (ENV{ROCM_PATH} "/opt/rocm")
+
+endif()
+
+if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
+    set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
+endif()
 
 add_executable( membench mem-bench.cpp mem-bench.hpp )
 
