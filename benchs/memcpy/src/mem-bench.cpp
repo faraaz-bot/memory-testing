@@ -1,6 +1,10 @@
 #include "mem-bench.hpp"
 
-void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs)
+/* Implementations */
+
+// (1.1) hipMemcpy2D between two devices
+template<typename Tfloat>
+void run_memcpy(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tfloat*>& out_bufs)
 {
     const size_t ngpus = in_bufs.size();
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
@@ -19,33 +23,54 @@ void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<flo
     return;
 }
 
-
 // (1.2) hipMemcpy2D between two devices, using streams
-void run_memcpy_async(const int N, const std::vector<float*>& in_bufs, std::vector<float*>& out_bufs, const std::vector<hipStream_t>& streams)
+template<typename Tfloat>
+void run_memcpy_async(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tfloat*>& out_bufs, const std::vector<hipStream_t>& streams)
 {
+
     return;
 }
 
+/* Setup and Teardown helpers */
+// Allocate and initialize gpu buffers, streams + distribute host input to gpu buffers
+template<typename Tfloat>
+void setup(size_t N, size_t ngpus, std::vector<Tfloat*>& in_gpubufs, std::vector<Tfloat*>& out_gpubufs, const std::vector<Tfloat>& host_input)
+{
+    for(size_t i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipSetDevice(i));
 
-// (4) RCCL alltoall
+        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(Tfloat) * buf_size)); 
+        HIP_CHECK(hipMemcpy(gpubufs_input[i], input.data() + i * buf_size, buf_size * sizeof(T), hipMemcpyHostToDevice));
+        // HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
+        
+        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(Tfloat) * buf_size));
+        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_size));
+        std::cout << "Input GPU Buffer " << i << ":\n";
+        // TODO template kernels
+        print<Tfloat><<<1,1>>>(buf_size, gpubufs_input[i]);
+        print2d<Tfloat><<<1,1>>>(N, buf_height, gpubufs_input[i]);
+
+        // Assign streams to current gpu
+        HIP_CHECK(hipStreamCreate(&streams[i]));
+    }
+    
+}
+
+// Clear data in 
+template<typename Tfloat>
+void reset()
+{}
+
+template<typename Tfloat>
+void teardown()
+{}
 
 /* Helpers for verifying correctness */
 
-// Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
-// Assumes hostbuf_result has enough memory allocated for it
-void assemble_output_to_host(const int N, const std::vector<float*>& gpubufs, float* hostbuf_result)
-{
-    const size_t ngpus = gpubufs.size();
-    const size_t buf_size = N * N / ngpus;
-    for(auto i = 0; i < ngpus; i++)
-    {
-        HIP_CHECK(hipMemcpy(hostbuf_result + i * buf_size, gpubufs[i], buf_size * sizeof(float), hipMemcpyDeviceToHost));
-    }
-
-}
-
-// Helper just to print N consecutive values in gpubuf
-__global__ void print(const int N, const float* input)
+// Helper kernel just to print N consecutive values in gpubuf
+template<typename Tfloat>
+__global__ void print(const int N, const float* Tfloat)
 {
     printf("[ ");
     for(int i = 0; i < N; i++)
@@ -53,8 +78,9 @@ __global__ void print(const int N, const float* input)
     printf("]\n");
 }
 
-// Helper just to print N consecutive values in gpubuf
-__global__ void print2d(const int N, const int M, const float* input)
+// Helper kernel just to print N consecutive values in gpubuf
+template<typename Tfloat>
+__global__ void print2d(const int N, const int M, const Tfloat* input)
 {
     printf("[\n");
     for(int i = 0; i < N; i++)
@@ -70,18 +96,9 @@ __global__ void print2d(const int N, const int M, const float* input)
     printf(" ]\n");
 }
 
-// Check equality of matrices
-bool is_same_matrix(const int N, const std::vector<float>& input1, const std::vector<float>& input2)
-{
-    for (auto i = 0; i < N*N; i++)
-        if(input1[i] != input2[i]) return false;
-
-    return true;
-}
-
-
 // Helper to print initial host matrix and transposed matrix
-void print_host_2d(const int N, const int M, const std::vector<float>& input)
+template<typename Tfloat>
+void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 {
     std::cout << "[\n";
     for(int i = 0; i < N; i++)
@@ -97,8 +114,32 @@ void print_host_2d(const int N, const int M, const std::vector<float>& input)
     std::cout << "]" << std::endl;
 }
 
-// Reference impl (out-of-place)
-void host_transpose(const int N, const std::vector<float>& input, std::vector<float>& output)
+// Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
+// Assumes hostbuf_result has enough memory allocated for it
+template<typename Tfloat>
+void assemble_output_to_host(const int N, const std::vector<Tfloat*>& gpubufs, Tfloat* hostbuf_result)
+{
+    const size_t ngpus = gpubufs.size();
+    const size_t buf_size = N * N / ngpus;
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipMemcpy(hostbuf_result + i * buf_size, gpubufs[i], buf_size * sizeof(Tfloat), hipMemcpyDeviceToHost));
+    }
+}
+
+// Check equality of matrices
+template<typename Tfloat>
+bool is_same_matrix(const int N, const std::vector<Tfloat>& input1, const std::vector<Tfloat>& input2)
+{
+    for (auto i = 0; i < N*N; i++)
+        if(input1[i] != input2[i]) return false;
+
+    return true;
+}
+
+// Reference impl on CPU (out-of-place)
+template<typename Tfloat>
+void host_transpose(const int N, const std::vector<Tfloat>& input, std::vector<Tfloat>& output)
 {
     output.reserve(N*N);
 #pragma omp parallel for
