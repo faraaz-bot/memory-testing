@@ -17,10 +17,12 @@
  * TODO list:
  * - Implement basic implementations for each method
  * - Optimize stuff after
- *     - Experiment with async, hipDeviceEnablePeerAccess, LDS optimization, bank conflicts
+ *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
  * - Perform local transpose on data as well
- * - Display/write output timings/other metrics
+ *
+ * - Display/write output timings/other metrics, allow ntrials
+ *     - Add Google Benchmark
 */
 
 // (1.1) hipMemcpy2D between two devices
@@ -31,26 +33,16 @@ void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<flo
     const size_t bytes_to_copy_per_row = sub_block_size * sizeof(float); // Bytes per row in transfer
     const size_t pitch_bytes = N * sizeof(float); // Width of buf
 
-    // TODO replace with macros or struct for handling timing -- ex. check tflops/main.cpp
     float ms;
     hipEvent_t start, end;
-    HIP_CHECK(hipEventCreate(&start));
-    HIP_CHECK(hipEventCreate(&end));
-    HIP_CHECK(hipEventRecord(start, 0));
-    for(auto i = 0; i < ngpus; i++) // Src GPU
+    for(auto i = 0; i < ngpus; i++) // src GPU
     {
-        for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA Dst GPU
+        HIP_CHECK(hipSetDevice(i));
+        for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
         {
-            // printf("i, j = %d, %d\n", i, j);
-            // printf("ngpus = %zu\nsub_block_size = %zu\nbytes_to_copy_per_row = %zu\npitch_bytes = %zu\n", ngpus, sub_block_size, bytes_to_copy_per_row, pitch_bytes);
             HIP_CHECK(hipMemcpy2D(out_bufs[j] + (i * sub_block_size), pitch_bytes, in_bufs[i] + (j * sub_block_size), pitch_bytes, bytes_to_copy_per_row, sub_block_size, hipMemcpyDeviceToDevice));
-            // HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
         }
     }
-
-    HIP_CHECK(hipEventRecord(end, 0));
-    HIP_CHECK(hipEventSynchronize(end));
-    HIP_CHECK(hipEventElapsedTime(&ms, start, end));
     return;
 }
 
@@ -74,16 +66,14 @@ __global__ void copy(const int N, const float* input, float* output)
 /* Helpers for verifying correctness */
 
 // Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
-// Assuming hostbuf_result has enough memory allocated for it
+// Assumes hostbuf_result has enough memory allocated for it
 void assemble_output_to_host(const int N, const std::vector<float*>& gpubufs, float* hostbuf_result)
 {
     const size_t ngpus = gpubufs.size();
     const size_t buf_size = N * N / ngpus;
     for(auto i = 0; i < ngpus; i++)
     {
-        // HIP_CHECK(hipMemcpy2D(hostbuf_result + i * buf_size, pitch_bytes, gpubufs_input[i], pitch_bytes, N, buf_height, hipMemcpyDeviceToHost));
         HIP_CHECK(hipMemcpy(hostbuf_result + i * buf_size, gpubufs[i], buf_size * sizeof(float), hipMemcpyDeviceToHost));
-        // HIP_CHECK(hipMemcpy(gpubufs_input[i], input.data() + i * buf_size, buf_size * sizeof(float), hipMemcpyHostToDevice));
     }
 
 }
@@ -97,14 +87,21 @@ __global__ void print(const int N, const float* input)
     printf("]\n");
 }
 
-// TODO
 // Helper just to print N consecutive values in gpubuf
 __global__ void print2d(const int N, const int M, const float* input)
 {
-    printf("[ ");
+    printf("[\n");
     for(int i = 0; i < N; i++)
-        printf("%.6f ", input[i]);
-    printf("]");
+    {
+        printf("\t[ ");
+        for(int j = 0; j < M; j++)
+        {
+            auto idx = i + N * j;
+            printf("%.6f ", input[idx]);
+        }
+        printf("]\n");
+    }
+    printf(" ]\n");
 }
 
 // Check equality of matrices
@@ -122,7 +119,7 @@ void print_host_2d(const int N, const int M, const std::vector<float>& input)
     std::cout << "[\n";
     for(int i = 0; i < N; i++)
     {
-        std::cout << "\t[ ";
+        std::cout << "  [ ";
         for(int j = 0; j < M; j++)
         {
             auto idx = i * N + j;
@@ -156,9 +153,13 @@ int main(int argc, char* argv[])
 
     size_t N;
     size_t ngpus;
-    app.add_option("-n, --length", N, "Length of input square matrix")->default_val(1000U);
+    int verbose;
+    app.add_option("-n, --length", N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
-    // Could restrict which methods to compare
+    app.add_option("-V, --verbose", verbose, "Adjust output verbosity level")->default_val(0);
+
+    // TODO option: precision, input generation (host, dev, random, sequence?), which benchmark(s) to run
+    // , output format options
 
     app.allow_extras();
     try
@@ -221,9 +222,23 @@ int main(int argc, char* argv[])
         HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(float) * buf_size));
         std::cout << "Input GPU Buffer " << i << ":\n";
         print<<<1,1>>>(buf_size, gpubufs_input[i]);
+        print2d<<<1,1>>>(N, buf_height, gpubufs_input[i]);
 
         // Assign streams to current gpu
         HIP_CHECK(hipStreamCreate(&streams[i]));
+    }
+
+    // Enable peer to peer memory access between GPUs
+    for(size_t i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipSetDevice(i));
+        for(size_t j = 0; j < ngpus; j++)
+        {
+            int can_access_peer;
+            HIP_CHECK(hipDeviceCanAccessPeer(&can_access_peer, i, j));
+            if(can_access_peer)
+                HIP_CHECK(hipDeviceEnablePeerAccess(j, 0));
+        }
     }
 
     // -- Run stuff --
@@ -235,6 +250,7 @@ int main(int argc, char* argv[])
     std::cout << "Are two matrices equal? " << res << "\nOutput Assembled on Host:\n"; // Currently should not, due to lack of local transpose!
     print_host_2d(N,N,h_assembled_output);
 
+    // Implement cleanup -> fill/memset existing bufs with 0?
 
     // Copy kernel
     // MPI alltoall
@@ -243,10 +259,21 @@ int main(int argc, char* argv[])
     // Free up buffers, streams
     for(auto i = 0; i < ngpus; i++){
         HIP_CHECK(hipSetDevice(i));
-        // std::cout << "\nOutput GPU Buffer " << i << ":\n";
-        // print<<<1,1>>>(buf_size, gpubufs_output[i]);
         HIP_CHECK(hipFree(gpubufs_input[i]));
         HIP_CHECK(hipFree(gpubufs_output[i]));
         HIP_CHECK(hipStreamDestroy(streams[i])); 
     }
+
+    // Disabling peer access
+    // for(size_t i = 0; i < ngpus; i++)
+    // {
+    //     HIP_CHECK(hipSetDevice(i));
+    //     for(size_t j = 0; j < ngpus; j++)
+    //     {
+    //         int can_access_peer;
+    //         HIP_CHECK(hipDeviceCanAccessPeer(&can_access_peer, i, j));
+    //         if(can_access_peer)
+    //             hipDeviceDisablePeerAccess(j);
+    //     }
+    // }
 }
