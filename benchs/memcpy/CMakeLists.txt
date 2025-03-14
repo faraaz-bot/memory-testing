@@ -9,6 +9,8 @@ set( CMAKE_CXX_EXTENSIONS OFF )
 # list(APPEND CMAKE_PREFIX_PATH $ENV{ROCM_PATH}/hip $ENV{ROCM_PATH})
 find_package( hip REQUIRED )
 
+include_directories(include)
+
 # find_package( MPI REQUIRED )
 # option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
@@ -22,7 +24,7 @@ if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
     set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
 endif()
 
-add_executable( membench mem-bench.cpp mem-bench.hpp )
+add_executable( membench main.cpp src/mem-bench.cpp)
 
 set_source_files_properties(mem-bench.cpp mem-bench.hpp PROPERTIES LANGUAGE HIP)
 target_link_libraries( membench hip::host hip::device )
