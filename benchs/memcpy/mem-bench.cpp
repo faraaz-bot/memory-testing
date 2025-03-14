@@ -37,7 +37,6 @@ void run_memcpy(const int N, const std::vector<float*>& in_bufs, std::vector<flo
     hipEvent_t start, end;
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
-        HIP_CHECK(hipSetDevice(i));
         for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
         {
             HIP_CHECK(hipMemcpy2D(out_bufs[j] + (i * sub_block_size), pitch_bytes, in_bufs[i] + (j * sub_block_size), pitch_bytes, bytes_to_copy_per_row, sub_block_size, hipMemcpyDeviceToDevice));
