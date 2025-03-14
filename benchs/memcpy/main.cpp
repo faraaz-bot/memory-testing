@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
-
-#include "mem-bench.hpp"
+#include "../../eg/argv/CLI11.hpp"
+#include "src/mem-bench.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -9,9 +9,11 @@ int main(int argc, char* argv[])
     size_t N;
     size_t ngpus;
     int verbose;
+    precision p;
     app.add_option("-n, --length", N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
     app.add_option("-V, --verbose", verbose, "Adjust output verbosity level")->default_val(0);
+    app.add_option("-p, --precision", p, "Data precision: single (default), double")->default_val(p_single);
 
     // TODO option: precision, input generation (host, dev, random, sequence?), which benchmark(s) to run
     // , output format options
@@ -45,12 +47,12 @@ int main(int argc, char* argv[])
         input[i] = i;
     
     std::cout << "Input Matrix:\n";
-    print_host_2d(N, N, input);
+    print_host_2d<float>(N, N, input);
 
     std::vector<float> reference_matrix(N*N);
     host_transpose(N, input, reference_matrix);
     std::cout << "Host Transposed Matrix:\n";
-    print_host_2d(N,N,reference_matrix);
+    print_host_2d<float>(N,N,reference_matrix);
 
     // Split input and transfer it
     // Assume inputs are evenly divisible :)
@@ -58,30 +60,9 @@ int main(int argc, char* argv[])
     std::vector<float*> gpubufs_output(ngpus);
     std::vector<hipStream_t> streams(ngpus);
 
-    const size_t buf_height = N / ngpus;
-    const size_t buf_size = N * buf_height; // Number of elements in buf
-    const size_t pitch_bytes = N * sizeof(float); // Size of a column in bytes incl. padding (which is 0)
-    
-    std::cout << "buf_height = " << buf_height << "\nbuf_size = " << buf_size << "\npitch_bytes = " << pitch_bytes << std::endl;
 
     // Allocate and init bufs, streams
-    for(size_t i = 0; i < ngpus; i++)
-    {
-        HIP_CHECK(hipSetDevice(i));
-
-        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(float) * buf_size)); 
-        HIP_CHECK(hipMemcpy(gpubufs_input[i], input.data() + i * buf_size, buf_size * sizeof(float), hipMemcpyHostToDevice));
-        // HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
-        
-        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(float) * buf_size));
-        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(float) * buf_size));
-        std::cout << "Input GPU Buffer " << i << ":\n";
-        print<<<1,1>>>(buf_size, gpubufs_input[i]);
-        print2d<<<1,1>>>(N, buf_height, gpubufs_input[i]);
-
-        // Assign streams to current gpu
-        HIP_CHECK(hipStreamCreate(&streams[i]));
-    }
+    setup<float>(N, ngpus, gpubufs_input, gpubufs_output, input, streams);
 
     // Enable peer to peer memory access between GPUs
     for(size_t i = 0; i < ngpus; i++)
@@ -97,13 +78,18 @@ int main(int argc, char* argv[])
     }
 
     // -- Run stuff --
-
+    if(verbose > 2)
+    {
+        std::cout << "Input GPU Buffer " << i << ":\n";
+        print<Tfloat><<<1,1>>>(buf_size, gpubufs_input[i]);
+        print2d<Tfloat><<<1,1>>>(N, buf_height, gpubufs_input[i]);
+    }
     std::vector<float> h_assembled_output(N*N);
-    run_memcpy(N, gpubufs_input, gpubufs_output);
-    assemble_output_to_host(N, gpubufs_output, h_assembled_output.data());
-    bool res = is_same_matrix(N, reference_matrix, h_assembled_output);
+    run_memcpy<float>(N, gpubufs_input, gpubufs_output);
+    assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
+    bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
     std::cout << "Are two matrices equal? " << res << "\nOutput Assembled on Host:\n"; // Currently should not, due to lack of local transpose!
-    print_host_2d(N,N,h_assembled_output);
+    print_host_2d<float>(N,N,h_assembled_output);
 
     // Implement cleanup -> fill/memset existing bufs with 0?
 

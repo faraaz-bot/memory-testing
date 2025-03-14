@@ -40,11 +40,11 @@ set(HAVE_STD_REGEX ON)
 set(RUN_HAVE_STD_REGEX 1)
 FetchContent_MakeAvailable(googlebenchmark)
 
-add_executable( membench main.cpp src/mem-bench.cpp)
+add_executable( membench main.cpp src/mem-bench.hpp )
 
-set_source_files_properties(mem-bench.cpp mem-bench.hpp PROPERTIES LANGUAGE HIP)
+set_source_files_properties(src/mem-bench.hpp src/helper.hpp PROPERTIES LANGUAGE HIP)
 target_link_libraries( membench hip::host hip::device )
-target_link_libraries( membench benchmark::benchmark)
+target_link_libraries( membench benchmark::benchmark )
 
 # if ( CRAY_MPI_ENABLE )
 #     get_filename_component( MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
