@@ -6,6 +6,15 @@ set( CMAKE_CXX_STANDARD 17 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
 set( CMAKE_CXX_EXTENSIONS OFF )
 
+if (NOT DEFINED ENV{ROCM_PATH})
+    set (ENV{ROCM_PATH} "/opt/rocm")
+
+endif()
+
+if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
+    set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
+endif()
+
 # list(APPEND CMAKE_PREFIX_PATH $ENV{ROCM_PATH}/hip $ENV{ROCM_PATH})
 find_package( hip REQUIRED )
 
@@ -15,14 +24,6 @@ include(FetchContent)
 # option(CRAY_MPI_ENABLE "Cray MPI" OFF)
 
 
-if (NOT DEFINED ENV{ROCM_PATH})
-    set (ENV{ROCM_PATH} "/opt/rocm")
-
-endif()
-
-if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
-    set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
-endif()
 
 
 # Google Benchmark (https://github.com/google/benchmark)
