@@ -1,21 +1,23 @@
 #include <hip/hip_runtime.h>
 
-#define HIP_CHECK(cmd)                                                                  \
-    do {                                                                                \
-        hipError_t error = (cmd);                                                       \
-        if (error != hipSuccess)                                                        \
-        {                                                                               \
-            std::cerr << "Encountered HIP error (" << hipGetErrorString(error)          \
-                      << ") at line " << __LINE__ << " in file " << __FILE__ << "\n";   \
-            exit(-1);                                                                   \
-        }                                                                               \
-    } while (0)
+#define HIP_CHECK(cmd)                                                                         \
+    do                                                                                         \
+    {                                                                                          \
+        hipError_t error = (cmd);                                                              \
+        if(error != hipSuccess)                                                                \
+        {                                                                                      \
+            std::cerr << "Encountered HIP error (" << hipGetErrorString(error) << ") at line " \
+                      << __LINE__ << " in file " << __FILE__ << "\n";                          \
+            exit(-1);                                                                          \
+        }                                                                                      \
+    } while(0)
 
 enum precision
 {
-    p_half,
     p_single,
     p_double,
+    p_complex_single,
+    p_complex_double,
 };
 
 enum generator
@@ -33,6 +35,22 @@ enum generator
 //     all,
 // };
 
+// Used for CLI11 parsing of precision enum
+static bool lexical_cast(const std::string& word, precision& p)
+{
+    if(word == "single" || word == "0")
+        p = p_single;
+    else if(word == "double" || word == "1")
+        p = p_double;
+    else if(word == "c_single" || word == "2")
+        p = p_complex_single;
+    else if(word == "c_double" || word == "3")
+        p = p_complex_double;
+    else
+        throw std::runtime_error("Invalid specified specified");
+    return true;
+}
+
 // Used for CLI11 parsing of input gen enum
 static bool lexical_cast(const std::string& word, generator& gen)
 {
@@ -44,4 +62,3 @@ static bool lexical_cast(const std::string& word, generator& gen)
         throw std::runtime_error("Invalid input generator specified");
     return true;
 }
-

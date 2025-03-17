@@ -71,15 +71,17 @@ int main(int argc, char* argv[])
     generator gen;
     app.add_option("-n, --length", N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
-    app.add_option("-p, --precision", p, "Data precision: single (default), double")->default_val(p_single);
-    app.add_option("-i, --inputGen", gen, "Data generation type: random host (default), ordered sequence")->default_val("h_random");
+    app.add_option("-p, --precision", p, "Data precision: single (default), double")
+        ->default_val("single");
+    app.add_option(
+           "-i, --inputGen", gen, "Data generation type:\n0) random (default)\n1) ordered sequence")
+        ->default_val(0);
     app.add_option("-v, --verbose", verbose, "Adjust output verbosity level")->default_val(0);
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
 
-    // TODO option: precision, which benchmark(s) to run
-    // , output format options
+    // TODO option: which benchmark(s) to run, output format options
 
     app.allow_extras();
     try
@@ -112,20 +114,21 @@ int main(int argc, char* argv[])
         std::cout << i << " ";
     std::cout << std::endl;
 
+    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus
+              << " gpus.\n";
 
-    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus << " gpus.\n";
-
-    // Generate input data 
-    std::vector<float> input(N*N);
+    // Generate input data
+    std::vector<float> input(N * N);
     if(gen == h_random)
     {
-        std::random_device rd;
-        std::mt19937       m_engine(rd()); // Mersenne Twister, rd as seed
+        std::random_device                    rd;
+        std::mt19937                          m_engine(rd()); // Mersenne Twister, rd as seed
         std::uniform_real_distribution<float> dist{-0.5, 0.5};
 #pragma omp parallel for
-        for(size_t i = 0; i < N*N; ++i)
+        for(size_t i = 0; i < N * N; ++i)
             input[i] = dist(m_engine);
-    } else if (gen == h_ordered)
+    }
+    else if(gen == h_ordered)
     {
         for(size_t i = 0; i < N * N; i++)
             input[i] = i;
