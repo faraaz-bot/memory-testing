@@ -11,18 +11,18 @@
         }                                                                               \
     } while (0)
 
-typedef enum precision_type
+enum precision
 {
     p_half,
     p_single,
     p_double,
-} precision;
+};
 
-typedef enum generators
+enum generator
 {
     h_random,
     h_ordered,
-} generator
+};
 
 // TODO figure out way to easily toggle benchmarks to run
 // enum copy_operation
@@ -32,3 +32,16 @@ typedef enum generators
 //     copy_kernel,
 //     all,
 // };
+
+// Used for CLI11 parsing of input gen enum
+static bool lexical_cast(const std::string& word, generator& gen)
+{
+    if(word == "h_random" || word == "0")
+        gen = h_random;
+    else if(word == "h_ordered" || word == "1")
+        gen = h_ordered;
+    else
+        throw std::runtime_error("Invalid input generator specified");
+    return true;
+}
+

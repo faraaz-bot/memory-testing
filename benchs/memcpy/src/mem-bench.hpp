@@ -125,7 +125,6 @@ void setup(size_t N, size_t ngpus, std::vector<Tfloat*>& gpubufs_input, std::vec
     const size_t buf_size = N * buf_height; // Number of elements in buf
     const size_t pitch_bytes = N * sizeof(Tfloat); // Size of a column in bytes incl. padding (which is 0)
     
-    std::cout << "buf_height = " << buf_height << "\nbuf_size = " << buf_size << "\npitch_bytes = " << pitch_bytes << std::endl;
     for(size_t i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
