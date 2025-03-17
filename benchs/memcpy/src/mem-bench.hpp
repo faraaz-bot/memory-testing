@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <stdio.h>
 #include <vector>
+
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
  * between multiple gpus. Currently will do out-of-place operations on 
@@ -18,6 +19,11 @@
  *
  * - Display/write output timings/other metrics, allow ntrials
  *     - Add Google Benchmark
+ *
+ * - Further out tasks to consider
+ *     - hipGraph vs stream (ngpus vs ngpus^2 # of streams) async comparison
+ *     - Rectangular data (still out of place)
+ *     - Arbitrary dim?
 */
 
 /* Helpers for verifying correctness */
@@ -32,7 +38,7 @@ __global__ void print(const int N, const Tfloat* input)
     printf("]\n");
 }
 
-// Helper kernel just to print N consecutive values in gpubuf
+// Helper kernel just to print NxM consecutive values in gpubuf, with 2d formatting
 template<typename Tfloat>
 __global__ void print2d(const int N, const int M, const Tfloat* input)
 {
@@ -69,7 +75,7 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 }
 
 // Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
-// Assumes hostbuf_result has enough memory allocated for it
+// * Assumes hostbuf_result has enough memory allocated for it
 template<typename Tfloat>
 void assemble_output_to_host(const int N, const std::vector<Tfloat*>& gpubufs, Tfloat* hostbuf_result)
 {

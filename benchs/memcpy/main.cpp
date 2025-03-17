@@ -10,10 +10,12 @@ int main(int argc, char* argv[])
     size_t ngpus;
     int verbose;
     precision p;
+    generator gen;
     app.add_option("-n, --length", N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
     app.add_option("-V, --verbose", verbose, "Adjust output verbosity level")->default_val(0);
     app.add_option("-p, --precision", p, "Data precision: single (default), double")->default_val(p_single);
+    app.add_option("-i, --inputGen", gen, "Data generation type: random host, ordered sequence")->default_val(ordered);
 
     // TODO option: precision, input generation (host, dev, random, sequence?), which benchmark(s) to run
     // , output format options
@@ -42,7 +44,6 @@ int main(int argc, char* argv[])
     //     input[i] = dist(m_engine);
     
     // For debugging, [1,2,3,..N*N]
-    std::vector<float> input(N*N);
     for(size_t i = 0; i < N*N; i++)
         input[i] = i;
     

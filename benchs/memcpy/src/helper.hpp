@@ -18,6 +18,12 @@ typedef enum precision_type
     p_double,
 } precision;
 
+typedef enum generators
+{
+    h_random,
+    h_ordered,
+} generator
+
 // TODO figure out way to easily toggle benchmarks to run
 // enum copy_operation
 // {
