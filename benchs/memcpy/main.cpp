@@ -160,6 +160,19 @@ int main(int argc, char* argv[])
     // Allocate and init bufs, streams
     setup<float>(N, ngpus, gpubufs_input, gpubufs_output, input, streams);
 
+    // Optionally output gpu bufs after distributing data
+    if(verbose > 3)
+    {
+        const size_t buf_height = N / ngpus;
+        const size_t buf_size   = N * buf_height;
+        for(auto i = 0; i < ngpus; i++)
+        {
+            std::cout << "Input GPU Buffer " << i << ":\n";
+            print<float><<<1, 1>>>(buf_size, gpubufs_input[i]);
+            print2d<float><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
+        }
+    }
+
     // Enable peer to peer memory access between GPUs
     for(size_t i = 0; i < ngpus; i++)
     {
@@ -174,12 +187,6 @@ int main(int argc, char* argv[])
     }
 
     // -- Run stuff --
-    // if(verbose > 2)
-    // {
-    //     std::cout << "Input GPU Buffer " << i << ":\n";
-    //     print<float><<<1, 1>>>(buf_size, gpubufs_input[i]);
-    //     print2d<float><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
-    // }
     std::vector<float> h_assembled_output(N * N);
     run_memcpy<float>(N, gpubufs_input, gpubufs_output);
     assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
