@@ -102,17 +102,18 @@ int main(int argc, char* argv[])
     char** cArga     = cArgs.data();
     int    cArg_size = cArgs.size();
 
-    std::cout << "Before:\n";
-    for(auto& i : cArgs)
-        std::cout << i << " ";
-    std::cout << std::endl;
+    // TODO Better way of handling benchmark args at same time as CLI11?
+    // std::cout << "Before:\n";
+    // for(auto& i : cArgs)
+    //     std::cout << i << " ";
+    // std::cout << std::endl;
 
     benchmark::Initialize(&cArg_size, cArga);
 
-    std::cout << "After:\n";
-    for(auto& i : cArgs)
-        std::cout << i << " ";
-    std::cout << std::endl;
+    // std::cout << "After:\n";
+    // for(auto& i : cArgs)
+    //     std::cout << i << " ";
+    // std::cout << std::endl;
 
     std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus
               << " gpus.\n";
@@ -140,6 +141,7 @@ int main(int argc, char* argv[])
         print_host_2d<float>(N, N, input);
     }
 
+    // Compute host-side transposed matrix for correctness check
     std::vector<float> reference_matrix(N * N);
     host_transpose(N, input, reference_matrix);
 
@@ -153,7 +155,7 @@ int main(int argc, char* argv[])
     // Assume inputs are evenly divisible :)
     std::vector<float*>      gpubufs_input(ngpus);
     std::vector<float*>      gpubufs_output(ngpus);
-    std::vector<hipStream_t> streams(ngpus);
+    std::vector<hipStream_t> streams(ngpus * ngpus);
 
     // Allocate and init bufs, streams
     setup<float>(N, ngpus, gpubufs_input, gpubufs_output, input, streams);
@@ -197,20 +199,16 @@ int main(int argc, char* argv[])
     // MPI alltoall
     // RCCL alltoall
 
+    // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
     benchmarks.emplace_back(
         benchmark::RegisterBenchmark("test_bench", &run_benchmark<unsigned int>, trials, N));
     benchmarks.emplace_back(
         benchmark::RegisterBenchmark("test_bench2", &run_benchmark<unsigned int>, trials, N));
+
     // Free up buffers, streams
-    for(auto i = 0; i < ngpus; i++)
-    {
-        HIP_CHECK(hipSetDevice(i));
-        HIP_CHECK(hipFree(gpubufs_input[i]));
-        HIP_CHECK(hipFree(gpubufs_output[i]));
-        HIP_CHECK(hipStreamDestroy(streams[i]));
-    }
+    teardown<float>(ngpus, gpubufs_input, gpubufs_output, streams);
 
     // Disabling peer access
     // for(size_t i = 0; i < ngpus; i++)

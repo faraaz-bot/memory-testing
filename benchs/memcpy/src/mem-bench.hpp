@@ -135,36 +135,48 @@ void setup(size_t                     N,
 {
     const size_t buf_height = N / ngpus;
     const size_t buf_size   = N * buf_height; // Number of elements in buf
-    const size_t pitch_bytes
-        = N * sizeof(Tfloat); // Size of a column in bytes incl. padding (which is 0)
 
-    for(size_t i = 0; i < ngpus; i++)
+    for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
-
         HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(Tfloat) * buf_size));
         HIP_CHECK(hipMemcpy(gpubufs_input[i],
                             host_input.data() + i * buf_size,
                             buf_size * sizeof(Tfloat),
                             hipMemcpyHostToDevice));
-        // HIP_CHECK(hipMemcpy2D(gpubufs_input[i], pitch_bytes, input.data() + i * buf_size, pitch_bytes, N, buf_height, hipMemcpyHostToDevice));
-
         HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(Tfloat) * buf_size));
         HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_size));
 
-        // Assign streams to current gpu
-        HIP_CHECK(hipStreamCreate(&streams[i]));
+        // Assign streams to current gpu (on order of ngpus^2) for memcpy async
+        for(auto j = 0; j < ngpus; j++)
+            HIP_CHECK(hipStreamCreate(&streams[i * ngpus + j]));
     }
 }
 
-// Clear data in
-// template<typename Tfloat>
-// void reset()
-// {}
-//
-// template<typename Tfloat>
-// void teardown()
-// {}
+// Clear data in buffers to zero
+template <typename Tfloat>
+void reset(const int             ngpus,
+           std::vector<Tfloat*>& gpubufs_input,
+           std::vector<Tfloat*>& gpubufs_output)
+{
+}
+
+// Free allocated memory and streams
+template <typename Tfloat>
+void teardown(const int                 ngpus,
+              std::vector<Tfloat*>&     gpubufs_input,
+              std::vector<Tfloat*>&     gpubufs_output,
+              std::vector<hipStream_t>& streams)
+{
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipSetDevice(i));
+        HIP_CHECK(hipFree(gpubufs_input[i]));
+        HIP_CHECK(hipFree(gpubufs_output[i]));
+        for(auto j = 0; j < ngpus; j++)
+            HIP_CHECK(hipStreamDestroy(streams[i * ngpus + j]));
+    }
+}
 
 /* Implementations */
 
@@ -178,8 +190,6 @@ void run_memcpy(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tf
         = sub_block_size * sizeof(float); // Bytes per row in transfer
     const size_t pitch_bytes = N * sizeof(float); // Width of buf
 
-    float      ms;
-    hipEvent_t start, end;
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
         for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
@@ -196,7 +206,7 @@ void run_memcpy(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tf
     return;
 }
 
-// (1.2) hipMemcpy2D between two devices, using streams
+// (1.2) hipMemcpy2D between two devices, using stream per each gpu-gpu interaction
 template <typename Tfloat>
 void run_memcpy_async(const int                       N,
                       const std::vector<Tfloat*>&     in_bufs,
