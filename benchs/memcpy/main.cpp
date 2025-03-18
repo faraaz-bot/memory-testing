@@ -1,26 +1,69 @@
 #include <benchmark/benchmark.h>
 #include <limits.h>
-#include <random>
 #include <string>
 #include <vector>
 
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
 
-template <typename T, typename func>
+using func_type
+    = std::function<void(const benchmark_context&, const std::vector<float*>, std::vector<float*>)>;
+
+template <typename T>
 void run_benchmark(benchmark::State&  state,
                    benchmark_context& ctx,
                    const size_t       trials,
                    std::vector<T>&    h_input,
-                   const func&        f)
+                   func_type          f)
 {
-    const size_t ngpus = ctx.ngpus std::vector<float*> gpubufs_input(ngpus);
-    std::vector<float*>                                gpubufs_output(ngpus);
-    std::vector<hipStream_t>                           streams(ngpus * ngpus);
+    const size_t N       = ctx.N;
+    const size_t ngpus   = ctx.ngpus;
+    int          verbose = ctx.verbose;
 
-    setup<T>(ctx.N, ngpus, ) hipStream_t timing_stream;
-    hipEvent_t                           start, stop;
+    // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
+    std::vector<float*>      gpubufs_input(ngpus);
+    std::vector<float*>      gpubufs_output(ngpus);
+    std::vector<hipStream_t> streams(ngpus * ngpus);
+    setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, streams);
 
+    // Compute host-side transposed matrix for correctness check
+    std::vector<float> reference_matrix(N * N);
+    host_transpose(N, h_input, reference_matrix);
+
+    if(verbose > 1)
+    {
+        std::cout << "Host Transposed Matrix:\n";
+        print_host_2d<float>(N, N, reference_matrix);
+    }
+
+    // Allocate and init bufs, streams
+    setup<float>(N, ngpus, gpubufs_input, gpubufs_output, h_input, streams);
+
+    // Optionally output gpu bufs after distributing data
+    if(verbose > 3)
+    {
+        const size_t buf_height = N / ngpus;
+        const size_t buf_size   = N * buf_height;
+        for(auto i = 0; i < ngpus; i++)
+        {
+            std::cout << "Input GPU Buffer " << i << ":\n";
+            print<float><<<1, 1>>>(buf_size, gpubufs_input[i]);
+            print2d<float><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
+        }
+    }
+
+    // std::vector<float> h_assembled_output(N * N);
+    // assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
+    // bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
+    // if(verbose)
+    // {
+    //     std::cout << "Output Assembled on Host:\n";
+    //     print_host_2d<float>(N, N, h_assembled_output);
+    // }
+
+    // Setup timing events
+    hipStream_t timing_stream;
+    hipEvent_t  start, stop;
     HIP_CHECK(hipStreamCreate(&timing_stream));
     HIP_CHECK(hipEventCreate(&start));
     HIP_CHECK(hipEventCreate(&stop));
@@ -31,7 +74,7 @@ void run_benchmark(benchmark::State&  state,
 
         for(size_t __ = 0; __ < trials; __++)
         {
-            f(i1, i2);
+            f(ctx, gpubufs_input, gpubufs_output);
         }
 
         HIP_CHECK(hipEventRecord(stop, timing_stream));
@@ -41,7 +84,7 @@ void run_benchmark(benchmark::State&  state,
         HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
         state.SetIterationTime(elapsed_ms / 1000.f);
 
-        reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
+        // reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
     }
 
     state.counters["Throughput (GB/S)"]
@@ -50,6 +93,7 @@ void run_benchmark(benchmark::State&  state,
 
     HIP_CHECK(hipEventDestroy(stop));
     HIP_CHECK(hipEventDestroy(start));
+    teardown(ngpus, gpubufs_input, gpubufs_output, streams);
 }
 
 int main(int argc, char* argv[])
@@ -57,12 +101,12 @@ int main(int argc, char* argv[])
     CLI::App app{"Memcpy bench"};
 
     benchmark_context ctx;
+    size_t            trials;
     app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")->default_val(4U);
-    app.add_option("-v, --verbose", ctx.verbosity, "Adjust output verbosity level")->default_val(0);
-    app.add_option("-t, --trials",
-                   ctx.trials,
-                   "The amount of minimum trials to run per function (default 20)")
+    app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
+    app.add_option(
+           "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
 
     precision p;
@@ -91,8 +135,10 @@ int main(int argc, char* argv[])
         return app.exit(e);
     }
 
-    if(verbose)
-        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus
+    const size_t N = ctx.N;
+
+    if(ctx.verbose)
+        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
                   << " gpus.\n";
 
     std::vector<char*> cArgs(argv, argv + argc);
@@ -119,50 +165,13 @@ int main(int argc, char* argv[])
     // std::cout << std::endl;
 
     // Generate input data
-
-    if(verbose)
-    {
-        std::cout << "Input Matrix:\n";
-        print_host_2d<float>(N, N, input);
-    }
-
-    // Compute host-side transposed matrix for correctness check
-    std::vector<float> reference_matrix(N * N);
-    host_transpose(N, input, reference_matrix);
-
-    if(verbose > 1)
-    {
-        std::cout << "Host Transposed Matrix:\n";
-        print_host_2d<float>(N, N, reference_matrix);
-    }
-
-    // Split input and transfer it
-    // Assume inputs are evenly divisible :)
-    std::vector<float*>      gpubufs_input(ngpus);
-    std::vector<float*>      gpubufs_output(ngpus);
-    std::vector<hipStream_t> streams(ngpus * ngpus);
-
-    // Allocate and init bufs, streams
-    setup<float>(N, ngpus, gpubufs_input, gpubufs_output, input, streams);
-
-    // Optionally output gpu bufs after distributing data
-    if(verbose > 3)
-    {
-        const size_t buf_height = N / ngpus;
-        const size_t buf_size   = N * buf_height;
-        for(auto i = 0; i < ngpus; i++)
-        {
-            std::cout << "Input GPU Buffer " << i << ":\n";
-            print<float><<<1, 1>>>(buf_size, gpubufs_input[i]);
-            print2d<float><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
-        }
-    }
+    auto h_input = generate(N, N, gen, min_val, max_val);
 
     // Enable peer to peer memory access between GPUs
-    for(size_t i = 0; i < ngpus; i++)
+    for(size_t i = 0; i < ctx.ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
-        for(size_t j = 0; j < ngpus; j++)
+        for(size_t j = 0; j < ctx.ngpus; j++)
         {
             int can_access_peer;
             HIP_CHECK(hipDeviceCanAccessPeer(&can_access_peer, i, j));
@@ -171,39 +180,15 @@ int main(int argc, char* argv[])
         }
     }
 
-    // -- Run stuff --
-    // TODO register benchmark, and move this stuff there
-    std::vector<float> h_assembled_output(N * N);
-    run_memcpy<float>(N, gpubufs_input, gpubufs_output);
-    assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
-    // bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
-    if(verbose)
-    {
-        // std::cout
-        //     << "Are two matrices equal? " << res
-        //     << "\nOutput Assembled on Host:\n"; // Currently should not, due to lack of local transpose! *unless ngpus = n
-        std::cout << "Output Assembled on Host:\n";
-        print_host_2d<float>(N, N, h_assembled_output);
-    }
-
-    // Implement cleanup -> fill/memset existing bufs with 0?
-
-    // Copy kernel
-    // MPI alltoall
-    // RCCL alltoall
-
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
-    benchmarks.emplace_back(
-        benchmark::RegisterBenchmark("test_bench", &run_benchmark<unsigned int>, trials, N));
-    benchmarks.emplace_back(
-        benchmark::RegisterBenchmark("test_bench2", &run_benchmark<unsigned int>, trials, N));
-
-    // Free up buffers, streams
-    teardown<float>(ngpus, gpubufs_input, gpubufs_output, streams);
-
-    // Disabling peer access
+    benchmarks.emplace_back(benchmark::RegisterBenchmark("test_bench", [=](benchmark::State& st) {
+        st, &run_benchmark<float>, ctx, trials, h_input,
+            [](const benchmark_context&   ctx,
+               const std::vector<float*>& in_bufs,
+               std::vector<float*>&       out_bufs) { run_memcpy(ctx, in_bufs, out_bufs); };
+    }));
     // for(size_t i = 0; i < ngpus; i++)
     // {
     //     b->UseManualTime();

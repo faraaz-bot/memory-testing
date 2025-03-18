@@ -1,4 +1,5 @@
 #include <hip/hip_runtime.h>
+#include <vector>
 
 #define HIP_CHECK(cmd)                                                                         \
     do                                                                                         \
@@ -19,7 +20,7 @@ struct benchmark_context
     size_t                   ngpus;
     size_t                   blocks;
     size_t                   threads;
-    int                      verbosity;
+    int                      verbose;
     std::vector<hipStream_t> streams;
 };
 

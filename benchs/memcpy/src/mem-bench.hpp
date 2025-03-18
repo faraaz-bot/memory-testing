@@ -2,6 +2,7 @@
 #include <hip/hip_runtime.h>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <stdio.h>
 #include <vector>
 
@@ -213,9 +214,12 @@ void teardown(const int                 ngpus,
 
 // (1.1) hipMemcpy2D between two devices
 template <typename Tfloat>
-void run_memcpy(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tfloat*>& out_bufs)
+void run_memcpy(const benchmark_context&    ctx,
+                const std::vector<Tfloat*>& in_bufs,
+                std::vector<Tfloat*>&       out_bufs)
 {
-    const size_t ngpus          = in_bufs.size();
+    const size_t N              = ctx.N;
+    const size_t ngpus          = ctx.ngpus;
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
     const size_t bytes_to_copy_per_row
         = sub_block_size * sizeof(float); // Bytes per row in transfer
@@ -239,16 +243,17 @@ void run_memcpy(const int N, const std::vector<Tfloat*>& in_bufs, std::vector<Tf
 
 // (1.2) hipMemcpy2D between two devices, using stream per each gpu-gpu interaction
 template <typename Tfloat>
-void run_memcpy_async(const int                       N,
-                      const std::vector<Tfloat*>&     in_bufs,
-                      std::vector<Tfloat*>&           out_bufs,
-                      const std::vector<hipStream_t>& streams)
+void run_memcpy_async(const benchmark_context&    ctx,
+                      const std::vector<Tfloat*>& in_bufs,
+                      std::vector<Tfloat*>&       out_bufs)
 {
-    const size_t ngpus          = in_bufs.size();
+    const size_t N              = ctx.N;
+    const size_t ngpus          = ctx.ngpus;
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
     const size_t bytes_to_copy_per_row
         = sub_block_size * sizeof(float); // Bytes per row in transfer
-    const size_t pitch_bytes = N * sizeof(float); // Width of buf
+    const size_t                    pitch_bytes = N * sizeof(float); // Width of buf
+    const std::vector<hipStream_t>& streams     = ctx.streams;
 
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
