@@ -135,19 +135,18 @@ void setup(size_t                     N,
            const std::vector<Tfloat>& host_input,
            std::vector<hipStream_t>&  streams)
 {
-    const size_t buf_height = N / ngpus;
-    const size_t buf_size   = N * buf_height; // Number of elements in buf
+    const size_t buf_elems = N * N / ngpus;
 
     for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
-        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(Tfloat) * buf_size));
+        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(Tfloat) * buf_elems));
         HIP_CHECK(hipMemcpy(gpubufs_input[i],
-                            host_input.data() + i * buf_size,
-                            buf_size * sizeof(Tfloat),
+                            host_input.data() + i * buf_elems,
+                            buf_elems * sizeof(Tfloat),
                             hipMemcpyHostToDevice));
-        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(Tfloat) * buf_size));
-        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_size));
+        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(Tfloat) * buf_elems));
+        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_elems));
 
         // Assign streams to current gpu (on order of ngpus^2) for memcpy async
         for(auto j = 0; j < ngpus; j++)
@@ -155,12 +154,19 @@ void setup(size_t                     N,
     }
 }
 
-// Clear data in buffers to zero
+// Clear data in out buffers to zero
 template <typename Tfloat>
-void reset(const int             ngpus,
-           std::vector<Tfloat*>& gpubufs_input,
-           std::vector<Tfloat*>& gpubufs_output)
+void reset(const int             N,
+           const int             ngpus,
+           std::vector<Tfloat*>& gpubufs_output,
+           std::vector<Tfloat>&  host_assembled_buf)
 {
+    const size_t buf_elems = N * N / ngpus; // Number of elements in buf
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_elems));
+    }
+    std::fill(host_assembled_buf.begin(), host_assembled_buf.end(), 0);
 }
 
 // Free allocated memory and streams

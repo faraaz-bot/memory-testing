@@ -202,6 +202,7 @@ int main(int argc, char* argv[])
     }
 
     // Implement cleanup -> fill/memset existing bufs with 0?
+    reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
 
     // Copy kernel
     // MPI alltoall
