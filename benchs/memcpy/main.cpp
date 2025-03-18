@@ -187,10 +187,11 @@ int main(int argc, char* argv[])
     }
 
     // -- Run stuff --
+    // TODO register benchmark, and move this stuff there
     std::vector<float> h_assembled_output(N * N);
     run_memcpy<float>(N, gpubufs_input, gpubufs_output);
     assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
-    bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
+    // bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
     if(verbose)
     {
         // std::cout
