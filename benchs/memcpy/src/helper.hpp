@@ -12,6 +12,17 @@
         }                                                                                      \
     } while(0)
 
+// Hold data useful for benchmarks being run
+struct benchmark_context
+{
+    size_t                   N;
+    size_t                   ngpus;
+    size_t                   blocks;
+    size_t                   threads;
+    int                      verbosity;
+    std::vector<hipStream_t> streams;
+};
+
 enum precision
 {
     p_single,
@@ -26,16 +37,7 @@ enum generator
     h_ordered,
 };
 
-// TODO figure out way to easily toggle benchmarks to run
-// enum copy_operation
-// {
-//     memcpy_async,
-//     mpi_alltoall,
-//     copy_kernel,
-//     all,
-// };
-
-// Used for CLI11 parsing of precision enum
+// Used for CLI11 parsing of precision enum option
 static bool lexical_cast(const std::string& word, precision& p)
 {
     if(word == "single" || word == "0")
@@ -47,11 +49,11 @@ static bool lexical_cast(const std::string& word, precision& p)
     else if(word == "c_double" || word == "3")
         p = p_complex_double;
     else
-        throw std::runtime_error("Invalid specified specified");
+        throw std::runtime_error("Invalid precision specified");
     return true;
 }
 
-// Used for CLI11 parsing of input gen enum
+// Used for CLI11 parsing of input gen enum option
 static bool lexical_cast(const std::string& word, generator& gen)
 {
     if(word == "h_random" || word == "0")

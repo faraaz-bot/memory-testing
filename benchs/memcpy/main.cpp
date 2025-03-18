@@ -7,48 +7,41 @@
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
 
-template <typename T>
-void run_benchmark(benchmark::State& state, const size_t trials, const size_t N)
+template <typename T, typename func>
+void run_benchmark(benchmark::State&  state,
+                   benchmark_context& ctx,
+                   const size_t       trials,
+                   std::vector<T>&    h_input,
+                   const func&        f)
 {
-    std::vector<std::vector<T>> temp(N, std::vector<T>(N, 0));
+    const size_t ngpus = ctx.ngpus std::vector<float*> gpubufs_input(ngpus);
+    std::vector<float*>                                gpubufs_output(ngpus);
+    std::vector<hipStream_t>                           streams(ngpus * ngpus);
 
-    std::random_device rd;
-    std::mt19937       m_engine(rd()); // Mersenne Twister, rd as seed
+    setup<T>(ctx.N, ngpus, ) hipStream_t timing_stream;
+    hipEvent_t                           start, stop;
 
-    T mini = std::numeric_limits<T>::min();
-    T maxi = std::numeric_limits<T>::max();
-
-    std::uniform_real_distribution<double> dist{static_cast<double>(mini),
-                                                static_cast<double>(maxi)};
-
-    hipStream_t stream;
-    hipEvent_t  start, stop;
-
-    HIP_CHECK(hipStreamCreate(&stream));
-
+    HIP_CHECK(hipStreamCreate(&timing_stream));
     HIP_CHECK(hipEventCreate(&start));
     HIP_CHECK(hipEventCreate(&stop));
 
     for(auto _ : state)
     {
-        HIP_CHECK(hipEventRecord(start, stream));
+        HIP_CHECK(hipEventRecord(start, timing_stream));
 
         for(size_t __ = 0; __ < trials; __++)
         {
-
-            for(size_t i = 0; i < N; i++)
-            {
-                for(size_t j = 0; j < N; j++)
-                    temp[i][j] = static_cast<T>(dist(m_engine));
-            }
+            f(i1, i2);
         }
 
-        HIP_CHECK(hipEventRecord(stop, stream));
+        HIP_CHECK(hipEventRecord(stop, timing_stream));
         HIP_CHECK(hipEventSynchronize(stop));
 
-        float elapsed = 0.0f;
-        HIP_CHECK(hipEventElapsedTime(&elapsed, start, stop));
-        state.SetIterationTime(elapsed / 1000.f);
+        float elapsed_ms = 0.0f;
+        HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
+        state.SetIterationTime(elapsed_ms / 1000.f);
+
+        reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
     }
 
     state.counters["Throughput (GB/S)"]
@@ -63,23 +56,28 @@ int main(int argc, char* argv[])
 {
     CLI::App app{"Memcpy bench"};
 
-    size_t    N;
-    size_t    ngpus;
-    int       verbose;
-    size_t    trials;
+    benchmark_context ctx;
+    app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
+    app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")->default_val(4U);
+    app.add_option("-v, --verbose", ctx.verbosity, "Adjust output verbosity level")->default_val(0);
+    app.add_option("-t, --trials",
+                   ctx.trials,
+                   "The amount of minimum trials to run per function (default 20)")
+        ->default_val(20);
+
     precision p;
     generator gen;
-    app.add_option("-n, --length", N, "Length of input square matrix")->default_val(8U);
-    app.add_option("-g, --ngpus", ngpus, "Number of gpus")->default_val(4U);
+    float     min_val;
+    float     max_val;
     app.add_option("-p, --precision", p, "Data precision: single (default), double")
         ->default_val("single");
     app.add_option(
            "-i, --inputGen", gen, "Data generation type:\n0) random (default)\n1) ordered sequence")
         ->default_val(0);
-    app.add_option("-v, --verbose", verbose, "Adjust output verbosity level")->default_val(0);
-    app.add_option(
-           "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
-        ->default_val(20);
+    app.add_option("--min", min_val, "Minimum value to use if generating random input")
+        ->default_val(-1.0f);
+    app.add_option("--max", max_val, "Maximum value to use if generating random input")
+        ->default_val(1.0f);
 
     // TODO option: which benchmark(s) to run, output format options
 
@@ -93,6 +91,10 @@ int main(int argc, char* argv[])
         return app.exit(e);
     }
 
+    if(verbose)
+        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus
+                  << " gpus.\n";
+
     std::vector<char*> cArgs(argv, argv + argc);
 
     std::string tabular = "--benchmark_counters_tabular=true";
@@ -103,6 +105,7 @@ int main(int argc, char* argv[])
     int    cArg_size = cArgs.size();
 
     // TODO Better way of handling benchmark args at same time as CLI11?
+    // If gbench removes args, then we can allow extras then check leftovers later...
     // std::cout << "Before:\n";
     // for(auto& i : cArgs)
     //     std::cout << i << " ";
@@ -115,25 +118,7 @@ int main(int argc, char* argv[])
     //     std::cout << i << " ";
     // std::cout << std::endl;
 
-    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ngpus
-              << " gpus.\n";
-
     // Generate input data
-    std::vector<float> input(N * N);
-    if(gen == h_random)
-    {
-        std::random_device                    rd;
-        std::mt19937                          m_engine(rd()); // Mersenne Twister, rd as seed
-        std::uniform_real_distribution<float> dist{-0.5, 0.5};
-#pragma omp parallel for
-        for(size_t i = 0; i < N * N; ++i)
-            input[i] = dist(m_engine);
-    }
-    else if(gen == h_ordered)
-    {
-        for(size_t i = 0; i < N * N; i++)
-            input[i] = i;
-    }
 
     if(verbose)
     {
@@ -202,7 +187,6 @@ int main(int argc, char* argv[])
     }
 
     // Implement cleanup -> fill/memset existing bufs with 0?
-    reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
 
     // Copy kernel
     // MPI alltoall
