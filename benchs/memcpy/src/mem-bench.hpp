@@ -16,6 +16,7 @@
  * - Optimize stuff after
  *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
+ *     - Pinned memory, HMM?
  * - Perform local transpose on data as well
  *
  * - Display/write output timings/other metrics, allow ntrials
@@ -277,8 +278,44 @@ void run_memcpy_async(const benchmark_context&    ctx,
 }
 
 // (2) Copy kernel
+// Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
 template <typename Tfloat>
-__global__ void copy(const int N, const Tfloat* input, Tfloat* output);
+// __launch_bounds__(1024)
+__global__ void copy(const benchmark_context&    ctx,
+                     const std::vector<Tfloat&>& in_bufs,
+                     std::vector<Tfloat*>&       out_bufs)
+{
+    // TODO: Should this loop over all gpus, or be called per device?
+    // Adjust func signature or ctx if needed, but we can call this from a diff host func
+    // What about input size vs how LDS is used => num of blocks to use...
+    //     const size_t N     = ctx.N;
+    //     const size_t ngpus = ctx.ngpus;
+    //
+    //     __shared__ Tfloat lds[64][64]; // Need to consider
+    //     size_t            tile_block_idx_x  = blockIdx.x;
+    //     size_t            tile_block_idx_y  = blockIdx.y;
+    //     size_t            tile_thread_idx_x = threadIdx.x;
+    //     size_t            tile_thread_idx_y = threadIdx.y;
+    //     // Add strides
+    //
+    //     // Read in values from global memory
+    // #pragma unroll
+    //     for(size_t i = 0; i < 4; ++i)
+    //     {
+    //         auto logical_row = 64 * tile_block_idx_y + tile_thread_idx_y + i * 16;
+    //         auto idx0        = 64 * tile_block_idx_x + tile_thread_idx_x;
+    //         auto idx1        = logical_row;
+    //         auto gidx        = idx0 + idx1;
+    //
+    //         lds[tile_thread_idx_x][i * 16 + tile_thread_idx_y] = in_bufs[?][gidx];
+    //     }
+    //     __syncthreads();
+    //
+    //     Tfloat val[4];
+    //     // Realloc threads to write along fastest dim, and read transposed from LDS
+    //     tile_thread_idx_x = tile_thread_idx_y;
+    //
+}
 
 // (3.1) MPI alltoall
 // (3.2) MPI alltoallv
