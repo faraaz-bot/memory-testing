@@ -249,13 +249,14 @@ void run_memcpy_async(const benchmark_context&    ctx,
                       const std::vector<Tfloat*>& in_bufs,
                       std::vector<Tfloat*>&       out_bufs)
 {
-    const size_t N              = ctx.N;
-    const size_t ngpus          = ctx.ngpus;
+    const size_t                    N       = ctx.N;
+    const size_t                    ngpus   = ctx.ngpus;
+    const std::vector<hipStream_t>& streams = ctx.streams;
+
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
     const size_t bytes_to_copy_per_row
         = sub_block_size * sizeof(float); // Bytes per row in transfer
-    const size_t                    pitch_bytes = N * sizeof(float); // Width of buf
-    const std::vector<hipStream_t>& streams     = ctx.streams;
+    const size_t pitch_bytes = N * sizeof(float); // Width of buf
 
     for(auto i = 0; i < ngpus; i++) // src GPU
     {

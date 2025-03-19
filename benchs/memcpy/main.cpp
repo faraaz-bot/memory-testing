@@ -10,21 +10,20 @@ using func_type = std::function<void(
     const benchmark_context&, const std::vector<float*>&, std::vector<float*>&)>;
 
 template <typename T>
-void run_benchmark(benchmark::State&        state,
-                   const benchmark_context& ctx,
-                   const size_t             trials,
-                   const std::vector<T>&    h_input,
-                   func_type                f)
+void run_benchmark(benchmark::State&     state,
+                   benchmark_context     ctx,
+                   const size_t          trials,
+                   const std::vector<T>& h_input,
+                   func_type             f)
 {
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
     int          verbose = ctx.verbose;
+    ctx.streams          = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
-    std::vector<float*>      gpubufs_input(ngpus);
-    std::vector<float*>      gpubufs_output(ngpus);
-    std::vector<hipStream_t> streams(ngpus * ngpus);
-    setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, streams);
+    std::vector<float*> gpubufs_input(ngpus);
+    std::vector<float*> gpubufs_output(ngpus);
 
     // Compute host-side transposed matrix for correctness check
     std::vector<float> reference_matrix(N * N);
@@ -37,7 +36,7 @@ void run_benchmark(benchmark::State&        state,
     }
 
     // Allocate and init bufs, streams
-    setup<float>(N, ngpus, gpubufs_input, gpubufs_output, h_input, streams);
+    setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
 
     // Optionally output gpu bufs after distributing data
     if(verbose > 3)
@@ -93,7 +92,7 @@ void run_benchmark(benchmark::State&        state,
 
     HIP_CHECK(hipEventDestroy(stop));
     HIP_CHECK(hipEventDestroy(start));
-    teardown(ngpus, gpubufs_input, gpubufs_output, streams);
+    teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
 int main(int argc, char* argv[])
@@ -183,8 +182,8 @@ int main(int argc, char* argv[])
 
     benchmarks.emplace_back(benchmark::RegisterBenchmark(
         "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
-    // benchmarks.emplace_back(benchmark::RegisterBenchmark(
-    //     "hipMemcpy2DAsync", &run_benchmark<float>, ctx, trials, h_input, run_memcpy_async<float>));
+    benchmarks.emplace_back(benchmark::RegisterBenchmark(
+        "hipMemcpy2DAsync", &run_benchmark<float>, ctx, trials, h_input, run_memcpy_async<float>));
 
     benchmark::Initialize(&cArg_size, cArga);
 
