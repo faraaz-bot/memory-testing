@@ -6,15 +6,15 @@
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
 
-using func_type
-    = std::function<void(const benchmark_context&, const std::vector<float*>, std::vector<float*>)>;
+using func_type = std::function<void(
+    const benchmark_context&, const std::vector<float*>&, std::vector<float*>&)>;
 
 template <typename T>
-void run_benchmark(benchmark::State&  state,
-                   benchmark_context& ctx,
-                   const size_t       trials,
-                   std::vector<T>&    h_input,
-                   func_type          f)
+void run_benchmark(benchmark::State&        state,
+                   const benchmark_context& ctx,
+                   const size_t             trials,
+                   const std::vector<T>&    h_input,
+                   func_type                f)
 {
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
@@ -157,8 +157,6 @@ int main(int argc, char* argv[])
     //     std::cout << i << " ";
     // std::cout << std::endl;
 
-    benchmark::Initialize(&cArg_size, cArga);
-
     // std::cout << "After:\n";
     // for(auto& i : cArgs)
     //     std::cout << i << " ";
@@ -183,13 +181,14 @@ int main(int argc, char* argv[])
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
-    benchmarks.emplace_back(benchmark::RegisterBenchmark("test_bench", [=](benchmark::State& st) {
-        st, &run_benchmark<float>, ctx, trials, h_input,
-            [](const benchmark_context&   ctx,
-               const std::vector<float*>& in_bufs,
-               std::vector<float*>&       out_bufs) { run_memcpy(ctx, in_bufs, out_bufs); };
-    }));
-    // for(size_t i = 0; i < ngpus; i++)
+    benchmarks.emplace_back(benchmark::RegisterBenchmark(
+        "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
+    // benchmarks.emplace_back(benchmark::RegisterBenchmark(
+    //     "hipMemcpy2DAsync", &run_benchmark<float>, ctx, trials, h_input, run_memcpy_async<float>));
+
+    benchmark::Initialize(&cArg_size, cArga);
+
+    // for(auto& b : benchmarks)
     // {
     //     b->UseManualTime();
     //     b->Unit(benchmark::kMillisecond);

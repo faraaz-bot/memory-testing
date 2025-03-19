@@ -148,6 +148,8 @@ std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tflo
         for(size_t i = 0; i < N * N; i++)
             input[i] = i;
     }
+
+    return input;
 }
 
 // Allocate and initialize gpu buffers, streams + distribute host input to gpu buffers
