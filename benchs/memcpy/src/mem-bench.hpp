@@ -1,4 +1,5 @@
 #include "helper.hpp"
+#include <cstring>
 #include <hip/hip_runtime.h>
 #include <iomanip>
 #include <iostream>
@@ -107,6 +108,48 @@ bool is_same_matrix(const int                  N,
             return false;
 
     return true;
+}
+
+// Reference impl on CPU that does not perform local transpose (out-of-place)
+template <typename Tfloat>
+void host_copy(const size_t N, const size_t ngpus, const Tfloat* input, Tfloat* output)
+{
+    const size_t buf_elems = N * N / ngpus;
+    // Where each device's partitions would start
+    const std::vector<size_t> offsets{0, buf_elems, 2 * buf_elems, 3 * buf_elems};
+
+    const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
+    const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
+    const size_t elems_per_row   = sub_block_size * sizeof(float); // Elems per row in transfer
+
+    // Simulating GPU to GPU data layout & copy
+    for(auto src = 0; src < ngpus; src++)
+    {
+        for(auto dst = 0; dst < ngpus; dst++)
+        {
+            // Copy sub_block to output buf across diagonal
+            for(auto row = 0; row < sub_block_size; row++)
+            {
+                size_t src_offset = offsets[src] + src * sub_block_size + elems_per_row * row;
+                size_t dst_offset = offsets[dst] + dst * sub_block_size + elems_per_row * row;
+                std::memcpy(output + dst_offset, input + src_offset, sub_block_bytes);
+            }
+        }
+    }
+
+    // for(auto i = 0; i < ngpus; i++) // src GPU
+    // {
+    //     for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
+    //     {
+    //         HIP_CHECK(hipMemcpy2D(out_bufs[j] + (i * sub_block_size),
+    //                               pitch_bytes,
+    //                               in_bufs[i] + (j * sub_block_size),
+    //                               pitch_bytes,
+    //                               bytes_to_copy_per_row,
+    //                               sub_block_size,
+    //                               hipMemcpyDeviceToDevice));
+    //     }
+    // }
 }
 
 // Reference impl on CPU (out-of-place)
