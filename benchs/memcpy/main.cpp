@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <limits.h>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -85,10 +86,9 @@ void run_benchmark(benchmark::State&     state,
 
         // reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
     }
-
-    state.counters["Throughput (GB/S)"]
-        = static_cast<double>((trials * state.iterations() * N * N * sizeof(T)))
-          / static_cast<double>((1024 * 1024 * 1024));
+    double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
+    state.counters["Throughput (GB/s)"]
+        = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
     HIP_CHECK(hipEventDestroy(stop));
     HIP_CHECK(hipEventDestroy(start));
@@ -99,14 +99,28 @@ int main(int argc, char* argv[])
 {
     CLI::App app{"Memcpy bench"};
 
-    benchmark_context ctx;
-    size_t            trials;
+    std::set<std::string> valid_benchmarks = {"all", "hipMemcpy2D", "hipMemcpy2DAsync"};
+
+    std::string run_bench_helper
+        = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
+          "hipMemcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
+
+    for(const auto& x : valid_benchmarks)
+        run_bench_helper += x + "\n";
+
+    run_bench_helper += "------------------------\n";
+
+    benchmark_context     ctx;
+    size_t                trials;
+    std::set<std::string> param_enabled_benchmarks;
     app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")->default_val(4U);
     app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
+    app.add_option("--run-benchmark", param_enabled_benchmarks, run_bench_helper)
+        ->default_val("all");
 
     precision p;
     generator gen;
@@ -132,6 +146,25 @@ int main(int argc, char* argv[])
     catch(const CLI::ParseError& e)
     {
         return app.exit(e);
+    }
+
+    std::vector<std::string> enabled_benchmarks;
+    bool                     runAll = false;
+
+    for(auto it = param_enabled_benchmarks.begin(); it != param_enabled_benchmarks.end(); it++)
+    {
+        if(valid_benchmarks.find(*it) == valid_benchmarks.end())
+            std::cout << *it << " is not a valid benchmark. It has been discarded!" << std::endl;
+        else
+        {
+            if(*it == "all")
+            {
+                runAll = true;
+                break;
+            }
+
+            enabled_benchmarks.push_back(*it);
+        }
     }
 
     const size_t N = ctx.N;
@@ -180,18 +213,42 @@ int main(int argc, char* argv[])
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
-    benchmarks.emplace_back(benchmark::RegisterBenchmark(
-        "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
-    benchmarks.emplace_back(benchmark::RegisterBenchmark(
-        "hipMemcpy2DAsync", &run_benchmark<float>, ctx, trials, h_input, run_memcpy_async<float>));
+    if(runAll)
+    {
+        benchmarks.emplace_back(benchmark::RegisterBenchmark(
+            "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
+        benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
+                                                             &run_benchmark<float>,
+                                                             ctx,
+                                                             trials,
+                                                             h_input,
+                                                             run_memcpy_async<float>));
+    }
+    else
+    {
+        for(const auto& x : enabled_benchmarks)
+        {
+            if(x == "hipMemcpy2D")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark(
+                    "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
+
+            else if(x == "hipMemcpy2DAsync")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
+                                                                     &run_benchmark<float>,
+                                                                     ctx,
+                                                                     trials,
+                                                                     h_input,
+                                                                     run_memcpy_async<float>));
+        }
+    }
 
     benchmark::Initialize(&cArg_size, cArga);
 
-    // for(auto& b : benchmarks)
-    // {
-    //     b->UseManualTime();
-    //     b->Unit(benchmark::kMillisecond);
-    // }
+    for(auto& b : benchmarks)
+    {
+        b->UseManualTime();
+        b->Unit(benchmark::kSecond);
+    }
 
     static benchmark::ConsoleReporter terminal_reporter;
     terminal_reporter.SetErrorStream(&std::cout);
