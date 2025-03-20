@@ -197,12 +197,6 @@ int main(int argc, char* argv[])
     // Generate input data
     std::vector<float> h_input = generate<float>(N, N, gen, min_val, max_val);
 
-    // TEMP: Test if host implementation is working
-    // print_host_2d(N, N, h_input);
-    // std::vector<float> reference_matrix(N * N);
-    // host_copy<float>(N, ctx.ngpus, h_input.data(), reference_matrix.data());
-    // print_host_2d(N, N, reference_matrix);
-
     // Enable peer to peer memory access between GPUs
     for(size_t i = 0; i < ctx.ngpus; i++)
     {
