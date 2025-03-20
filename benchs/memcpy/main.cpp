@@ -7,10 +7,15 @@
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
 
-// TODO how to add template here?
-// using func_type<T> = std::function<void(
-//     const benchmark_context&, const std::vector<T*>&, std::vector<T*>&)>;
+/**
+ * Benchmarking tool for comparing speed of various memory copy methods
+ * between multiple gpus. Currently will do out-of-place operations on 
+ * square matrices only.
+ */
 
+// Execute f under Google Benchmark, for at least trials times
+// Manages device memory management, timing, and verification,
+// but not generating initial input data (h_input).
 template <typename T>
 void run_benchmark(
     benchmark::State&                                                                       state,
@@ -105,6 +110,7 @@ void run_benchmark(
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
+// Register all (valid) provided functions to run as benchmarks
 template <typename T>
 void add_benchmarks(bool                                          runAll,
                     std::vector<benchmark::internal::Benchmark*>& benchmarks,
@@ -141,6 +147,7 @@ void add_benchmarks(bool                                          runAll,
 
 int main(int argc, char* argv[])
 {
+    // Parse args
     CLI::App app{"Memcpy bench"};
 
     std::set<std::string> valid_benchmarks = {"all", "hipMemcpy2D", "hipMemcpy2DAsync"};
@@ -172,7 +179,7 @@ int main(int argc, char* argv[])
 
     precision p;
     generator gen;
-    // TODO template these
+    // TODO template these?
     float min_val;
     float max_val;
     app.add_option("-p, --precision", p, "Data precision: single (default), double")
@@ -185,7 +192,7 @@ int main(int argc, char* argv[])
     app.add_option("--max", max_val, "Maximum value to use if generating random input")
         ->default_val(1.0f);
 
-    // TODO option: which benchmark(s) to run, output format options
+    // TODO option: output format options? Or at least show gbench help as well
 
     app.allow_extras();
     try
@@ -200,6 +207,7 @@ int main(int argc, char* argv[])
     std::vector<std::string> enabled_benchmarks;
     bool                     runAll = false;
 
+    // Validate benchmarks to run, from command line arg data
     for(auto it = param_enabled_benchmarks.begin(); it != param_enabled_benchmarks.end(); it++)
     {
         if(valid_benchmarks.find(*it) == valid_benchmarks.end())
@@ -217,7 +225,6 @@ int main(int argc, char* argv[])
     }
 
     const size_t N = ctx.N;
-
     if(ctx.verbose)
         std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
                   << " gpus.\n";
@@ -302,11 +309,11 @@ int main(int argc, char* argv[])
                                generate<double>(N, N, gen, min_val, max_val),
                                enabled_benchmarks);
         break;
+    // TODO Complex valued cases
     case p_complex_single:
         break;
     case p_complex_double:
         break;
-        // TODO Complex valued cases
     }
 
     benchmark::Initialize(&cArg_size, cArga);
