@@ -14,6 +14,6 @@ mkdir build\
 cd build\
 cmake ..\
 make -j\
-`./membench            `    # using default matrix size, number of gpus\
+`./membench`                # using default matrix size, number of gpus\
 `./membench -n 128 -g 4`    # using 128 x 128 matrix, for 4 gpus \
 `./membench -h`             # explore other options like precision, verbosity, etc.\
