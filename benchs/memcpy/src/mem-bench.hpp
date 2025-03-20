@@ -27,6 +27,7 @@
  *     - hipGraph vs stream (ngpus vs ngpus^2 # of streams) async comparison
  *     - Rectangular data (still out of place)
  *     - Arbitrary dim?
+ *     - Optionally regenerate new inputs per trial?
 */
 
 /* Helpers for verifying correctness */
@@ -165,7 +166,7 @@ std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tflo
 {
     // TODO add complex data support
     // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
-    std::vector<float> input(N * M);
+    std::vector<Tfloat> input(N * M);
     if(gen == h_random)
     {
         std::random_device                     rd;
@@ -178,7 +179,7 @@ std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tflo
     else if(gen == h_ordered)
     {
         for(size_t i = 0; i < N * N; i++)
-            input[i] = i;
+            input[i] = static_cast<Tfloat>(i);
     }
 
     return input;
@@ -256,8 +257,8 @@ void run_memcpy(const benchmark_context&    ctx,
     const size_t ngpus          = ctx.ngpus;
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
     const size_t bytes_to_copy_per_row
-        = sub_block_size * sizeof(float); // Bytes per row in transfer
-    const size_t pitch_bytes = N * sizeof(float); // Width of buf
+        = sub_block_size * sizeof(Tfloat); // Bytes per row in transfer
+    const size_t pitch_bytes = N * sizeof(Tfloat); // Width of buf
 
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
@@ -287,8 +288,8 @@ void run_memcpy_async(const benchmark_context&    ctx,
 
     const size_t sub_block_size = N / ngpus; // Length of block in each transfer
     const size_t bytes_to_copy_per_row
-        = sub_block_size * sizeof(float); // Bytes per row in transfer
-    const size_t pitch_bytes = N * sizeof(float); // Width of buf
+        = sub_block_size * sizeof(Tfloat); // Bytes per row in transfer
+    const size_t pitch_bytes = N * sizeof(Tfloat); // Width of buf
 
     for(auto i = 0; i < ngpus; i++) // src GPU
     {

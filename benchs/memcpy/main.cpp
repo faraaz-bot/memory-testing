@@ -8,15 +8,16 @@
 #include "src/mem-bench.hpp"
 
 // TODO how to add template here?
-using func_type = std::function<void(
-    const benchmark_context&, const std::vector<float*>&, std::vector<float*>&)>;
+// using func_type<T> = std::function<void(
+//     const benchmark_context&, const std::vector<T*>&, std::vector<T*>&)>;
 
 template <typename T>
-void run_benchmark(benchmark::State&     state,
-                   benchmark_context     ctx,
-                   const size_t          trials,
-                   const std::vector<T>& h_input,
-                   func_type             f)
+void run_benchmark(
+    benchmark::State&                                                                       state,
+    benchmark_context                                                                       ctx,
+    const size_t                                                                            trials,
+    const std::vector<T>&                                                                   h_input,
+    std::function<void(const benchmark_context&, const std::vector<T*>&, std::vector<T*>&)> f)
 {
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
@@ -104,6 +105,40 @@ void run_benchmark(benchmark::State&     state,
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
+template <typename T>
+void add_benchmarks(bool                                          runAll,
+                    std::vector<benchmark::internal::Benchmark*>& benchmarks,
+                    const benchmark_context&                      ctx,
+                    size_t                                        trials,
+                    const std::vector<T>&                         h_input,
+                    const std::vector<std::string>&               enabled_benchmarks)
+{
+    if(runAll)
+    {
+        benchmarks.emplace_back(benchmark::RegisterBenchmark(
+            "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
+        benchmarks.emplace_back(benchmark::RegisterBenchmark(
+            "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
+    }
+    else
+    {
+        for(const auto& x : enabled_benchmarks)
+        {
+            if(x == "hipMemcpy2D")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark(
+                    "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
+
+            else if(x == "hipMemcpy2DAsync")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
+                                                                     &run_benchmark<T>,
+                                                                     ctx,
+                                                                     trials,
+                                                                     h_input,
+                                                                     run_memcpy_async<T>));
+        }
+    }
+}
+
 int main(int argc, char* argv[])
 {
     CLI::App app{"Memcpy bench"};
@@ -128,7 +163,7 @@ int main(int argc, char* argv[])
     app.add_option("-c, --verify",
                    ctx.verify_results,
                    "Toggle correctness checks performed after each trial")
-        ->default_val(true);
+        ->default_val(false);
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
@@ -137,8 +172,9 @@ int main(int argc, char* argv[])
 
     precision p;
     generator gen;
-    float     min_val;
-    float     max_val;
+    // TODO template these
+    float min_val;
+    float max_val;
     app.add_option("-p, --precision", p, "Data precision: single (default), double")
         ->default_val("single");
     app.add_option(
@@ -207,9 +243,6 @@ int main(int argc, char* argv[])
     //     std::cout << i << " ";
     // std::cout << std::endl;
 
-    // Generate input data
-    std::vector<float> h_input = generate<float>(N, N, gen, min_val, max_val);
-
     // Enable peer to peer memory access between GPUs
     for(size_t i = 0; i < ctx.ngpus; i++)
     {
@@ -223,36 +256,57 @@ int main(int argc, char* argv[])
         }
     }
 
+    // switch(p)
+    // {
+    // case p_single:
+    // }
+    // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
+    // std::vector<T*> gpubufs_input(ngpus);
+    // std::vector<T*> gpubufs_output(ngpus);
+
+    // // Compute host-side transposed matrix for correctness check
+    // std::vector<T> reference_matrix(N * N);
+    // host_copy(N, ngpus, h_input.data(), reference_matrix.data());
+    // setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
+
+    // assemble_output_to_host<T>(N, gpubufs_output, h_assembled_output.data());
+    // bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+    // if(!res)
+    // {
+    //     std::cout << "Incorrect result detected for " << state.name() << "\n";
+    //     std::cout << "Host Side Computation:\n";
+    //     print_host_2d<T>(N, N, reference_matrix);
+    //     std::cout << "----------------------\nDevice Side Computation:\n";
+    //     print_host_2d<T>(N, N, h_assembled_output);
+    // }
+
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
-    if(runAll)
+    // Generate input data and register benchmarks based on precision
+    switch(p)
     {
-        benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
-        benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
-                                                             &run_benchmark<float>,
-                                                             ctx,
-                                                             trials,
-                                                             h_input,
-                                                             run_memcpy_async<float>));
-    }
-    else
-    {
-        for(const auto& x : enabled_benchmarks)
-        {
-            if(x == "hipMemcpy2D")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark(
-                    "hipMemcpy2D", &run_benchmark<float>, ctx, trials, h_input, run_memcpy<float>));
-
-            else if(x == "hipMemcpy2DAsync")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
-                                                                     &run_benchmark<float>,
-                                                                     ctx,
-                                                                     trials,
-                                                                     h_input,
-                                                                     run_memcpy_async<float>));
-        }
+    case p_single:
+        add_benchmarks<float>(runAll,
+                              benchmarks,
+                              ctx,
+                              trials,
+                              generate<float>(N, N, gen, min_val, max_val),
+                              enabled_benchmarks);
+        break;
+    case p_double:
+        add_benchmarks<double>(runAll,
+                               benchmarks,
+                               ctx,
+                               trials,
+                               generate<double>(N, N, gen, min_val, max_val),
+                               enabled_benchmarks);
+        break;
+    case p_complex_single:
+        break;
+    case p_complex_double:
+        break;
+        // TODO Complex valued cases
     }
 
     benchmark::Initialize(&cArg_size, cArga);
