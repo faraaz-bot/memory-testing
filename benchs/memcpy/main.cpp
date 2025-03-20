@@ -7,6 +7,7 @@
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
 
+// TODO how to add template here?
 using func_type = std::function<void(
     const benchmark_context&, const std::vector<float*>&, std::vector<float*>&)>;
 
@@ -23,17 +24,19 @@ void run_benchmark(benchmark::State&     state,
     ctx.streams          = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
-    std::vector<float*> gpubufs_input(ngpus);
-    std::vector<float*> gpubufs_output(ngpus);
+    std::vector<T*> gpubufs_input(ngpus);
+    std::vector<T*> gpubufs_output(ngpus);
 
     // Compute host-side transposed matrix for correctness check
-    std::vector<float> reference_matrix(N * N);
-    host_transpose(N, h_input, reference_matrix);
+    std::vector<T> reference_matrix(N * N);
+    host_copy(N, ngpus, h_input.data(), reference_matrix.data());
 
     if(verbose > 1)
     {
-        std::cout << "Host Transposed Matrix:\n";
-        print_host_2d<float>(N, N, reference_matrix);
+        std::cout << "Starting Input Matrix:\n";
+        print_host_2d<T>(N, N, h_input);
+        std::cout << "Host Reference Matrix:\n";
+        print_host_2d<T>(N, N, reference_matrix);
     }
 
     // Allocate and init bufs, streams
@@ -43,23 +46,13 @@ void run_benchmark(benchmark::State&     state,
     if(verbose > 3)
     {
         const size_t buf_height = N / ngpus;
-        const size_t buf_size   = N * buf_height;
         for(auto i = 0; i < ngpus; i++)
         {
             std::cout << "Input GPU Buffer " << i << ":\n";
-            print<float><<<1, 1>>>(buf_size, gpubufs_input[i]);
-            print2d<float><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
+            // print<T><<<1, 1>>>(buf_size, gpubufs_input[i]);
+            print2d<T><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
         }
     }
-
-    // std::vector<float> h_assembled_output(N * N);
-    // assemble_output_to_host<float>(N, gpubufs_output, h_assembled_output.data());
-    // bool res = is_same_matrix<float>(N, reference_matrix, h_assembled_output);
-    // if(verbose)
-    // {
-    //     std::cout << "Output Assembled on Host:\n";
-    //     print_host_2d<float>(N, N, h_assembled_output);
-    // }
 
     // Setup timing events
     hipStream_t timing_stream;
@@ -68,28 +61,44 @@ void run_benchmark(benchmark::State&     state,
     HIP_CHECK(hipEventCreate(&start));
     HIP_CHECK(hipEventCreate(&stop));
 
+    float          total_ms = 0.0f;
+    std::vector<T> h_assembled_output(N * N);
     for(auto _ : state)
     {
-        HIP_CHECK(hipEventRecord(start, timing_stream));
-
         for(size_t __ = 0; __ < trials; __++)
         {
+            HIP_CHECK(hipEventRecord(start, timing_stream));
             f(ctx, gpubufs_input, gpubufs_output);
+            HIP_CHECK(hipEventRecord(stop, timing_stream));
+            HIP_CHECK(hipEventSynchronize(stop));
+            float elapsed_ms = 0.0f;
+            HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
+            total_ms += elapsed_ms;
+
+            // Optionally
+            if(ctx.verify_results)
+            {
+                assemble_output_to_host<T>(N, gpubufs_output, h_assembled_output.data());
+                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                if(!res)
+                {
+                    std::cout << "Incorrect result detected for " << state.name() << "\n";
+                    std::cout << "Host Side Computation:\n";
+                    print_host_2d<T>(N, N, reference_matrix);
+                    std::cout << "----------------------\nDevice Side Computation:\n";
+                    print_host_2d<T>(N, N, h_assembled_output);
+                }
+            }
+            reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
-
-        HIP_CHECK(hipEventRecord(stop, timing_stream));
-        HIP_CHECK(hipEventSynchronize(stop));
-
-        float elapsed_ms = 0.0f;
-        HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
-        state.SetIterationTime(elapsed_ms / 1000.f);
-
-        // reset<float>(N, ngpus, gpubufs_output, h_assembled_output);
     }
+
+    state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
     state.counters["Throughput (GB/s)"]
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
+    // Clean up
     HIP_CHECK(hipEventDestroy(stop));
     HIP_CHECK(hipEventDestroy(start));
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
@@ -116,6 +125,10 @@ int main(int argc, char* argv[])
     app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
     app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")->default_val(4U);
     app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
+    app.add_option("-c, --verify",
+                   ctx.verify_results,
+                   "Toggle correctness checks performed after each trial")
+        ->default_val(true);
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);

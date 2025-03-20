@@ -125,6 +125,7 @@ void host_copy(const size_t N, const size_t ngpus, const Tfloat* input, Tfloat* 
     const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
 
     // Simulating GPU to GPU data layout & copy
+#pragma omp parallel for
     for(auto src = 0; src < ngpus; src++)
     {
         for(auto dst = 0; dst < ngpus; dst++)
