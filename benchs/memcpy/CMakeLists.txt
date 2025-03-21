@@ -42,7 +42,7 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable( membench main.cpp src/mem-bench.hpp )
 
-set_source_files_properties(src/mem-bench.hpp src/helper.hpp PROPERTIES LANGUAGE HIP)
+set_source_files_properties(main.cpp src/mem-bench.hpp src/helper.hpp PROPERTIES LANGUAGE HIP)
 target_link_libraries( membench hip::host hip::device )
 target_link_libraries( membench benchmark::benchmark )
 

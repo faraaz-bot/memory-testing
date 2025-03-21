@@ -27,15 +27,16 @@ void run_benchmark(
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
     int          verbose = ctx.verbose;
-    ctx.streams          = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
     std::vector<T*> gpubufs_input(ngpus);
     std::vector<T*> gpubufs_output(ngpus);
+    std::vector<T>  h_assembled_output(N * N);
+    ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Compute host-side transposed matrix for correctness check
     std::vector<T> reference_matrix(N * N);
-    host_copy(N, ngpus, h_input.data(), reference_matrix.data());
+    host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
 
     if(verbose > 1)
     {
@@ -67,16 +68,19 @@ void run_benchmark(
     HIP_CHECK(hipEventCreate(&start));
     HIP_CHECK(hipEventCreate(&stop));
 
-    float          total_ms = 0.0f;
-    std::vector<T> h_assembled_output(N * N);
+    float  total_ms     = 0.0f;
+    size_t num_failures = 0;
+    size_t num_pass     = 0;
+    size_t total_runs   = 0;
     for(auto _ : state)
     {
-        for(size_t __ = 0; __ < trials; __++)
+        for(size_t t = 0; t < trials; t++)
         {
             HIP_CHECK(hipEventRecord(start, timing_stream));
             f(ctx, gpubufs_input, gpubufs_output);
             HIP_CHECK(hipEventRecord(stop, timing_stream));
             HIP_CHECK(hipEventSynchronize(stop));
+
             float elapsed_ms = 0.0f;
             HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
             total_ms += elapsed_ms;
@@ -88,16 +92,29 @@ void run_benchmark(
                 bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
                 if(!res)
                 {
-                    std::cout << "Incorrect result detected for " << state.name() << "\n";
+                    num_failures++;
+                    std::cout << "Incorrect result detected for " << state.name() << ", trial #"
+                              << t << "\n";
+                    std::cout << "Original Input:\n";
+                    print_host_2d<T>(N, N, h_input);
                     std::cout << "Host Side Computation:\n";
                     print_host_2d<T>(N, N, reference_matrix);
                     std::cout << "----------------------\nDevice Side Computation:\n";
                     print_host_2d<T>(N, N, h_assembled_output);
                 }
+                else
+                {
+                    num_pass++;
+                    // std::cout << "PASS\n";
+                }
+                total_runs++;
             }
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
     }
+    if(ctx.verify_results)
+        std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
+                  << " runs failed." << std::endl;
 
     state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
@@ -179,18 +196,17 @@ int main(int argc, char* argv[])
 
     precision p;
     generator gen;
-    // TODO template these?
-    float min_val;
-    float max_val;
+    double    min_val;
+    double    max_val;
     app.add_option("-p, --precision", p, "Data precision: single (default), double")
         ->default_val("single");
     app.add_option(
            "-i, --inputGen", gen, "Data generation type:\n0) random (default)\n1) ordered sequence")
         ->default_val(0);
     app.add_option("--min", min_val, "Minimum value to use if generating random input")
-        ->default_val(-1.0f);
+        ->default_val(-1.0);
     app.add_option("--max", max_val, "Maximum value to use if generating random input")
-        ->default_val(1.0f);
+        ->default_val(1.0);
 
     // TODO option: output format options? Or at least show gbench help as well
 
@@ -262,30 +278,6 @@ int main(int argc, char* argv[])
                 HIP_CHECK(hipDeviceEnablePeerAccess(j, 0));
         }
     }
-
-    // switch(p)
-    // {
-    // case p_single:
-    // }
-    // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
-    // std::vector<T*> gpubufs_input(ngpus);
-    // std::vector<T*> gpubufs_output(ngpus);
-
-    // // Compute host-side transposed matrix for correctness check
-    // std::vector<T> reference_matrix(N * N);
-    // host_copy(N, ngpus, h_input.data(), reference_matrix.data());
-    // setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
-
-    // assemble_output_to_host<T>(N, gpubufs_output, h_assembled_output.data());
-    // bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-    // if(!res)
-    // {
-    //     std::cout << "Incorrect result detected for " << state.name() << "\n";
-    //     std::cout << "Host Side Computation:\n";
-    //     print_host_2d<T>(N, N, reference_matrix);
-    //     std::cout << "----------------------\nDevice Side Computation:\n";
-    //     print_host_2d<T>(N, N, h_assembled_output);
-    // }
 
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};

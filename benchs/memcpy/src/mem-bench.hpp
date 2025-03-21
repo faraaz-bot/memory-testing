@@ -71,7 +71,7 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
         for(int j = 0; j < M; j++)
         {
             auto idx = i * N + j;
-            std::cout << std::setw(4) << input[idx] << " ";
+            std::cout << std::setw(6) << input[idx] << " ";
         }
         std::cout << " ]\n";
     }
