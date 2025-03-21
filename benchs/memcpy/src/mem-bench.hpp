@@ -310,11 +310,51 @@ void run_memcpy_async(const benchmark_context&    ctx,
 }
 
 // (2) Copy kernel
+
+// Based on host side copy, with purely global memory accesses and no parallelism yet
+// template <typename Tfloat>
+// __global__ void naive_copy(const benchmark_context& ctx, const Tfloat** in_bufs, Tfloat** out_bufs[])
+// {
+//     const size_t N     = ctx.N;
+//     const size_t ngpus = ctx.ngpus;
+//
+//     const size_t buf_elems       = N * N / ngpus;
+//     const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
+//     const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
+//     const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
+//
+//     for(auto src = 0; src < ngpus; src++)
+//     {
+//         for(auto dst = 0; dst < ngpus; dst++)
+//         {
+//             // Copy sub_block to output buf across diagonal
+//             for(auto row = 0; row < sub_block_size; row++)
+//             {
+//                 size_t src_base_offset = (dst * sub_block_size) + (elems_per_row * row);
+//                 size_t dst_base_offset = (src * sub_block_size) + (elems_per_row * row);
+//                 for(auto col = 0; col < sub_block_size; col++)
+//                 {
+//                     *(out_bufs[dst_base_offset] + col) = in_bufs[src_base_offset + col];
+//                 }
+//             }
+//         }
+//     }
+// }
+//
+// // Handle launching of copy kernels
+// template <typename Tfloat>
+// void naive_copy_kernel_launcher(const benchmark_context&    ctx,
+//                                 const std::vector<Tfloat*>& in_bufs,
+//                                 std::vector<Tfloat*>&       out_bufs)
+// {
+//     naive_copy<Tfloat><<<1, 1>>>(ctx, in_bufs.data(), out_bufs.data());
+// }
+
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
 template <typename Tfloat>
 // __launch_bounds__(1024)
 __global__ void copy(const benchmark_context&    ctx,
-                     const std::vector<Tfloat&>& in_bufs,
+                     const std::vector<Tfloat*>& in_bufs,
                      std::vector<Tfloat*>&       out_bufs)
 {
     // TODO: Should this loop over all gpus, or be called per device?
@@ -347,6 +387,15 @@ __global__ void copy(const benchmark_context&    ctx,
     //     // Realloc threads to write along fastest dim, and read transposed from LDS
     //     tile_thread_idx_x = tile_thread_idx_y;
     //
+}
+
+// Handle launching of copy kernels
+template <typename Tfloat>
+void copy_kernel_launcher(const benchmark_context&    ctx,
+                          const std::vector<Tfloat*>& in_bufs,
+                          std::vector<Tfloat*>&       out_bufs)
+{
+    // Experiment with streams!
 }
 
 // (3.1) MPI alltoall
