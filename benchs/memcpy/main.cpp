@@ -18,11 +18,11 @@
 // but not generating initial input data (h_input).
 template <typename T>
 void run_benchmark(
-    benchmark::State&                                                                       state,
-    benchmark_context                                                                       ctx,
-    const size_t                                                                            trials,
-    const std::vector<T>&                                                                   h_input,
-    std::function<void(const benchmark_context&, const std::vector<T*>&, std::vector<T*>&)> f)
+    benchmark::State&                                                                 state,
+    benchmark_context                                                                 ctx,
+    const size_t                                                                      trials,
+    const std::vector<T>&                                                             h_input,
+    std::function<void(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
 {
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
@@ -142,8 +142,8 @@ void add_benchmarks(bool                                          run_all,
             "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
             "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
-        // benchmarks.emplace_back(benchmark::RegisterBenchmark(
-        //     "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_kernel_launcher<T>));
+        benchmarks.emplace_back(benchmark::RegisterBenchmark(
+            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_kernel_launcher<T>));
     }
     else
     {
@@ -159,14 +159,14 @@ void add_benchmarks(bool                                          run_all,
                                                                      trials,
                                                                      h_input,
                                                                      run_memcpy_async<T>));
-            // else if(x == "naiveCopy")
-            //     benchmarks.emplace_back(
-            //         benchmark::RegisterBenchmark("naiveCopy",
-            //                                      &run_benchmark<T>,
-            //                                      ctx,
-            //                                      trials,
-            //                                      h_input,
-            //                                      naive_copy_kernel_launcher<T>));
+            else if(x == "naiveCopy")
+                benchmarks.emplace_back(
+                    benchmark::RegisterBenchmark("naiveCopy",
+                                                 &run_benchmark<T>,
+                                                 ctx,
+                                                 trials,
+                                                 h_input,
+                                                 naive_copy_kernel_launcher<T>));
         }
     }
 }

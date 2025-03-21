@@ -249,9 +249,9 @@ void teardown(const int                 ngpus,
 
 // (1.1) hipMemcpy2D between two devices
 template <typename Tfloat>
-void run_memcpy(const benchmark_context&    ctx,
-                const std::vector<Tfloat*>& in_bufs,
-                std::vector<Tfloat*>&       out_bufs)
+void run_memcpy(const benchmark_context& ctx,
+                std::vector<Tfloat*>&    in_bufs,
+                std::vector<Tfloat*>&    out_bufs)
 {
     const size_t N              = ctx.N;
     const size_t ngpus          = ctx.ngpus;
@@ -278,9 +278,9 @@ void run_memcpy(const benchmark_context&    ctx,
 
 // (1.2) hipMemcpy2D between two devices, using stream per each gpu-gpu interaction
 template <typename Tfloat>
-void run_memcpy_async(const benchmark_context&    ctx,
-                      const std::vector<Tfloat*>& in_bufs,
-                      std::vector<Tfloat*>&       out_bufs)
+void run_memcpy_async(const benchmark_context& ctx,
+                      std::vector<Tfloat*>&    in_bufs,
+                      std::vector<Tfloat*>&    out_bufs)
 {
     const size_t                    N       = ctx.N;
     const size_t                    ngpus   = ctx.ngpus;
@@ -311,51 +311,55 @@ void run_memcpy_async(const benchmark_context&    ctx,
 
 // (2) Copy kernel
 
-// Based on host side copy, with purely global memory accesses and no parallelism yet
-// template <typename Tfloat>
-// __global__ void naive_copy(const benchmark_context& ctx, const Tfloat** in_bufs, Tfloat** out_bufs[])
-// {
-//     const size_t N     = ctx.N;
-//     const size_t ngpus = ctx.ngpus;
-//
-//     const size_t buf_elems       = N * N / ngpus;
-//     const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
-//     const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
-//     const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
-//
-//     for(auto src = 0; src < ngpus; src++)
-//     {
-//         for(auto dst = 0; dst < ngpus; dst++)
-//         {
-//             // Copy sub_block to output buf across diagonal
-//             for(auto row = 0; row < sub_block_size; row++)
-//             {
-//                 size_t src_base_offset = (dst * sub_block_size) + (elems_per_row * row);
-//                 size_t dst_base_offset = (src * sub_block_size) + (elems_per_row * row);
-//                 for(auto col = 0; col < sub_block_size; col++)
-//                 {
-//                     *(out_bufs[dst_base_offset] + col) = in_bufs[src_base_offset + col];
-//                 }
-//             }
-//         }
-//     }
-// }
-//
+// Based on host side copy, with purely global memory accesses and no parallelism yet
+template <typename Tfloat>
+__global__ void naive_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
+{
+    const size_t buf_elems       = N * N / ngpus;
+    const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
+    const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
+    const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
+
+    for(auto src = 0; src < ngpus; src++)
+    {
+        for(auto dst = 0; dst < ngpus; dst++)
+        {
+            // Copy sub_block to output buf across diagonal
+            for(auto row = 0; row < sub_block_size; row++)
+            {
+                size_t src_offset = (dst * sub_block_size) + (elems_per_row * row);
+                size_t dst_offset = (src * sub_block_size) + (elems_per_row * row);
+                for(auto col = 0; col < sub_block_size; col++)
+                {
+                    // std::memcpy(output + dst_offset, input + src_offset, sub_block_bytes);
+                    printf("col = %d, dst = %d, dst_offset = %zu, src = %d, src_offset = %zu\n",
+                           col,
+                           dst,
+                           dst_offset,
+                           src,
+                           src_offset);
+                    // *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
+                }
+            }
+        }
+    }
+}
+
 // // Handle launching of copy kernels
-// template <typename Tfloat>
-// void naive_copy_kernel_launcher(const benchmark_context&    ctx,
-//                                 const std::vector<Tfloat*>& in_bufs,
-//                                 std::vector<Tfloat*>&       out_bufs)
-// {
-//     naive_copy<Tfloat><<<1, 1>>>(ctx, in_bufs.data(), out_bufs.data());
-// }
+template <typename Tfloat>
+void naive_copy_kernel_launcher(const benchmark_context& ctx,
+                                std::vector<Tfloat*>&    in_bufs,
+                                std::vector<Tfloat*>&    out_bufs)
+{
+    naive_copy<Tfloat><<<1, 1>>>(ctx.N, ctx.ngpus, in_bufs.data(), out_bufs.data());
+}
 
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
 template <typename Tfloat>
 // __launch_bounds__(1024)
-__global__ void copy(const benchmark_context&    ctx,
-                     const std::vector<Tfloat*>& in_bufs,
-                     std::vector<Tfloat*>&       out_bufs)
+__global__ void copy(const benchmark_context& ctx,
+                     std::vector<Tfloat*>&    in_bufs,
+                     std::vector<Tfloat*>&    out_bufs)
 {
     // TODO: Should this loop over all gpus, or be called per device?
     // Adjust func signature or ctx if needed, but we can call this from a diff host func
@@ -391,9 +395,9 @@ __global__ void copy(const benchmark_context&    ctx,
 
 // Handle launching of copy kernels
 template <typename Tfloat>
-void copy_kernel_launcher(const benchmark_context&    ctx,
-                          const std::vector<Tfloat*>& in_bufs,
-                          std::vector<Tfloat*>&       out_bufs)
+void copy_kernel_launcher(const benchmark_context& ctx,
+                          std::vector<Tfloat*>&    in_bufs,
+                          std::vector<Tfloat*>&    out_bufs)
 {
     // Experiment with streams!
 }
