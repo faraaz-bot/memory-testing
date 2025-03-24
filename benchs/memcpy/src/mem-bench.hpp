@@ -104,9 +104,8 @@ bool is_same_matrix(const int                  N,
                     const std::vector<Tfloat>& input2)
 {
     for(auto i = 0; i < N * N; i++)
-        if(input1[i] == input2[i])
+        if(input1[i] != input2[i])
             return false;
-
     return true;
 }
 
