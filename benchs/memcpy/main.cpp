@@ -218,7 +218,11 @@ int main(int argc, char* argv[])
     app.add_option("--max", max_val, "Maximum value to use if generating random input")
         ->default_val(1.0);
 
-    // TODO option: output format options? Or at least show gbench help as well
+    /*clang format off*/
+    std::string gtest_options = "Google Benchmark Options:\n\n--benchmark_list_tests={true|false}\n[--benchmark_filter=<regex>]\n[--benchmark_min_time=`<integer>x` OR `<float>s` ]\n[--benchmark_min_warmup_time=<min_warmup_time>]\n[--benchmark_repetitions=<num_repetitions>]\n[--benchmark_dry_run={true|false}]\n[--benchmark_enable_random_interleaving={true|false}]\n[--benchmark_report_aggregates_only={true|false}]\n[--benchmark_display_aggregates_only={true|false}]\n[--benchmark_format=<console|json|csv>]\n[--benchmark_out=<filename>]\n[--benchmark_out_format=<json|console|csv>]\n[--benchmark_color={auto|true|false}]\n[--benchmark_counters_tabular={true|false}]\n[--benchmark_context=<key>=<value>,...]\n[--benchmark_time_unit={ns|us|ms|s}]\n[--v=<verbosity>]";
+    /*clang format on*/
+
+    app.footer(gtest_options.c_str());
 
     app.allow_extras();
     try
@@ -254,15 +258,6 @@ int main(int argc, char* argv[])
     if(ctx.verbose)
         std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
                   << " gpus.\n";
-
-    std::vector<char*> cArgs(argv, argv + argc);
-
-    std::string tabular = "--benchmark_counters_tabular=true";
-
-    cArgs.push_back(tabular.data());
-
-    char** cArga     = cArgs.data();
-    int    cArg_size = cArgs.size();
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
@@ -318,6 +313,14 @@ int main(int argc, char* argv[])
         break;
     }
 
+    std::vector<char*> cArgs(argv, argv + argc);
+
+    std::string tabular = "--benchmark_counters_tabular=true";
+
+    cArgs.push_back(tabular.data());
+
+    char** cArga     = cArgs.data();
+    int    cArg_size = cArgs.size();
     benchmark::Initialize(&cArg_size, cArga);
 
     for(auto& b : benchmarks)
