@@ -97,15 +97,14 @@ void assemble_output_to_host(const int                   N,
 }
 
 // TODO May need to update this if adding complex data
-// TODO Pick a "better" epsilon value
-// Check equality of matrices
+// Check equality of matrices, should be exactly the same since data is copied
 template <typename Tfloat>
 bool is_same_matrix(const int                  N,
                     const std::vector<Tfloat>& input1,
                     const std::vector<Tfloat>& input2)
 {
     for(auto i = 0; i < N * N; i++)
-        if(std::abs(input1[i] - input2[i]) > 0.005)
+        if(input1[i] == input2[i])
             return false;
 
     return true;
