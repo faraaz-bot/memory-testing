@@ -329,16 +329,7 @@ __global__ void naive_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs,
                 size_t src_offset = (dst * sub_block_size) + (elems_per_row * row);
                 size_t dst_offset = (src * sub_block_size) + (elems_per_row * row);
                 for(auto col = 0; col < sub_block_size; col++)
-                {
-                    // std::memcpy(output + dst_offset, input + src_offset, sub_block_bytes);
-                    printf("col = %d, dst = %d, dst_offset = %zu, src = %d, src_offset = %zu\n",
-                           col,
-                           dst,
-                           dst_offset,
-                           src,
-                           src_offset);
-                    // *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
-                }
+                    *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
             }
         }
     }
@@ -350,7 +341,15 @@ void naive_copy_kernel_launcher(const benchmark_context& ctx,
                                 std::vector<Tfloat*>&    in_bufs,
                                 std::vector<Tfloat*>&    out_bufs)
 {
-    naive_copy<Tfloat><<<1, 1>>>(ctx.N, ctx.ngpus, in_bufs.data(), out_bufs.data());
+    const size_t ngpus = ctx.ngpus;
+    Tfloat**     d_in_bufs;
+    Tfloat**     d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    naive_copy<Tfloat><<<1, 1>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
 }
 
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
