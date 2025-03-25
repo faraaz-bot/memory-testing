@@ -219,7 +219,30 @@ int main(int argc, char* argv[])
         ->default_val(1.0);
 
     /*clang format off*/
-    std::string gtest_options = "Google Benchmark Options:\n\n--benchmark_list_tests={true|false}\n[--benchmark_filter=<regex>]\n[--benchmark_min_time=`<integer>x` OR `<float>s` ]\n[--benchmark_min_warmup_time=<min_warmup_time>]\n[--benchmark_repetitions=<num_repetitions>]\n[--benchmark_dry_run={true|false}]\n[--benchmark_enable_random_interleaving={true|false}]\n[--benchmark_report_aggregates_only={true|false}]\n[--benchmark_display_aggregates_only={true|false}]\n[--benchmark_format=<console|json|csv>]\n[--benchmark_out=<filename>]\n[--benchmark_out_format=<json|console|csv>]\n[--benchmark_color={auto|true|false}]\n[--benchmark_counters_tabular={true|false}]\n[--benchmark_context=<key>=<value>,...]\n[--benchmark_time_unit={ns|us|ms|s}]\n[--v=<verbosity>]";
+    std::string gtest_options = 
+        std::string("Google Benchmark Options:\n\n") +
+        std::string("--benchmark_filter=<regex>\n") + 
+        std::string("\tFilters out which benchmarks to run,                         i.e: ./membench --benchmark_filter=2D\n") +
+        std::string("--benchmark_min_time=`<integer>x` OR `<float>s`\n") +
+        std::string("\tSets the minimum amount of time each benchmark has to run,   i.e: ./membench --benchmark_min_time=10s\n") +
+        std::string("\tSets the display format on the terminal (default console),   i.e: ./membench --benchmark_format=csv\n") +
+        std::string("--benchmark_out=<filename>\n") + 
+        std::string("\tStore the output to filename,                                i.e: ./membench --benchmark_out=./sample.csv\n") +
+        std::string("--benchmark_out_format=<json|console|csv>\n") + 
+        std::string("\tSet the display format on the output file (default console), i.e: ./membench --benchmark_out_format=csv\n\n") + 
+        std::string("--benchmark_list_tests={true|false}\n") +
+        std::string("--benchmark_min_warmup_time=<min_warmup_time>\n") + 
+        std::string("--benchmark_repetitions=<num_repetitions>\n") + 
+        std::string("--benchmark_dry_run={true|false}\n") + 
+        std::string("--benchmark_enable_random_interleaving={true|false}\n") + 
+        std::string("--benchmark_report_aggregates_only={true|false}\n") + 
+        std::string("--benchmark_display_aggregates_only={true|false}\n") + 
+        std::string("--benchmark_format=<console|json|csv>\n") + 
+        std::string("--benchmark_color={auto|true|false}\n") + 
+        std::string("--benchmark_counters_tabular={true|false}\n") + 
+        std::string("--benchmark_context=<key>=<value>,...\n") + 
+        std::string("--benchmark_time_unit={ns|us|ms|s}\n") + 
+        std::string("--v=<verbosity>");
     /*clang format on*/
 
     app.footer(gtest_options.c_str());
