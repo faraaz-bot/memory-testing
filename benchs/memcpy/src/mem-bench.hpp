@@ -309,10 +309,12 @@ void run_memcpy_async(const benchmark_context& ctx,
 }
 
 // (2) Copy kernel
-
-// Based on host side copy, with purely global memory accesses and no parallelism yet
 template <typename Tfloat>
-__global__ void naive_copy(const size_t N, const size_t ngpus, const size_t items_per_thread, Tfloat** in_bufs, Tfloat** out_bufs)
+__global__ void naive_copy(const size_t N,
+                           const size_t ngpus,
+                           const size_t items_per_thread,
+                           Tfloat**     in_bufs,
+                           Tfloat**     out_bufs)
 {
 
     const size_t sub_block_size = std::sqrt(items_per_thread);
@@ -333,11 +335,55 @@ __global__ void naive_copy(const size_t N, const size_t ngpus, const size_t item
     
 }
 
-// // Handle launching of copy kernels
+// Try to improve on naive with parallelism and LDS usage
+// This variant will map blocks to gpus, and have each thread operates on one "sub_block"
 template <typename Tfloat>
-void naive_copy_kernel_launcher(const benchmark_context& ctx,
-                                std::vector<Tfloat*>&    in_bufs,
-                                std::vector<Tfloat*>&    out_bufs)
+__global__ void
+    standard_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
+{
+    const auto               gidx = blockDim.x * blockIdx.x + threadIdx.x;
+    const auto               tidx = threadIdx.x;
+    extern __shared__ Tfloat lds[]; // Should be buf_elems size, for curr GPU buf
+
+    const auto buf_elems        = N * N / ngpus; // Elems per GPU
+    const auto sub_block_size   = N / ngpus; // Length of block in each transfer
+    const auto sub_block_bytes  = sizeof(Tfloat) * sub_block_size;
+    const auto elems_per_row    = sub_block_size * ngpus; // Elems per row in transfer
+    const auto items_per_thread = sub_block_size * sub_block_size;
+
+    // if(tidx >= (buf_elems / sub_block_size)) return;
+
+    const auto src = blockIdx.x;
+    const auto dst = (src + ngpus / 2) % ngpus; // Map src gpu to dst gpu in some unique manner
+
+    // Copy items_per_thread contiguous values to lds
+    Tfloat* glb = in_bufs[src];
+    for(auto i = 0; i < items_per_thread && tidx + i < buf_elems; ++i)
+        lds[tidx * items_per_thread + i] = glb[gidx * items_per_thread + i];
+
+    __syncthreads(); // Sync since we will be reading different values than what we just wrote to LDS
+
+    // Copy to output now
+    for(auto row = 0; row < sub_block_size; ++row)
+    {
+        // Read contiguous values from LDS now, but row is used to map to destination of copy
+        for(auto col = 0; col < sub_block_size; ++col)
+        {
+            auto src_offset                     = (dst * sub_block_size) + (elems_per_row * row);
+            auto dst_offset                     = (src * sub_block_size) + (elems_per_row * row);
+            *(out_bufs[dst] + dst_offset + col) = lds[row * sub_block_size + col];
+        }
+    }
+}
+
+// Let each thread handle up to 4 values in LDS / LDS tiling?
+// Consider LDS bank conflict
+
+// Handle launching of copy kernels
+template <typename Tfloat>
+void naive_copy_launcher(const benchmark_context& ctx,
+                         std::vector<Tfloat*>&    in_bufs,
+                         std::vector<Tfloat*>&    out_bufs)
 {
     const size_t ngpus = ctx.ngpus;
     Tfloat**     d_in_bufs;
@@ -353,7 +399,26 @@ void naive_copy_kernel_launcher(const benchmark_context& ctx,
 
     size_t items_per_thread = (ctx.N * ctx.N) / (num_blocks * num_threads);
 
-    naive_copy<Tfloat><<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
+    naive_copy<Tfloat>
+        <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
+}
+
+template <typename Tfloat>
+void standard_copy_launcher(const benchmark_context& ctx,
+                            std::vector<Tfloat*>&    in_bufs,
+                            std::vector<Tfloat*>&    out_bufs)
+{
+    const size_t ngpus           = ctx.ngpus;
+    const auto   sub_block_bytes = sizeof(Tfloat) * ctx.N / ngpus;
+    Tfloat**     d_in_bufs;
+    Tfloat**     d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    standard_copy<Tfloat>
+        <<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
 }
 
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
