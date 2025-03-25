@@ -143,7 +143,9 @@ void add_benchmarks(bool                                          run_all,
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
             "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_kernel_launcher<T>));
+            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
+        benchmarks.emplace_back(benchmark::RegisterBenchmark(
+            "standardCopy", &run_benchmark<T>, ctx, trials, h_input, standard_copy_launcher<T>));
     }
     else
     {
@@ -160,13 +162,15 @@ void add_benchmarks(bool                                          run_all,
                                                                      h_input,
                                                                      run_memcpy_async<T>));
             else if(x == "naiveCopy")
-                benchmarks.emplace_back(
-                    benchmark::RegisterBenchmark("naiveCopy",
-                                                 &run_benchmark<T>,
-                                                 ctx,
-                                                 trials,
-                                                 h_input,
-                                                 naive_copy_kernel_launcher<T>));
+                benchmarks.emplace_back(benchmark::RegisterBenchmark(
+                    "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
+            else if(x == "standardCopy")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark("standardCopy",
+                                                                     &run_benchmark<T>,
+                                                                     ctx,
+                                                                     trials,
+                                                                     h_input,
+                                                                     standard_copy_launcher<T>));
         }
     }
 }
@@ -177,7 +181,7 @@ int main(int argc, char* argv[])
     CLI::App app{"Memcpy bench"};
 
     std::set<std::string> valid_benchmarks
-        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy"};
+        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "standardCopy"};
 
     std::string run_bench_helper
         = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
@@ -304,12 +308,12 @@ int main(int argc, char* argv[])
                               enabled_benchmarks);
         break;
     case p_double:
-        add_benchmarks<double>(runAll,
-                               benchmarks,
-                               ctx,
-                               trials,
-                               generate<double>(N, N, gen, min_val, max_val),
-                               enabled_benchmarks);
+        // add_benchmarks<double>(runAll,
+        //                        benchmarks,
+        //                        ctx,
+        //                        trials,
+        //                        generate<double>(N, N, gen, min_val, max_val),
+        //                        enabled_benchmarks);
         break;
     // TODO Complex valued cases
     case p_complex_single:
