@@ -6,6 +6,7 @@
 #include <random>
 #include <stdio.h>
 #include <vector>
+#include <cmath>
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -313,26 +314,23 @@ void run_memcpy_async(const benchmark_context& ctx,
 template <typename Tfloat>
 __global__ void naive_copy(const size_t N, const size_t ngpus, const size_t items_per_thread, Tfloat** in_bufs, Tfloat** out_bufs)
 {
-    printf("N: %u, Blocks: %u IPT: %u\n", N, ngpus, items_per_thread);
-    // const size_t buf_elems       = N * N / ngpus;
-    // const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
-    // const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
-    // const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
 
-    // for(auto src = 0; src < ngpus; src++)
-    // {
-    //     for(auto dst = 0; dst < ngpus; dst++)
-    //     {
-    //         // Copy sub_block to output buf across diagonal
-    //         for(auto row = 0; row < sub_block_size; row++)
-    //         {
-    //             size_t src_offset = (dst * sub_block_size) + (elems_per_row * row);
-    //             size_t dst_offset = (src * sub_block_size) + (elems_per_row * row);
-    //             for(auto col = 0; col < sub_block_size; col++)
-    //                 *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
-    //         }
-    //     }
-    // }
+    const size_t sub_block_size = std::sqrt(items_per_thread);
+
+    const size_t bIndex = blockIdx.x;
+    const size_t tIndex = threadIdx.x;
+    
+    for(size_t x = 0; x < sub_block_size; x++){
+        for(size_t y = 0; y < sub_block_size; y++){
+            
+            size_t oIndex = x * N + (tIndex * sub_block_size + y);
+            size_t nIndex = x * N + (bIndex * sub_block_size + y);
+
+            out_bufs[tIndex][nIndex] = in_bufs[bIndex][oIndex];
+
+        }
+    }
+    
 }
 
 // // Handle launching of copy kernels
@@ -349,17 +347,11 @@ void naive_copy_kernel_launcher(const benchmark_context& ctx,
     HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-
+    
     size_t num_blocks = ngpus;
-    size_t num_threads = (ctx.N * ctx.N) / ngpus;
-    size_t items_per_thread = num_threads / num_blocks;
+    size_t num_threads = num_blocks;
 
-    if(num_threads > 1024){
-        num_threads = 1024;
-        while(items_per_thread * num_threads < ctx.N)
-            items_per_thread *= 2;
-    }
-
+    size_t items_per_thread = (ctx.N * ctx.N) / (num_blocks * num_threads);
 
     naive_copy<Tfloat><<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
 }
