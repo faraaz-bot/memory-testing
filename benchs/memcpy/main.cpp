@@ -222,7 +222,37 @@ int main(int argc, char* argv[])
     app.add_option("--max", max_val, "Maximum value to use if generating random input")
         ->default_val(1.0);
 
-    // TODO option: output format options? Or at least show gbench help as well
+    /*clang format off*/
+    std::string gtest_options
+        = std::string("Google Benchmark Options:\n\n") + std::string("--benchmark_filter=<regex>\n")
+          + std::string("\tFilters out which benchmarks to run,                         i.e: "
+                        "./membench --benchmark_filter=2D\n")
+          + std::string("--benchmark_min_time=`<integer>x` OR `<float>s`\n")
+          + std::string("\tSets the minimum amount of time each benchmark has to run,   i.e: "
+                        "./membench --benchmark_min_time=10s\n")
+          + std::string("\tSets the display format on the terminal (default console),   i.e: "
+                        "./membench --benchmark_format=csv\n")
+          + std::string("--benchmark_out=<filename>\n")
+          + std::string("\tStore the output to filename,                                i.e: "
+                        "./membench --benchmark_out=./sample.csv\n")
+          + std::string("--benchmark_out_format=<json|console|csv>\n")
+          + std::string("\tSet the display format on the output file (default console), i.e: "
+                        "./membench --benchmark_out_format=csv\n\n")
+          + std::string("--benchmark_list_tests={true|false}\n")
+          + std::string("--benchmark_min_warmup_time=<min_warmup_time>\n")
+          + std::string("--benchmark_repetitions=<num_repetitions>\n")
+          + std::string("--benchmark_dry_run={true|false}\n")
+          + std::string("--benchmark_enable_random_interleaving={true|false}\n")
+          + std::string("--benchmark_report_aggregates_only={true|false}\n")
+          + std::string("--benchmark_display_aggregates_only={true|false}\n")
+          + std::string("--benchmark_format=<console|json|csv>\n")
+          + std::string("--benchmark_color={auto|true|false}\n")
+          + std::string("--benchmark_counters_tabular={true|false}\n")
+          + std::string("--benchmark_context=<key>=<value>,...\n")
+          + std::string("--benchmark_time_unit={ns|us|ms|s}\n") + std::string("--v=<verbosity>");
+    /*clang format on*/
+
+    app.footer(gtest_options.c_str());
 
     app.allow_extras();
     try
@@ -258,15 +288,6 @@ int main(int argc, char* argv[])
     if(ctx.verbose)
         std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
                   << " gpus.\n";
-
-    std::vector<char*> cArgs(argv, argv + argc);
-
-    std::string tabular = "--benchmark_counters_tabular=true";
-
-    cArgs.push_back(tabular.data());
-
-    char** cArga     = cArgs.data();
-    int    cArg_size = cArgs.size();
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
@@ -322,6 +343,14 @@ int main(int argc, char* argv[])
         break;
     }
 
+    std::vector<char*> cArgs(argv, argv + argc);
+
+    std::string tabular = "--benchmark_counters_tabular=true";
+
+    cArgs.push_back(tabular.data());
+
+    char** cArga     = cArgs.data();
+    int    cArg_size = cArgs.size();
     benchmark::Initialize(&cArg_size, cArga);
 
     for(auto& b : benchmarks)

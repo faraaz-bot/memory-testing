@@ -311,25 +311,32 @@ void run_memcpy_async(const benchmark_context& ctx,
 
 // Based on host side copy, with purely global memory accesses and no parallelism yet
 template <typename Tfloat>
-__global__ void naive_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
+__global__ void naive_copy(const size_t N,
+                           const size_t ngpus,
+                           const size_t items_per_thread,
+                           Tfloat**     in_bufs,
+                           Tfloat**     out_bufs)
 {
-    const size_t sub_block_size = N / ngpus; // Length of block in each transfer
-    const size_t elems_per_row  = sub_block_size * ngpus; // Elems per row in transfer
+    printf("N: %u, Blocks: %u IPT: %u\n", N, ngpus, items_per_thread);
+    // const size_t buf_elems       = N * N / ngpus;
+    // const size_t sub_block_size  = N / ngpus; // Length of block in each transfer
+    // const size_t sub_block_bytes = sizeof(Tfloat) * sub_block_size;
+    // const size_t elems_per_row   = sub_block_size * ngpus; // Elems per row in transfer
 
-    for(auto src = 0; src < ngpus; src++)
-    {
-        for(auto dst = 0; dst < ngpus; dst++)
-        {
-            // Copy sub_block to output buf across diagonal
-            for(auto row = 0; row < sub_block_size; row++)
-            {
-                size_t src_offset = (dst * sub_block_size) + (elems_per_row * row);
-                size_t dst_offset = (src * sub_block_size) + (elems_per_row * row);
-                for(auto col = 0; col < sub_block_size; col++)
-                    *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
-            }
-        }
-    }
+    // for(auto src = 0; src < ngpus; src++)
+    // {
+    //     for(auto dst = 0; dst < ngpus; dst++)
+    //     {
+    //         // Copy sub_block to output buf across diagonal
+    //         for(auto row = 0; row < sub_block_size; row++)
+    //         {
+    //             size_t src_offset = (dst * sub_block_size) + (elems_per_row * row);
+    //             size_t dst_offset = (src * sub_block_size) + (elems_per_row * row);
+    //             for(auto col = 0; col < sub_block_size; col++)
+    //                 *(out_bufs[dst] + dst_offset + col) = *(in_bufs[src] + src_offset + col);
+    //         }
+    //     }
+    // }
 }
 
 // Try to improve on naive with parallelism and LDS usage
@@ -390,7 +397,20 @@ void naive_copy_launcher(const benchmark_context& ctx,
     HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-    naive_copy<Tfloat><<<1, 1>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
+
+    size_t num_blocks       = ngpus;
+    size_t num_threads      = (ctx.N * ctx.N) / ngpus;
+    size_t items_per_thread = num_threads / num_blocks;
+
+    if(num_threads > 1024)
+    {
+        num_threads = 1024;
+        while(items_per_thread * num_threads < ctx.N)
+            items_per_thread *= 2;
+    }
+
+    naive_copy<Tfloat>
+        <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
 }
 
 template <typename Tfloat>
