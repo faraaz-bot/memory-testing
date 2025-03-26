@@ -34,7 +34,6 @@ void run_benchmark(
     std::vector<T>  h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
-    
     // Compute host-side transposed matrix for correctness check
     std::vector<T> reference_matrix(N * N);
     host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
@@ -165,12 +164,8 @@ void add_benchmarks(bool                                          run_all,
                 benchmarks.emplace_back(benchmark::RegisterBenchmark(
                     "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
             else if(x == "ldsCopy")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark("ldsCopy",
-                                                                     &run_benchmark<T>,
-                                                                     ctx,
-                                                                     trials,
-                                                                     h_input,
-                                                                     lds_copy_launcher<T>));
+                benchmarks.emplace_back(benchmark::RegisterBenchmark(
+                    "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
         }
     }
 }
@@ -196,16 +191,16 @@ int main(int argc, char* argv[])
     size_t                trials;
     std::set<std::string> param_enabled_benchmarks;
     app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
-    app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")->default_val(4U);
+    app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")
+        ->default_val(4U)
+        ->check(CLI::PositiveNumber);
     app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
-    app.add_option("-c, --verify",
-                   ctx.verify_results,
-                   "Toggle correctness checks performed after each trial")
-        ->default_val(false);
+    app.add_flag(
+        "-c, --verify", ctx.verify_results, "Toggle correctness checks performed after each trial");
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
-    app.add_option("--run-benchmark", param_enabled_benchmarks, run_bench_helper)
+    app.add_option("-r, --run-benchmark", param_enabled_benchmarks, run_bench_helper)
         ->default_val("all");
 
     precision p;
@@ -288,7 +283,7 @@ int main(int argc, char* argv[])
     const size_t N = ctx.N;
     if(ctx.verbose)
         std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
-                  << " gpus.\n";
+                  << " gpus." << std::endl;
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...

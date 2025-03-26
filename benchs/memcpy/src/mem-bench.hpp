@@ -405,8 +405,8 @@ __global__ void naive_copy(const size_t N,
 {
 
     const size_t sub_block_size = std::sqrt(items_per_thread);
-    const size_t bIndex = blockIdx.x;
-    const size_t tIndex = threadIdx.x;
+    const size_t bIndex         = blockIdx.x;
+    const size_t tIndex         = threadIdx.x;
 
     for(size_t x = 0; x < sub_block_size; x++)
     {
@@ -415,7 +415,7 @@ __global__ void naive_copy(const size_t N,
 
             size_t oIndex = x * N + (tIndex * sub_block_size + y);
             size_t nIndex = x * N + (bIndex * sub_block_size + y);
-            
+
             out_bufs[tIndex][nIndex] = in_bufs[bIndex][oIndex];
         }
     }
@@ -445,25 +445,24 @@ void naive_copy_launcher(const benchmark_context& ctx,
         <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
 }
 
-// Try to improve on naive with parallelism and LDS usage
+// Try to improve on naive with LDS usage
 // This variant will map blocks to gpus, and have each thread operates on one "sub_block"
 template <typename Tfloat>
-__global__ void
-    lds_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
+__global__ void lds_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
 {
-    const size_t bIndex = blockIdx.x;
-    const size_t tIndex = threadIdx.x;
+    const size_t           bIndex = blockIdx.x;
+    const size_t           tIndex = threadIdx.x;
     extern __shared__ char lds_char[]; // Should be buf_elems size, for curr GPU buf
     auto                   lds
-    = reinterpret_cast<Tfloat*>(lds_char); // Workaround declaring extern lds for diff types
-    
+        = reinterpret_cast<Tfloat*>(lds_char); // Workaround declaring extern lds for diff types
+
     const size_t items_per_thread = (N * N) / (ngpus * ngpus);
-    const size_t sub_block_size = std::sqrt(items_per_thread);
+    const size_t sub_block_size   = std::sqrt(items_per_thread);
 
     for(size_t i = 0; i < items_per_thread; i++)
         lds[tIndex * items_per_thread + i] = in_bufs[bIndex][tIndex * items_per_thread + i];
     __syncthreads(); // Sync since we will be reading different values than what we just wrote to LDS
- 
+
     for(size_t x = 0; x < sub_block_size; x++)
     {
         for(size_t y = 0; y < sub_block_size; y++)
@@ -471,7 +470,7 @@ __global__ void
 
             size_t oIndex = x * N + (tIndex * sub_block_size + y);
             size_t nIndex = x * N + (bIndex * sub_block_size + y);
-            
+
             out_bufs[tIndex][nIndex] = lds[oIndex];
         }
     }
@@ -479,8 +478,8 @@ __global__ void
 
 template <typename Tfloat>
 void lds_copy_launcher(const benchmark_context& ctx,
-                            std::vector<Tfloat*>&    in_bufs,
-                            std::vector<Tfloat*>&    out_bufs)
+                       std::vector<Tfloat*>&    in_bufs,
+                       std::vector<Tfloat*>&    out_bufs)
 {
     const size_t ngpus           = ctx.ngpus;
     const auto   sub_block_bytes = sizeof(Tfloat) * ctx.N * ctx.N / ngpus;
@@ -491,13 +490,10 @@ void lds_copy_launcher(const benchmark_context& ctx,
     HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-    lds_copy<Tfloat>
-        <<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
+    lds_copy<Tfloat><<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
 }
 // Let each thread handle up to 4 values in LDS / LDS tiling?
 // Consider LDS bank conflict
-
-
 
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
 template <typename Tfloat>
