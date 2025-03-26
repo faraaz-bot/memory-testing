@@ -34,9 +34,11 @@ void run_benchmark(
     std::vector<T>  h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
-    // Compute host-side transposed matrix for correctness check
     std::vector<T> reference_matrix(N * N);
-    host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+    // Compute host-side transposed matrix for correctness check
+    if(ctx.verify_results)
+        host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+
     if(verbose > 1)
     {
         std::cout << "Starting Input Matrix:\n";
@@ -77,6 +79,13 @@ void run_benchmark(
         {
             HIP_CHECK(hipEventRecord(start, timing_stream));
             f(ctx, gpubufs_input, gpubufs_output);
+
+            for(auto i = 0; i < ngpus; i++)
+            {
+                HIP_CHECK(hipSetDevice(i));
+                HIP_CHECK(hipDeviceSynchronize());
+            }
+
             HIP_CHECK(hipEventRecord(stop, timing_stream));
             HIP_CHECK(hipEventSynchronize(stop));
 
