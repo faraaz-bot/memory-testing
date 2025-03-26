@@ -34,10 +34,10 @@ void run_benchmark(
     std::vector<T>  h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
+    
     // Compute host-side transposed matrix for correctness check
     std::vector<T> reference_matrix(N * N);
     host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
-
     if(verbose > 1)
     {
         std::cout << "Starting Input Matrix:\n";
@@ -142,10 +142,10 @@ void add_benchmarks(bool                                          run_all,
             "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
             "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
+        // benchmarks.emplace_back(benchmark::RegisterBenchmark(
+        //     "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
-        benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "standardCopy", &run_benchmark<T>, ctx, trials, h_input, standard_copy_launcher<T>));
+            "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
     }
     else
     {
@@ -164,13 +164,13 @@ void add_benchmarks(bool                                          run_all,
             else if(x == "naiveCopy")
                 benchmarks.emplace_back(benchmark::RegisterBenchmark(
                     "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
-            else if(x == "standardCopy")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark("standardCopy",
+            else if(x == "ldsCopy")
+                benchmarks.emplace_back(benchmark::RegisterBenchmark("ldsCopy",
                                                                      &run_benchmark<T>,
                                                                      ctx,
                                                                      trials,
                                                                      h_input,
-                                                                     standard_copy_launcher<T>));
+                                                                     lds_copy_launcher<T>));
         }
     }
 }
@@ -181,7 +181,7 @@ int main(int argc, char* argv[])
     CLI::App app{"Memcpy bench"};
 
     std::set<std::string> valid_benchmarks
-        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "standardCopy"};
+        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy"};
 
     std::string run_bench_helper
         = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
@@ -232,6 +232,7 @@ int main(int argc, char* argv[])
           + std::string("--benchmark_min_time=`<integer>x` OR `<float>s`\n")
           + std::string("\tSets the minimum amount of time each benchmark has to run,   i.e: "
                         "./membench --benchmark_min_time=10s\n")
+          + std::string("--benchmark_format=<json|console|csv>\n")
           + std::string("\tSets the display format on the terminal (default console),   i.e: "
                         "./membench --benchmark_format=csv\n")
           + std::string("--benchmark_out=<filename>\n")
