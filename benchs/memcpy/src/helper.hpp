@@ -21,7 +21,7 @@ struct benchmark_context
     size_t                   blocks;
     size_t                   threads;
     int                      verbose;
-    bool                     verify_results;
+    bool                     verify_results = false;
     std::vector<hipStream_t> streams;
 };
 
