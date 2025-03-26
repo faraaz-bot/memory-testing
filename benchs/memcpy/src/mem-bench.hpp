@@ -1,4 +1,5 @@
 #include "helper.hpp"
+#include <cmath>
 #include <cstring>
 #include <hip/hip_runtime.h>
 #include <iomanip>
@@ -6,7 +7,6 @@
 #include <random>
 #include <stdio.h>
 #include <vector>
-#include <cmath>
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -321,18 +321,18 @@ __global__ void naive_copy(const size_t N,
 
     const size_t bIndex = blockIdx.x;
     const size_t tIndex = threadIdx.x;
-    
-    for(size_t x = 0; x < sub_block_size; x++){
-        for(size_t y = 0; y < sub_block_size; y++){
-            
+
+    for(size_t x = 0; x < sub_block_size; x++)
+    {
+        for(size_t y = 0; y < sub_block_size; y++)
+        {
+
             size_t oIndex = x * N + (tIndex * sub_block_size + y);
             size_t nIndex = x * N + (bIndex * sub_block_size + y);
 
             out_bufs[tIndex][nIndex] = in_bufs[bIndex][oIndex];
-
         }
     }
-    
 }
 
 // Try to improve on naive with parallelism and LDS usage
@@ -341,9 +341,11 @@ template <typename Tfloat>
 __global__ void
     standard_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
 {
-    const auto               gidx = blockDim.x * blockIdx.x + threadIdx.x;
-    const auto               tidx = threadIdx.x;
-    extern __shared__ Tfloat lds[]; // Should be buf_elems size, for curr GPU buf
+    const auto             gidx = blockDim.x * blockIdx.x + threadIdx.x;
+    const auto             tidx = threadIdx.x;
+    extern __shared__ char lds_char[]; // Should be buf_elems size, for curr GPU buf
+    auto                   lds
+        = reinterpret_cast<Tfloat*>(lds_char); // Workaround declaring extern lds for diff types
 
     const auto buf_elems        = N * N / ngpus; // Elems per GPU
     const auto sub_block_size   = N / ngpus; // Length of block in each transfer
@@ -393,8 +395,8 @@ void naive_copy_launcher(const benchmark_context& ctx,
     HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-    
-    size_t num_blocks = ngpus;
+
+    size_t num_blocks  = ngpus;
     size_t num_threads = num_blocks;
 
     size_t items_per_thread = (ctx.N * ctx.N) / (num_blocks * num_threads);

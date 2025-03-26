@@ -329,12 +329,12 @@ int main(int argc, char* argv[])
                               enabled_benchmarks);
         break;
     case p_double:
-        // add_benchmarks<double>(runAll,
-        //                        benchmarks,
-        //                        ctx,
-        //                        trials,
-        //                        generate<double>(N, N, gen, min_val, max_val),
-        //                        enabled_benchmarks);
+        add_benchmarks<double>(runAll,
+                               benchmarks,
+                               ctx,
+                               trials,
+                               generate<double>(N, N, gen, min_val, max_val),
+                               enabled_benchmarks);
         break;
     // TODO Complex valued cases
     case p_complex_single:
