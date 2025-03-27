@@ -223,31 +223,8 @@ void host_transpose(const int N, const std::vector<Tfloat>& input, std::vector<T
     }
 }
 
-// /* Setup and Teardown helpers */
-// template <typename Tfloat>
-// std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tfloat max)
-// {
-//     // TODO add complex data support
-//     // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
-//     std::vector<Tfloat> input(N * M);
-//     if(gen == h_random)
-//     {
-//         std::random_device                     rd;
-//         std::mt19937                           m_engine(rd()); // Mersenne Twister, rd as seed
-//         std::uniform_real_distribution<Tfloat> dist{min, max};
-// #pragma omp parallel for
-//         for(size_t i = 0; i < N * N; ++i)
-//             input[i] = dist(m_engine);
-//     }
-//     else if(gen == h_ordered)
-//     {
-//         for(size_t i = 0; i < N * N; i++)
-//             input[i] = static_cast<Tfloat>(i);
-//     }
-
-//     return input;
-// }
-
+/* Setup and Teardown helpers */
+// Generates data of specified type (by gen) on device and transfers to host
 template <typename Tfloat>
 std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tfloat max)
 {
@@ -255,7 +232,7 @@ std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tflo
     // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
     std::vector<Tfloat> input(N * M);
 
-    bool isRandom = gen == h_random;
+    bool isRandom = gen == gen_random;
 
     Tfloat* dArr;
     HIP_CHECK(hipMalloc(&dArr, sizeof(Tfloat) * N * M));

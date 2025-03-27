@@ -35,8 +35,8 @@ enum precision
 
 enum generator
 {
-    h_random,
-    h_ordered,
+    gen_random,
+    gen_ordered,
 };
 
 // Used for CLI11 parsing of precision enum option
@@ -58,10 +58,10 @@ static bool lexical_cast(const std::string& word, precision& p)
 // Used for CLI11 parsing of input gen enum option
 static bool lexical_cast(const std::string& word, generator& gen)
 {
-    if(word == "h_random" || word == "0")
-        gen = h_random;
-    else if(word == "h_ordered" || word == "1")
-        gen = h_ordered;
+    if(word == "random" || word == "0")
+        gen = gen_random;
+    else if(word == "ordered" || word == "1")
+        gen = gen_ordered;
     else
         throw std::runtime_error("Invalid input generator specified");
     return true;

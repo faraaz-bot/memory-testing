@@ -218,8 +218,9 @@ int main(int argc, char* argv[])
     double    max_val;
     app.add_option("-p, --precision", p, "Data precision: single (default), double")
         ->default_val("single");
-    app.add_option(
-           "-i, --inputGen", gen, "Data generation type:\n0) random (default)\n1) ordered sequence")
+    app.add_option("-i, --inputGen",
+                   gen,
+                   "Data generation type:\n0) random (default)\n1) ordered (linear sequence)")
         ->default_val(0);
     app.add_option("--min", min_val, "Minimum value to use if generating random input")
         ->default_val(-1.0);
