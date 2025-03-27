@@ -103,17 +103,19 @@ void run_benchmark(
                     num_failures++;
                     std::cout << "Incorrect result detected for " << state.name() << ", trial #"
                               << t << "\n";
-                    std::cout << "Original Input:\n";
-                    print_host_2d<T>(N, N, h_input);
-                    std::cout << "Host Side Computation:\n";
-                    print_host_2d<T>(N, N, reference_matrix);
-                    std::cout << "----------------------\nDevice Side Computation:\n";
-                    print_host_2d<T>(N, N, h_assembled_output);
+                    if(verbose > 2)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "Host Side Computation:\n";
+                        print_host_2d<T>(N, N, reference_matrix);
+                        std::cout << "----------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
                 }
                 else
                 {
                     num_pass++;
-                    // std::cout << "PASS\n";
                 }
                 total_runs++;
             }

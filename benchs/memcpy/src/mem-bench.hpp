@@ -16,6 +16,7 @@
  *
  * TODO list:
  * - Implement basic implementations for each method
+ *     - Adjust timing to exclude hipMemcpy for input pointers for kernels
  * - Optimize stuff after
  *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
@@ -425,6 +426,9 @@ void naive_copy_launcher(const benchmark_context& ctx,
 
     naive_copy<Tfloat>
         <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
+
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
 }
 
 // Try to improve on naive with LDS usage
@@ -473,9 +477,15 @@ void lds_copy_launcher(const benchmark_context& ctx,
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     lds_copy<Tfloat><<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
+
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
 }
+
 // Let each thread handle up to 4 values in LDS / LDS tiling?
 // Consider LDS bank conflict
+// Kernels on different streams?
+// Adjust LDS kernel to use (ngpus * size of a sub block row) threads per block instead of just ngpus?
 
 // Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
 template <typename Tfloat>
