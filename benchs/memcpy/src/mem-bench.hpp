@@ -1,13 +1,13 @@
 #include "helper.hpp"
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <hip/hip_runtime.h>
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <stdio.h>
 #include <vector>
-#include <ctime>
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -34,60 +34,68 @@
 
 /* Helpers for verifying correctness */
 
-#define xorwow_next(states, max, min, val)\
-    uint32_t t  = states[4];\
-    uint32_t s  = states[0];\
-    states[4] = states[3];\
-    states[3] = states[2];\
-    states[2] = states[1];\
-    states[1] = s;\
-    t ^= t >> 2;\
-    t ^= t << 1;\
-    t ^= s ^ (s << 4);\
-    states[0] = t;\
-    states[5] += 362437;\
-    uint32_t temp = t + states[5];\
-    val = min + (static_cast<Tfloat>(temp) * (max - min)) / static_cast<Tfloat>(4294967295);\
-
+#define xorwow_next(states, max, min, val) \
+    uint32_t t = states[4];                \
+    uint32_t s = states[0];                \
+    states[4]  = states[3];                \
+    states[3]  = states[2];                \
+    states[2]  = states[1];                \
+    states[1]  = s;                        \
+    t ^= t >> 2;                           \
+    t ^= t << 1;                           \
+    t ^= s ^ (s << 4);                     \
+    states[0] = t;                         \
+    states[5] += 362437;                   \
+    uint32_t temp = t + states[5];         \
+    val = min + (static_cast<Tfloat>(temp) * (max - min)) / static_cast<Tfloat>(4294967295);
 
 template <typename Tfloat>
-__global__  void populate_array(const size_t N, Tfloat * out, const Tfloat min, const Tfloat max, const bool isRandom, size_t seed){
-    const size_t bIndex = blockIdx.x;
-    const size_t tIndex = threadIdx.x;
+__global__ void populate_array(const size_t N,
+                               Tfloat*      out,
+                               const Tfloat min,
+                               const Tfloat max,
+                               const bool   isRandom,
+                               size_t       seed)
+{
+    const size_t bIndex         = blockIdx.x;
+    const size_t tIndex         = threadIdx.x;
     const size_t itemsPerThread = N;
-    const size_t blockSize = itemsPerThread * blockDim.x;
-    const size_t start = (tIndex * itemsPerThread) + (bIndex * blockSize);
+    const size_t blockSize      = itemsPerThread * blockDim.x;
+    const size_t start          = (tIndex * itemsPerThread) + (bIndex * blockSize);
 
-    if(isRandom){
+    if(isRandom)
+    {
         uint32_t states[6];
         states[0] = seed ^ tIndex + bIndex;
         states[1] = seed >> 1 ^ (tIndex + bIndex * 2);
         states[2] = seed >> 2 ^ (tIndex + bIndex * 3);
         states[3] = seed >> 3 ^ (tIndex + bIndex * 4);
         states[4] = seed >> 4 ^ (tIndex + bIndex * 5);
-        states[5] = seed + tIndex + bIndex; 
-        
+        states[5] = seed + tIndex + bIndex;
+
         Tfloat temp;
-        for(size_t i = 0; i < 5; i++){
+        for(size_t i = 0; i < 5; i++)
+        {
             xorwow_next(states, max, min, temp);
         }
-        
 
-        for(size_t i = 0; i < itemsPerThread; i++){
+        for(size_t i = 0; i < itemsPerThread; i++)
+        {
             if(start + i >= N * N)
                 continue;
             xorwow_next(states, max, min, out[start + i]);
         }
     }
-    else{
-        for(size_t i = 0; i < itemsPerThread; i++){
+    else
+    {
+        for(size_t i = 0; i < itemsPerThread; i++)
+        {
             if(start + i >= N * N)
                 continue;
             out[start + i] = start + i;
         }
-    }    
+    }
 }
-
 
 // Helper kernel just to print N consecutive values in gpubuf
 template <typename Tfloat>
@@ -240,34 +248,31 @@ void host_transpose(const int N, const std::vector<Tfloat>& input, std::vector<T
 //     return input;
 // }
 
-
-
 template <typename Tfloat>
 std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tfloat max)
 {
     // TODO add complex data support
     // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
     std::vector<Tfloat> input(N * M);
-    
+
     bool isRandom = gen == h_random;
 
-    Tfloat * dArr;
+    Tfloat* dArr;
     HIP_CHECK(hipMalloc(&dArr, sizeof(Tfloat) * N * M));
-
 
     size_t threads = N <= 1024 ? N : 1024;
     // size_t itemsPerThread = N <= 1024 ? N : 1024;
     size_t blocks = std::ceil(static_cast<double>((N * M)) / static_cast<double>((threads * N)));
 
-    auto now = std::chrono::system_clock::now();
+    auto now    = std::chrono::system_clock::now();
     auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
 
-    auto value = now_ms.time_since_epoch();
+    auto   value    = now_ms.time_since_epoch();
     size_t duration = value.count();
     populate_array<<<blocks, threads>>>(N, dArr, min, max, isRandom, duration);
 
     HIP_CHECK(hipMemcpy(input.data(), dArr, sizeof(Tfloat) * N * M, hipMemcpyDeviceToHost));
-    
+
     return input;
 }
 
