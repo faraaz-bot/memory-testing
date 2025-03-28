@@ -315,12 +315,14 @@ void teardown(const int                 ngpus,
 }
 
 /* Implementations */
+// Host function ("launcher" in case of kernel benchmark) is passed in to benchmark
+// float return value is the time in ms that was recorded for one execution
 
 // (1.1) hipMemcpy2D between two devices
 template <typename Tfloat>
-void run_memcpy(const benchmark_context& ctx,
-                std::vector<Tfloat*>&    in_bufs,
-                std::vector<Tfloat*>&    out_bufs)
+float run_memcpy(const benchmark_context& ctx,
+                 std::vector<Tfloat*>&    in_bufs,
+                 std::vector<Tfloat*>&    out_bufs)
 {
     const size_t N              = ctx.N;
     const size_t ngpus          = ctx.ngpus;
@@ -329,6 +331,8 @@ void run_memcpy(const benchmark_context& ctx,
         = sub_block_size * sizeof(Tfloat); // Bytes per row in transfer
     const size_t pitch_bytes = N * sizeof(Tfloat); // Width of buf
 
+    GPUTimer timer;
+    timer.tick();
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
         for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
@@ -342,14 +346,16 @@ void run_memcpy(const benchmark_context& ctx,
                                   hipMemcpyDeviceToDevice));
         }
     }
-    return;
+    timer.tock();
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    return timer.elapsed();
 }
 
 // (1.2) hipMemcpy2D between two devices, using stream per each gpu-gpu interaction
 template <typename Tfloat>
-void run_memcpy_async(const benchmark_context& ctx,
-                      std::vector<Tfloat*>&    in_bufs,
-                      std::vector<Tfloat*>&    out_bufs)
+float run_memcpy_async(const benchmark_context& ctx,
+                       std::vector<Tfloat*>&    in_bufs,
+                       std::vector<Tfloat*>&    out_bufs)
 {
     const size_t                    N       = ctx.N;
     const size_t                    ngpus   = ctx.ngpus;
@@ -360,6 +366,8 @@ void run_memcpy_async(const benchmark_context& ctx,
         = sub_block_size * sizeof(Tfloat); // Bytes per row in transfer
     const size_t pitch_bytes = N * sizeof(Tfloat); // Width of buf
 
+    GPUTimer timer;
+    timer.tick();
     for(auto i = 0; i < ngpus; i++) // src GPU
     {
         for(auto j = 0; j < ngpus; j++) // Offset within GPU, AKA dst GPU
@@ -375,10 +383,13 @@ void run_memcpy_async(const benchmark_context& ctx,
                                        stream));
         }
     }
-    return;
+
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
+    return timer.elapsed();
 }
 
-// (2) Copy kernel
+// (2) Copy kernels
 template <typename Tfloat>
 __global__ void naive_copy(const size_t N,
                            const size_t ngpus,
@@ -402,33 +413,6 @@ __global__ void naive_copy(const size_t N,
             out_bufs[tIndex][nIndex] = in_bufs[bIndex][oIndex];
         }
     }
-}
-
-// Handle launching of copy kernels
-template <typename Tfloat>
-void naive_copy_launcher(const benchmark_context& ctx,
-                         std::vector<Tfloat*>&    in_bufs,
-                         std::vector<Tfloat*>&    out_bufs)
-{
-    const size_t ngpus = ctx.ngpus;
-    Tfloat**     d_in_bufs;
-    Tfloat**     d_out_bufs;
-    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
-    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
-    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-    HIP_CHECK(
-        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-
-    size_t num_blocks  = ngpus;
-    size_t num_threads = num_blocks;
-
-    size_t items_per_thread = (ctx.N * ctx.N) / (num_blocks * num_threads);
-
-    naive_copy<Tfloat>
-        <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
-
-    HIP_CHECK(hipFree(d_in_bufs));
-    HIP_CHECK(hipFree(d_out_bufs));
 }
 
 // Try to improve on naive with LDS usage
@@ -462,24 +446,68 @@ __global__ void lds_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, T
     }
 }
 
+// Handle setup of device ptr to all device bufs, launching of copy kernels, and timing them
 template <typename Tfloat>
-void lds_copy_launcher(const benchmark_context& ctx,
-                       std::vector<Tfloat*>&    in_bufs,
-                       std::vector<Tfloat*>&    out_bufs)
+float naive_copy_launcher(const benchmark_context& ctx,
+                          std::vector<Tfloat*>&    in_bufs,
+                          std::vector<Tfloat*>&    out_bufs)
 {
-    const size_t ngpus           = ctx.ngpus;
-    const auto   sub_block_bytes = sizeof(Tfloat) * ctx.N * ctx.N / ngpus;
-    Tfloat**     d_in_bufs;
-    Tfloat**     d_out_bufs;
+    const size_t ngpus = ctx.ngpus;
+
+    // Copy over device ptrs stored in in_bufs/out_bufs into device side array
+    Tfloat** d_in_bufs;
+    Tfloat** d_out_bufs;
     HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
     HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
     HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
     HIP_CHECK(
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
-    lds_copy<Tfloat><<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
+
+    size_t num_blocks  = ngpus;
+    size_t num_threads = num_blocks;
+
+    size_t items_per_thread = (ctx.N * ctx.N) / (num_blocks * num_threads);
+
+    // Execute kernel and time it
+    GPUTimer timer;
+    timer.tick();
+    naive_copy<Tfloat>
+        <<<num_blocks, num_threads>>>(ctx.N, ctx.ngpus, items_per_thread, d_in_bufs, d_out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
 
     HIP_CHECK(hipFree(d_in_bufs));
     HIP_CHECK(hipFree(d_out_bufs));
+    return timer.elapsed();
+}
+
+template <typename Tfloat>
+float lds_copy_launcher(const benchmark_context& ctx,
+                        std::vector<Tfloat*>&    in_bufs,
+                        std::vector<Tfloat*>&    out_bufs)
+{
+    const size_t ngpus           = ctx.ngpus;
+    const auto   sub_block_bytes = sizeof(Tfloat) * ctx.N * ctx.N / ngpus;
+
+    // Copy over device ptrs stored in in_bufs/out_bufs into device side array
+    Tfloat** d_in_bufs;
+    Tfloat** d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Execute kernel and time it
+    GPUTimer timer;
+    timer.tick();
+    lds_copy<Tfloat><<<ngpus, ngpus, sub_block_bytes>>>(ctx.N, ctx.ngpus, d_in_bufs, d_out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
+
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
+    return timer.elapsed();
 }
 
 // Let each thread handle up to 4 values in LDS / LDS tiling?
@@ -528,9 +556,9 @@ __global__ void copy(const benchmark_context& ctx,
 
 // Handle launching of copy kernels
 template <typename Tfloat>
-void copy_kernel_launcher(const benchmark_context& ctx,
-                          std::vector<Tfloat*>&    in_bufs,
-                          std::vector<Tfloat*>&    out_bufs)
+float copy_kernel_launcher(const benchmark_context& ctx,
+                           std::vector<Tfloat*>&    in_bufs,
+                           std::vector<Tfloat*>&    out_bufs)
 {
     // Experiment with streams!
 }

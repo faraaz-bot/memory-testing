@@ -18,11 +18,11 @@
 // but not generating initial input data (h_input).
 template <typename T>
 void run_benchmark(
-    benchmark::State&                                                                 state,
-    benchmark_context                                                                 ctx,
-    const size_t                                                                      trials,
-    const std::vector<T>&                                                             h_input,
-    std::function<void(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
+    benchmark::State&                                                                  state,
+    benchmark_context                                                                  ctx,
+    const size_t                                                                       trials,
+    const std::vector<T>&                                                              h_input,
+    std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
 {
     const size_t N       = ctx.N;
     const size_t ngpus   = ctx.ngpus;
@@ -62,13 +62,6 @@ void run_benchmark(
         }
     }
 
-    // Setup timing events
-    hipStream_t timing_stream;
-    hipEvent_t  start, stop;
-    HIP_CHECK(hipStreamCreate(&timing_stream));
-    HIP_CHECK(hipEventCreate(&start));
-    HIP_CHECK(hipEventCreate(&stop));
-
     float  total_ms     = 0.0f;
     size_t num_failures = 0;
     size_t num_pass     = 0;
@@ -77,8 +70,7 @@ void run_benchmark(
     {
         for(size_t t = 0; t < trials; t++)
         {
-            HIP_CHECK(hipEventRecord(start, timing_stream));
-            f(ctx, gpubufs_input, gpubufs_output);
+            total_ms += f(ctx, gpubufs_input, gpubufs_output);
 
             for(auto i = 0; i < ngpus; i++)
             {
@@ -86,14 +78,7 @@ void run_benchmark(
                 HIP_CHECK(hipDeviceSynchronize());
             }
 
-            HIP_CHECK(hipEventRecord(stop, timing_stream));
-            HIP_CHECK(hipEventSynchronize(stop));
-
-            float elapsed_ms = 0.0f;
-            HIP_CHECK(hipEventElapsedTime(&elapsed_ms, start, stop));
-            total_ms += elapsed_ms;
-
-            // Optionally
+            // Optionally confirm correctness by copying output back and comparing to host-side computation
             if(ctx.verify_results)
             {
                 assemble_output_to_host<T>(N, gpubufs_output, h_assembled_output.data());
@@ -119,9 +104,11 @@ void run_benchmark(
                 }
                 total_runs++;
             }
+            // Set output buffers back to all 0s
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
     }
+
     if(ctx.verify_results)
         std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
                   << " runs failed." << std::endl;
@@ -131,9 +118,6 @@ void run_benchmark(
     state.counters["Throughput (GB/s)"]
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
-    // Clean up
-    HIP_CHECK(hipEventDestroy(stop));
-    HIP_CHECK(hipEventDestroy(start));
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 

@@ -1,4 +1,5 @@
 #include <hip/hip_runtime.h>
+#include <iostream>
 #include <vector>
 
 #define HIP_CHECK(cmd)                                                                         \
@@ -23,6 +24,51 @@ struct benchmark_context
     int                      verbose;
     bool                     verify_results = false;
     std::vector<hipStream_t> streams;
+};
+
+// Wrapper around hipEvent API for timing
+struct GPUTimer
+{
+    hipEvent_t start, stop;
+
+    GPUTimer()
+    {
+        HIP_CHECK(hipEventCreate(&start));
+        HIP_CHECK(hipEventCreate(&stop));
+    }
+
+    ~GPUTimer()
+    {
+        HIP_CHECK(hipEventDestroy(start));
+        HIP_CHECK(hipEventDestroy(stop));
+    }
+
+    void tick()
+    {
+        HIP_CHECK(hipEventRecord(start, 0));
+    }
+
+    void tock()
+    {
+        HIP_CHECK(hipEventRecord(stop, 0));
+        HIP_CHECK(hipEventSynchronize(stop));
+    }
+
+    float elapsed()
+    {
+        float elapsed;
+        HIP_CHECK(hipEventElapsedTime(&elapsed, start, stop));
+        return elapsed;
+    }
+
+    void sync_all(size_t ngpus)
+    {
+        for(size_t i = 0; i < ngpus; i++)
+        {
+            HIP_CHECK(hipSetDevice(i));
+            HIP_CHECK(hipDeviceSynchronize());
+        }
+    }
 };
 
 enum precision
