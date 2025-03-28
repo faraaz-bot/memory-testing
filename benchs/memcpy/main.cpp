@@ -146,16 +146,17 @@ void add_benchmarks(bool                                          run_all,
                     const std::vector<T>&                         h_input,
                     const std::vector<std::string>&               enabled_benchmarks)
 {
+    // Can change to have "default", "all", and specific ones
     if(run_all)
     {
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
             "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
             "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
-        // benchmarks.emplace_back(benchmark::RegisterBenchmark(
-        //     "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
         benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
+            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
+        // benchmarks.emplace_back(benchmark::RegisterBenchmark(
+        //     "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
     }
     else
     {
