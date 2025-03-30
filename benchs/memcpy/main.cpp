@@ -117,6 +117,9 @@ void run_benchmark(
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
     state.counters["Throughput (GB/s)"]
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
+    
+    state.counters["Dimension (N x N)"]
+        = benchmark::Counter(N);
 
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
