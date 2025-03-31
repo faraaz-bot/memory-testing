@@ -21,9 +21,11 @@ def visualie(storage):
             y_axis.append(s['gbps'][i])
         plt.plot(x_axis, y_axis, label=name)
 
+    plt.xscale('log', base=2)
+    plt.yscale('log', base=2)
     plt.xlabel('Dimension Size (N x N)')
     plt.ylabel('Throughput (GB/s)')
-    plt.title('Throughput for copying data between GPUs')
+    plt.title('Throughput for copying data between 8 GPUs')
     plt.legend()
     plt.savefig('visual.png')
     
