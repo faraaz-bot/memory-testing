@@ -43,9 +43,9 @@ void run_benchmark(
     if(ctx.verify_results)
     {
         if(is_transpose)
-            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
-        else
             host_transpose<T>(N, h_input.data(), reference_matrix.data());
+        else
+            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
     }
 
     if(verbose > 1)
