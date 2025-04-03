@@ -210,9 +210,8 @@ void host_copy(const size_t N, const size_t ngpus, const Tfloat* input, Tfloat* 
 
 // Reference impl on CPU (out-of-place)
 template <typename Tfloat>
-void host_transpose(const int N, const std::vector<Tfloat>& input, std::vector<Tfloat>& output)
+void host_transpose(const int N, const Tfloat* input, Tfloat* output)
 {
-    output.reserve(N * N);
 #pragma omp parallel for
     for(size_t i = 0; i < N; i++)
     {

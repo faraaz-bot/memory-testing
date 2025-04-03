@@ -25,9 +25,11 @@ void run_benchmark(
     const std::vector<T>&                                                              h_input,
     std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
 {
-    const size_t N       = ctx.N;
-    const size_t ngpus   = ctx.ngpus;
-    int          verbose = ctx.verbose;
+    const size_t N            = ctx.N;
+    const size_t ngpus        = ctx.ngpus;
+    int          verbose      = ctx.verbose;
+    std::string  bench_name   = state.name();
+    bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
     std::vector<T*> gpubufs_input(ngpus);
@@ -35,17 +37,26 @@ void run_benchmark(
     std::vector<T>  h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
+    // Compute host-side matrix for correctness check
+    // Can be either block transposed or fully transposed result
     std::vector<T> reference_matrix(N * N);
-    // Compute host-side transposed matrix for correctness check
     if(ctx.verify_results)
-        host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+    {
+        if(is_transpose)
+            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+        else
+            host_transpose<T>(N, h_input.data(), reference_matrix.data());
+    }
 
     if(verbose > 1)
     {
         std::cout << "Starting Input Matrix:\n";
         print_host_2d<T>(N, N, h_input);
-        std::cout << "Host Reference Matrix:\n";
-        print_host_2d<T>(N, N, reference_matrix);
+        if(ctx.verify_results)
+        {
+            std::cout << "Host Reference Matrix:\n";
+            print_host_2d<T>(N, N, reference_matrix);
+        }
     }
 
     // Allocate and init bufs, streams
@@ -63,6 +74,7 @@ void run_benchmark(
         }
     }
 
+    // Execute and time the benchmarks
     float  total_ms     = 0.0f;
     size_t num_failures = 0;
     size_t num_pass     = 0;
@@ -142,7 +154,8 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
            {"hipMemcpy2DAsync", run_memcpy_async<T>},
            {"naiveCopy", naive_copy_launcher<T>},
            // {"ldsCopy", naive_copy_launcher<T>},
-           {"naiveCopy+T", naive_copy_transpose<T>}};
+           // {"naiveCopy+FusedTranspose", naive_copy_transpose<T>},
+           {"naiveCopy+Transpose", naive_copy_transpose<T>}};
 
     bool run_all = enabled_benchmarks.count("all");
     for(const auto& kv : all_benchmarks)
