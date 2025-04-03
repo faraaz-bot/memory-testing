@@ -1,5 +1,6 @@
 #include "helper.hpp"
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <hip/hip_runtime.h>
@@ -541,60 +542,91 @@ float lds_copy_launcher(const benchmark_context& ctx,
     return timer.elapsed();
 }
 
-// Let each thread handle up to 4 values in LDS / LDS tiling?
 // Consider LDS bank conflict
 // Kernels on different streams?
-// Adjust LDS kernel to use (ngpus * size of a sub block row) threads per block instead of just ngpus?
 
-// Currently basing on a stripped down rocFFT transpose kernel, needs to be redone
+// Performs local transposes inside of blocks. Expected to be run after
+// one of the implementations performing block-wise transpose
+// e.g. naiveCopy, hipMemcpy2D, hipMemcpy2DAsync
+// Note: operates in the same fashion as naiveCopy, in that blocks map to gpu bufs, and threads map to sub blocks in gpu buf
 template <typename Tfloat>
-// __launch_bounds__(1024)
-__global__ void copy(const benchmark_context& ctx,
-                     std::vector<Tfloat*>&    in_bufs,
-                     std::vector<Tfloat*>&    out_bufs)
+__global__ __launch_bounds__(1024) void local_transpose(const size_t N,
+                                                        const size_t ngpus,
+                                                        Tfloat**     in_bufs,
+                                                        Tfloat**     out_bufs)
 {
-    // TODO: Should this loop over all gpus, or be called per device?
-    // Adjust func signature or ctx if needed, but we can call this from a diff host func
-    // What about input size vs how LDS is used => num of blocks to use...
-    //     const size_t N     = ctx.N;
-    //     const size_t ngpus = ctx.ngpus;
-    //
-    //     __shared__ Tfloat lds[64][64]; // Need to consider
-    //     size_t            tile_block_idx_x  = blockIdx.x;
-    //     size_t            tile_block_idx_y  = blockIdx.y;
-    //     size_t            tile_thread_idx_x = threadIdx.x;
-    //     size_t            tile_thread_idx_y = threadIdx.y;
-    //     // Add strides
-    //
-    //     // Read in values from global memory
-    // #pragma unroll
-    //     for(size_t i = 0; i < 4; ++i)
-    //     {
-    //         auto logical_row = 64 * tile_block_idx_y + tile_thread_idx_y + i * 16;
-    //         auto idx0        = 64 * tile_block_idx_x + tile_thread_idx_x;
-    //         auto idx1        = logical_row;
-    //         auto gidx        = idx0 + idx1;
-    //
-    //         lds[tile_thread_idx_x][i * 16 + tile_thread_idx_y] = in_bufs[?][gidx];
-    //     }
-    //     __syncthreads();
-    //
-    //     Tfloat val[4];
-    //     // Realloc threads to write along fastest dim, and read transposed from LDS
-    //     tile_thread_idx_x = tile_thread_idx_y;
-    //
+    // extern __shared__ char lds_char[][]; // Expect tile_size * tile_size
+    // auto                   lds
+    //     = reinterpret_cast<Tfloat*>(lds_char); // Workaround declaring extern lds for diff types
+    __shared__ Tfloat lds[64][64];
+    const size_t      tile_size = 64;
+
+    size_t x = blockIdx.x * tile_size + threadIdx.x;
+    size_t y = blockIdx.y * tile_size + threadIdx.y;
+
+    // Determine which GPU buffers to use as input and output
+    Tfloat* idata = in_bufs[blockIdx.x];
+    Tfloat* odata = out_bufs[blockIdx.y];
+
+    // Read in data in coalesced fashion to lds
+#pragma unroll
+    for(size_t i = 0; i < tile_size; i += 4)
+        lds[threadIdx.y + i][threadIdx.x] = idata[(y + i) * 4 + x];
+
+    __syncthreads();
+
+    // Swaperoo
+    y = blockIdx.x * tile_size + threadIdx.x;
+    x = blockIdx.y * tile_size + threadIdx.y;
+
+    // Coalesced write to output from lds
+#pragma unroll
+    for(size_t i = 0; i < tile_size; i += 4)
+    {
+        odata[(y + i) * 4 + x] = lds[threadIdx.x][threadIdx.y + i];
+    }
 }
 
-// Handle launching of copy kernels
+// Block-wide transpose + local transpose implementations
 template <typename Tfloat>
-float copy_kernel_launcher(const benchmark_context& ctx,
+float naive_copy_transpose(const benchmark_context& ctx,
                            std::vector<Tfloat*>&    in_bufs,
                            std::vector<Tfloat*>&    out_bufs)
 {
-    // Experiment with streams!
+    const size_t N     = ctx.N;
+    const size_t ngpus = ctx.ngpus;
+
+    // Copy over device ptrs stored in in_bufs/out_bufs into device side array
+    Tfloat** d_in_bufs;
+    Tfloat** d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Create intermediate tmp buffer between block transpose and local transpose
+    gpubuf<Tfloat> tmp = gpubuf<Tfloat>(N, ngpus);
+
+    size_t     num_blocks       = ngpus;
+    size_t     num_threads      = num_blocks;
+    size_t     items_per_thread = (N * N) / (num_blocks * num_threads);
+    const dim3 dim_grid{static_cast<uint32_t>(ngpus), static_cast<uint32_t>(ngpus), 1};
+    const dim3 dim_block{static_cast<uint32_t>(64), 4, 1};
+
+    // Execute kernels and time them
+    GPUTimer timer;
+    timer.tick();
+
+    naive_copy<Tfloat>
+        <<<num_blocks, num_threads>>>(N, ngpus, items_per_thread, d_in_bufs, tmp.bufs);
+    timer.sync_all(ngpus); // Is this needed before local_tranpose?
+    local_transpose<Tfloat><<<dim_grid, dim_block>>>(N, ngpus, tmp.bufs, d_out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+
+    timer.tock();
+
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
+    return timer.elapsed();
 }
-
-// (3.1) MPI alltoall
-// (3.2) MPI alltoallv
-
-// (4) RCCL alltoall
