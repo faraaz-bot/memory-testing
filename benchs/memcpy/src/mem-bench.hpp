@@ -35,6 +35,7 @@
 
 /* Helpers for verifying correctness */
 
+// PRNG for input generation
 #define xorwow_next(states, max, min, val) \
     uint32_t t = states[4];                \
     uint32_t s = states[0];                \
@@ -314,6 +315,36 @@ void teardown(const int                 ngpus,
     }
 }
 
+// RAII struct for temporary buffers for intermediate results
+// Used when performing multiple out-of-place operations
+template <typename Tfloat>
+struct gpubuf
+{
+    size_t   N;
+    size_t   ngpus;
+    Tfloat** bufs;
+
+    gpubuf(size_t N, size_t ngpus)
+        : N(N)
+        , ngpus(ngpus)
+    {
+        HIP_CHECK(hipMalloc(&bufs, sizeof(Tfloat*) * ngpus));
+        const size_t buf_elems = N * N / ngpus;
+        for(auto i = 0; i < ngpus; i++)
+        {
+            HIP_CHECK(hipMalloc(&bufs[i], sizeof(Tfloat) * buf_elems));
+            HIP_CHECK(hipMemset(bufs[i], 0, sizeof(Tfloat) * buf_elems));
+        }
+    }
+
+    ~gpubuf()
+    {
+        for(auto i = 0; i < ngpus; i++)
+            HIP_CHECK(hipFree(bufs[i]));
+        HIP_CHECK(hipFree(bufs));
+    }
+};
+
 /* Implementations */
 // Host function ("launcher" in case of kernel benchmark) is passed in to benchmark
 // float return value is the time in ms that was recorded for one execution
@@ -406,7 +437,6 @@ __global__ void naive_copy(const size_t N,
     {
         for(size_t y = 0; y < sub_block_size; y++)
         {
-
             size_t oIndex = x * N + (tIndex * sub_block_size + y);
             size_t nIndex = x * N + (bIndex * sub_block_size + y);
 
@@ -481,6 +511,7 @@ float naive_copy_launcher(const benchmark_context& ctx,
     return timer.elapsed();
 }
 
+// TODO: fix issue with missing data, incorrect timings (synchronization issue somewhere?)
 template <typename Tfloat>
 float lds_copy_launcher(const benchmark_context& ctx,
                         std::vector<Tfloat*>&    in_bufs,

@@ -117,9 +117,8 @@ void run_benchmark(
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
     state.counters["Throughput (GB/s)"]
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
-    
-    state.counters["Dimension (N x N)"]
-        = benchmark::Counter(N);
+
+    state.counters["Dimension (N x N)"] = benchmark::Counter(N);
 
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
@@ -281,9 +280,8 @@ int main(int argc, char* argv[])
     }
 
     const size_t N = ctx.N;
-    if(ctx.verbose)
-        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
-                  << " gpus." << std::endl;
+    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
+              << " gpus." << std::endl;
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
