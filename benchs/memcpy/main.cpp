@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "../../eg/argv/CLI11.hpp"
@@ -123,48 +124,32 @@ void run_benchmark(
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
+template <typename T>
+using benchmark_fn
+    = std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)>;
+
 // Register all (valid) provided functions to run as benchmarks
 template <typename T>
-void add_benchmarks(bool                                          run_all,
-                    std::vector<benchmark::internal::Benchmark*>& benchmarks,
+void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
                     const benchmark_context&                      ctx,
                     size_t                                        trials,
                     const std::vector<T>&                         h_input,
-                    const std::vector<std::string>&               enabled_benchmarks)
+                    const std::set<std::string>&                  enabled_benchmarks)
 {
-    // Can change to have "default", "all", and specific ones
-    if(run_all)
+    // Add benchmarks here
+    const std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
+        = {{"hipMemcpy2D", run_memcpy<T>},
+           {"hipMemcpy2DAsync", run_memcpy_async<T>},
+           {"naiveCopy", naive_copy_launcher<T>},
+           // {"ldsCopy", naive_copy_launcher<T>},
+           {"naiveCopy+T", naive_copy_transpose<T>}};
+
+    bool run_all = enabled_benchmarks.count("all");
+    for(const auto& kv : all_benchmarks)
     {
-        benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
-        benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "hipMemcpy2DAsync", &run_benchmark<T>, ctx, trials, h_input, run_memcpy_async<T>));
-        benchmarks.emplace_back(benchmark::RegisterBenchmark(
-            "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
-        // benchmarks.emplace_back(benchmark::RegisterBenchmark(
-        //     "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
-    }
-    else
-    {
-        for(const auto& x : enabled_benchmarks)
-        {
-            if(x == "hipMemcpy2D")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark(
-                    "hipMemcpy2D", &run_benchmark<T>, ctx, trials, h_input, run_memcpy<T>));
-            else if(x == "hipMemcpy2DAsync")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark("hipMemcpy2DAsync",
-                                                                     &run_benchmark<T>,
-                                                                     ctx,
-                                                                     trials,
-                                                                     h_input,
-                                                                     run_memcpy_async<T>));
-            else if(x == "naiveCopy")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark(
-                    "naiveCopy", &run_benchmark<T>, ctx, trials, h_input, naive_copy_launcher<T>));
-            else if(x == "ldsCopy")
-                benchmarks.emplace_back(benchmark::RegisterBenchmark(
-                    "ldsCopy", &run_benchmark<T>, ctx, trials, h_input, lds_copy_launcher<T>));
-        }
+        if(run_all || enabled_benchmarks.count(kv.first))
+            benchmarks.emplace_back(benchmark::RegisterBenchmark(
+                kv.first, &run_benchmark<T>, ctx, trials, h_input, kv.second));
     }
 }
 
@@ -174,11 +159,11 @@ int main(int argc, char* argv[])
     CLI::App app{"Memcpy bench"};
 
     std::set<std::string> valid_benchmarks
-        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy"};
+        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy", "naiveCopy+T"};
 
-    std::string run_bench_helper
-        = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
-          "hipMemcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
+    std::string run_bench_helper = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
+                                   "hipMemcpy2DAsync\n* Note: '+T' indicates performing local "
+                                   "tranpose\n\nAvailable Benchmarks:\n------------------------\n";
 
     for(const auto& x : valid_benchmarks)
         run_bench_helper += x + "\n";
@@ -259,8 +244,7 @@ int main(int argc, char* argv[])
         return app.exit(e);
     }
 
-    std::vector<std::string> enabled_benchmarks;
-    bool                     runAll = false;
+    std::set<std::string> enabled_benchmarks;
 
     // Validate benchmarks to run, from command line arg data
     for(auto it = param_enabled_benchmarks.begin(); it != param_enabled_benchmarks.end(); it++)
@@ -269,13 +253,7 @@ int main(int argc, char* argv[])
             std::cout << *it << " is not a valid benchmark. It has been discarded!" << std::endl;
         else
         {
-            if(*it == "all")
-            {
-                runAll = true;
-                break;
-            }
-
-            enabled_benchmarks.push_back(*it);
+            enabled_benchmarks.insert(*it);
         }
     }
 
@@ -315,16 +293,14 @@ int main(int argc, char* argv[])
     switch(p)
     {
     case p_single:
-        add_benchmarks<float>(runAll,
-                              benchmarks,
+        add_benchmarks<float>(benchmarks,
                               ctx,
                               trials,
                               generate<float>(N, N, gen, min_val, max_val),
                               enabled_benchmarks);
         break;
     case p_double:
-        add_benchmarks<double>(runAll,
-                               benchmarks,
+        add_benchmarks<double>(benchmarks,
                                ctx,
                                trials,
                                generate<double>(N, N, gen, min_val, max_val),
