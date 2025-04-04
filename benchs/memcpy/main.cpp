@@ -172,11 +172,11 @@ int main(int argc, char* argv[])
     CLI::App app{"Memcpy bench"};
 
     std::set<std::string> valid_benchmarks
-        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy", "naiveCopy+T"};
+        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy", "naiveCopy+Transpose"};
 
-    std::string run_bench_helper = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
-                                   "hipMemcpy2DAsync\n* Note: '+T' indicates performing local "
-                                   "tranpose\n\nAvailable Benchmarks:\n------------------------\n";
+    std::string run_bench_helper
+        = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
+          "hipMemcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
 
     for(const auto& x : valid_benchmarks)
         run_bench_helper += x + "\n";
