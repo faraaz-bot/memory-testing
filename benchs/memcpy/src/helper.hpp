@@ -14,7 +14,7 @@
         }                                                                                      \
     } while(0)
 
-size_t ceildiv(const size_t numerator, const size_t divisor)
+inline size_t ceildiv(const size_t numerator, const size_t divisor)
 {
     return (numerator + divisor - 1) / divisor;
 }
