@@ -48,29 +48,19 @@ void run_benchmark(
             host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
     }
 
-    if(verbose > 1)
-    {
-        std::cout << "Starting Input Matrix:\n";
-        print_host_2d<T>(N, N, h_input);
-        if(ctx.verify_results)
-        {
-            std::cout << "Host Reference Matrix:\n";
-            print_host_2d<T>(N, N, reference_matrix);
-        }
-    }
-
     // Allocate and init bufs, streams
     setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
 
     // Optionally output gpu bufs after distributing data
-    if(verbose > 3)
+    if(verbose > 2)
     {
         const size_t buf_height = N / ngpus;
         for(auto i = 0; i < ngpus; i++)
         {
             std::cout << "Input GPU Buffer " << i << ":\n";
             // print<T><<<1, 1>>>(buf_size, gpubufs_input[i]);
-            print2d<T><<<1, 1>>>(N, buf_height, gpubufs_input[i]);
+            print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
+            HIP_CHECK(hipDeviceSynchronize());
         }
     }
 
@@ -101,7 +91,7 @@ void run_benchmark(
                     num_failures++;
                     std::cout << "Incorrect result detected for " << state.name() << ", trial #"
                               << t << "\n";
-                    if(verbose > 2)
+                    if(verbose)
                     {
                         std::cout << "Original Input:\n";
                         print_host_2d<T>(N, N, h_input);
@@ -328,9 +318,11 @@ int main(int argc, char* argv[])
 
     std::vector<char*> cArgs(argv, argv + argc);
 
+    // Default benchmark args
     std::string tabular = "--benchmark_counters_tabular=true";
-
     cArgs.push_back(tabular.data());
+    std::string default_min_time = "--benchmark_min_time=0s";
+    cArgs.push_back(default_min_time.data());
 
     char** cArga     = cArgs.data();
     int    cArg_size = cArgs.size();
