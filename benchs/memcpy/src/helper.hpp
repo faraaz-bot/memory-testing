@@ -19,6 +19,13 @@ inline size_t ceildiv(const size_t numerator, const size_t divisor)
     return (numerator + divisor - 1) / divisor;
 }
 
+inline bool is_power_of_two(const size_t n)
+{
+    if(n == 0)
+        return false;
+    return (n & (n - 1)) == 0;
+}
+
 // Hold data useful for benchmarks being run
 struct benchmark_context
 {

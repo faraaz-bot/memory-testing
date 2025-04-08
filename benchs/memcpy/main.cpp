@@ -247,6 +247,10 @@ int main(int argc, char* argv[])
         return app.exit(e);
     }
 
+    // Check if inputs are valid for benchmark
+    if(!(is_power_of_two(ctx.N)) || !(is_power_of_two(ctx.ngpus)))
+        throw std::runtime_error("N and ngpus should both be powers of two");
+
     std::set<std::string> enabled_benchmarks;
 
     // Validate benchmarks to run, from command line arg data
