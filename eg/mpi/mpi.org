@@ -1,6 +1,14 @@
+Installation notes for OpenMPI-rocm:
+
 https://gpuopen.com/learn/amd-lab-notes/amd-lab-notes-gpu-aware-mpi-readme/
 
-cmake -DCMAKE_CXX_COMPILER=hipcc ..
+The cmake option CRAY_MPI_ENABLE is needed if using cray-mpi.  This
+option adds a link to the mpi_gtl_hsa library.
 
-mpirun --mca pml ucx
+Cray-mpi may need: mpirun --mca pml ucx
 
+You can execute these with
+
+mpirun -n 2 <binary name>
+
+or srun in the correct slurm/sbatch context
