@@ -26,6 +26,11 @@ inline bool is_power_of_two(const size_t n)
     return (n & (n - 1)) == 0;
 }
 
+inline size_t min(const size_t n, const size_t m)
+{
+    return ((n < m) ? n : m);
+}
+
 // Hold data useful for benchmarks being run
 struct benchmark_context
 {
