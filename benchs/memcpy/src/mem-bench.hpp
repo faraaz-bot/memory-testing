@@ -10,7 +10,10 @@
 #include <stdio.h>
 #include <vector>
 
-const int MAX_TILE_SIZE = 32;
+// Constants for transpose tiling
+constexpr int MAX_TILE_SIZE    = 4;
+constexpr int ITEMS_PER_THREAD = 1;
+constexpr int NUM_ROWS         = MAX_TILE_SIZE / ITEMS_PER_THREAD;
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -151,11 +154,8 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 // Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
 // * Assumes hostbuf_result has enough memory allocated for it
 template <typename Tfloat>
-void assemble_output_to_host(const int                   N,
-                             const std::vector<Tfloat*>& gpubufs,
-                             Tfloat*                     hostbuf_result)
+void assemble_output_to_host(const int N, const int ngpus, Tfloat** gpubufs, Tfloat* hostbuf_result)
 {
-    const size_t ngpus    = gpubufs.size();
     const size_t buf_size = N * N / ngpus;
     for(auto i = 0; i < ngpus; i++)
     {
@@ -542,7 +542,6 @@ float lds_copy_launcher(const benchmark_context& ctx,
     return timer.elapsed();
 }
 
-// Consider LDS bank conflict
 // Kernels on different streams?
 
 // Performs local transposes inside of blocks. Expected to be run after
@@ -553,44 +552,59 @@ template <typename Tfloat>
 __global__ __launch_bounds__(1024) void local_transpose(
     const size_t N, const size_t ngpus, const size_t tile_size, Tfloat** in_bufs, Tfloat** out_bufs)
 {
-    __shared__ Tfloat lds[MAX_TILE_SIZE][MAX_TILE_SIZE];
+    __shared__ Tfloat lds[MAX_TILE_SIZE][MAX_TILE_SIZE + 1]; // Offset to avoid bank conflicts
 
-    // Determine which GPU buffers to use as input and output, and offset inside buffer
-    const auto num_tiles_in_block = gridDim.x * gridDim.y / ngpus;
-    const auto src                = blockIdx.x / ngpus;
-    Tfloat*    idata              = in_bufs[src];
-    Tfloat*    odata              = out_bufs[src];
+    // Block off everything, focus on one block
+    // if(blockIdx.x == 0 && blockIdx.y == 0 && blockIdx.z == 0)
+    // {
+    // Determine which GPU buffers to use as input and output
+    const auto num_tiles_in_buf = gridDim.x * gridDim.y / ngpus;
+    const auto src              = (blockIdx.y * ngpus + blockIdx.x) / ngpus;
+    // printf("bx = %u, by = %u, bz = %u, src = %zu\n", blockIdx.x, blockIdx.y, blockIdx.z, src);
+    printf("tid = (%u, %u)\n", threadIdx.x, threadIdx.y);
+    Tfloat* idata = in_bufs[src];
+    Tfloat* odata = out_bufs[src];
 
-    // Add offset to account for data shape
-    const auto sub_block_size    = N / ngpus; // Length of block in each transfer
-    const auto internal_block_id = blockIdx.x % ngpus;
-    const auto internal_tile_id  = threadIdx.x * blockDim.x + threadIdx.y;
-    // const auto offset            = sub_block_size * internal_block_id;
-    const auto stride_in_y = N - sub_block_size;
+    // Offsets
+    const auto tile_x_offset  = blockIdx.z % num_tiles_in_buf;
+    const auto tile_y_offset  = blockIdx.z / num_tiles_in_buf;
+    const auto row_offset     = N - (tile_size * tile_x_offset);
+    const auto row_size       = N;
+    const auto sub_block_size = N / ngpus;
+    const auto base_row       = sub_block_size * tile_y_offset;
+    const auto base_col       = 0;
 
-    // Read in data in coalesced fashion to lds (modify here to add ipt > 1)
-    // auto block_location  = tile_size * internal_block_id + threadIdx.x;
-    // auto row_location    = tile_size + stride_in * threadIdx.y;
-    // auto global_read_idx = block_location + row_location * offset; // Include stride if needed
-    auto idx0            = tile_size * blockIdx.x + threadIdx.x;
-    auto idx1            = tile_size * blockIdx.y + threadIdx.y * stride_in_y;
-    auto global_read_idx = idx0 + idx1;
+    auto x = tile_x_offset * tile_size + threadIdx.x;
+    auto y = threadIdx.y;
 
-    lds[threadIdx.x][threadIdx.y] = idata[global_read_idx];
+    auto glb_x = x;
+
+    // Read in coalesced from global mem
+#pragma unroll
+    for(int i = 0; i < ITEMS_PER_THREAD; i++)
+    {
+        auto glb_y                                   = y;
+        lds[threadIdx.y + i * NUM_ROWS][threadIdx.x] = idata[glb_y * N + glb_x];
+        printf("lds[%u][%u] = idata[%zu] = %f\n",
+               threadIdx.y + i * NUM_ROWS,
+               threadIdx.x,
+               glb_y * sub_block_size + glb_x,
+               idata[glb_y * sub_block_size + glb_x]);
+    }
 
     __syncthreads();
 
-    // Coalesced write to output from lds
-    auto global_write_idx   = global_read_idx; // Change for diff ipt or stride
-    odata[global_write_idx] = lds[threadIdx.y][threadIdx.x];
+    x = tile_y_offset * tile_size + threadIdx.x;
+    y = tile_x_offset * tile_size + threadIdx.y;
 
-    printf("internal_block_id = %zu, tile_id = %u, tIdx = (%u, %u), src = %zu, gidx = %zu\n",
-           internal_block_id,
-           internal_tile_id,
-           threadIdx.x,
-           threadIdx.y,
-           src,
-           global_read_idx);
+#pragma unroll
+    for(int i = 0; i < ITEMS_PER_THREAD; i++)
+    {
+        glb_x                    = base_row + x;
+        auto glb_y               = base_col + y + i * NUM_ROWS;
+        odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y + i * NUM_ROWS];
+    }
+    // }
 }
 
 // Block-wide transpose + local transpose implementations
@@ -619,33 +633,43 @@ float naive_copy_transpose(const benchmark_context& ctx,
     const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
 
     // For local_transpose:
-    const uint32_t num_sub_blocks   = ngpus * ngpus;
-    const uint32_t sub_block_size   = N / ngpus; // Length of block in each transfer
-    const uint32_t actual_tile_size = min(MAX_TILE_SIZE, sub_block_size);
+    const uint32_t num_sub_blocks = ngpus;
+    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
+    // const uint32_t actual_tile_size = min(MAX_TILE_SIZE, sub_block_size);
+    const uint32_t actual_tile_size = MAX_TILE_SIZE;
     const uint32_t num_threads_x    = actual_tile_size;
     const uint32_t num_threads_y    = actual_tile_size;
-    const uint32_t num_blocks       = ceildiv(sub_block_size * sub_block_size,
-                                        MAX_TILE_SIZE * MAX_TILE_SIZE)
-                                * num_sub_blocks; // How many total blocks needed for all sub blocks
-    const uint32_t num_blocks_x = std::sqrt(num_blocks);
-    const uint32_t num_blocks_y = std::sqrt(num_blocks);
-    const dim3     grid_dim{num_blocks_x, num_blocks_y};
-    const dim3     block_dim{num_threads_x, num_threads_y};
-    std::cout << "num_blocks_x = " << num_blocks_x << ", num_blocks_y = " << num_blocks_y
-              << ", num_threads_x = " << num_threads_x << "num_threads_y = " << num_threads_y
-              << std::endl;
+    const uint32_t num_blocks
+        = ceildiv(sub_block_size * sub_block_size,
+                  MAX_TILE_SIZE * MAX_TILE_SIZE); // How many total blocks needed for all sub blocks
+    // const uint32_t num_blocks_x = std::sqrt(num_blocks);
+    // const uint32_t num_blocks_y = std::sqrt(num_blocks);
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_sub_blocks};
+    const dim3 block_dim{num_threads_x, num_threads_y};
+    std::cout << "num_blocks_x = " << ngpus << ", num_blocks_y = " << ngpus
+              << ", num_threads_x = " << num_threads_x << ", num_threads_y = " << num_threads_y
+              << ", num_sub_blocks = " << num_sub_blocks << std::endl;
 
     // Execute kernels and time them
     GPUTimer timer;
     timer.tick();
 
+    std::vector<Tfloat> tmp_copy(N * N);
+    std::vector<Tfloat> out_copy(N * N);
+
     naive_copy<Tfloat><<<ngpus, ngpus>>>(N, ngpus, copy_ipt, d_in_bufs, tmp.bufs);
     timer.sync_all(ngpus); // Is this needed before local_tranpose?
+    std::cout << "Block transposed matrix, input to local_tranpose:" << std::endl;
+    assemble_output_to_host(N, ngpus, tmp.bufs, tmp_copy.data());
+    print_host_2d<Tfloat>(N, N, tmp_copy);
     local_transpose<Tfloat>
         <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, tmp.bufs, d_out_bufs);
     timer.sync_all(ngpus); // Ensure all GPUs have finished their work
 
     timer.tock();
+    std::cout << "Locally transposed matrix, output from local_tranpose:" << std::endl;
+    assemble_output_to_host(N, ngpus, d_out_bufs, out_copy.data());
+    print_host_2d<Tfloat>(N, N, out_copy);
 
     HIP_CHECK(hipFree(d_in_bufs));
     HIP_CHECK(hipFree(d_out_bufs));

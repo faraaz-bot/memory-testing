@@ -84,7 +84,8 @@ void run_benchmark(
             // Optionally confirm correctness by copying output back and comparing to host-side computation
             if(ctx.verify_results)
             {
-                assemble_output_to_host<T>(N, gpubufs_output, h_assembled_output.data());
+                assemble_output_to_host<T>(
+                    N, ngpus, gpubufs_output.data(), h_assembled_output.data());
                 bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
                 if(!res)
                 {
@@ -258,7 +259,6 @@ int main(int argc, char* argv[])
     {
         if(valid_benchmarks.find(*it) == valid_benchmarks.end())
             std::cout << *it << " is not a valid benchmark. It has been discarded!" << std::endl;
-        else
         {
             enabled_benchmarks.insert(*it);
         }
