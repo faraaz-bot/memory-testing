@@ -555,7 +555,9 @@ __global__ __launch_bounds__(1024) void local_transpose(
     __shared__ Tfloat lds[MAX_TILE_SIZE][MAX_TILE_SIZE + 1]; // Offset to avoid bank conflicts
 
     // Block off everything, focus on one block
-    // if(blockIdx.x == 0 && blockIdx.y == 0 && blockIdx.z == 0)
+    // if(blockIdx.x == 0 && blockIdx.y == 0 && (blockIdx.z == 0 || blockIdx.z == 2))
+    // {
+
     // Determine which GPU buffers to use as input and output
     const auto num_tiles_in_buf = gridDim.x * gridDim.y / ngpus;
     const auto src              = (blockIdx.y * ngpus + blockIdx.x) / ngpus;
@@ -563,44 +565,44 @@ __global__ __launch_bounds__(1024) void local_transpose(
     Tfloat* idata = in_bufs[src];
     Tfloat* odata = out_bufs[src];
 
-    // printf("bx = %u, by = %u, bz = %u, src = %zu\n", blockIdx.x, blockIdx.y, blockIdx.z, src);
     // Offsets
+    // Tile x/y when reading in, flip for writing
     const auto tile_x_offset  = blockIdx.z % num_tiles_in_buf;
     const auto tile_y_offset  = blockIdx.z / num_tiles_in_buf;
     const auto row_offset     = N - (tile_size * tile_x_offset);
-    const auto row_size       = N;
     const auto sub_block_size = N / ngpus;
-    const auto base_row       = sub_block_size * tile_y_offset;
-    const auto base_col       = 0;
 
-    auto x = tile_x_offset * tile_size + threadIdx.x;
-    auto y = threadIdx.y;
+    // Indices to use
+    auto tile_x = tile_x_offset * tile_size + threadIdx.x;
+    auto tile_y = tile_y_offset * tile_size + threadIdx.y;
+    auto glb_x  = tile_x + blockIdx.x * sub_block_size;
 
-    auto glb_x = x + blockIdx.x * sub_block_size;
+    // printf("bx = %u, by = %u, bz = %u, src = %zu\n", blockIdx.x, blockIdx.y, blockIdx.z, src);
+    // printf("tile_x_offset = %zu, num_tiles_in_buf =  %zu\n", tile_x_offset, num_tiles_in_buf);
 
     // Read in coalesced from global mem
 #pragma unroll
     for(int i = 0; i < ITEMS_PER_THREAD; i++)
     {
-        auto glb_y                                   = y;
+        auto glb_y                                   = tile_y;
         lds[threadIdx.y + i * NUM_ROWS][threadIdx.x] = idata[glb_y * N + glb_x];
         // printf("lds[%u][%u] = idata[%zu] = %f\n",
         //        threadIdx.y + i * NUM_ROWS,
         //        threadIdx.x,
         //        glb_y * N + glb_x,
-        //        idata[glb_y * sub_block_size + glb_x]);
+        //        idata[glb_y * N + glb_x]);
     }
 
     __syncthreads();
 
-    x = tile_y_offset * tile_size + threadIdx.x;
-    y = tile_x_offset * tile_size + threadIdx.y;
+    tile_x = tile_y_offset * tile_size + threadIdx.x;
+    tile_y = tile_x_offset * tile_size + threadIdx.y;
 
 #pragma unroll
     for(int i = 0; i < ITEMS_PER_THREAD; i++)
     {
-        glb_x                    = x + blockIdx.x * sub_block_size;
-        auto glb_y               = base_col + y + i * NUM_ROWS;
+        glb_x                    = tile_x + blockIdx.x * sub_block_size;
+        auto glb_y               = tile_y;
         odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y + i * NUM_ROWS];
     }
     // }
@@ -643,7 +645,7 @@ float naive_copy_transpose(const benchmark_context& ctx,
                   MAX_TILE_SIZE * MAX_TILE_SIZE); // How many total blocks needed for all sub blocks
     // const uint32_t num_blocks_x = std::sqrt(num_blocks);
     // const uint32_t num_blocks_y = std::sqrt(num_blocks);
-    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_sub_blocks};
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_blocks};
     const dim3 block_dim{num_threads_x, num_threads_y};
     // std::cout << "num_blocks_x = " << ngpus << ", num_blocks_y = " << ngpus
     //           << ", num_threads_x = " << num_threads_x << ", num_threads_y = " << num_threads_y
