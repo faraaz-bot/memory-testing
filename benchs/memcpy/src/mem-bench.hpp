@@ -12,8 +12,7 @@
 
 // Constants for transpose tiling
 constexpr int MAX_TILE_SIZE    = 32;
-constexpr int ITEMS_PER_THREAD = 1;
-constexpr int NUM_ROWS         = MAX_TILE_SIZE / ITEMS_PER_THREAD;
+constexpr int ITEMS_PER_THREAD = 4;
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -572,9 +571,9 @@ __global__ __launch_bounds__(1024) void local_transpose(
     const auto sub_block_size = N / ngpus;
 
     // Indices to use
-    auto tile_x = tile_x_offset * tile_size + threadIdx.x;
-    auto tile_y = tile_y_offset * tile_size + threadIdx.y;
-    auto glb_x  = tile_x + blockIdx.x * sub_block_size;
+    auto tile_x = tile_x_offset * tile_size;
+    auto tile_y = tile_y_offset * tile_size;
+    auto glb_x  = threadIdx.x + tile_x + blockIdx.x * sub_block_size;
 
     // printf("bx = %u, by = %u, bz = %u, src = %zu\n", blockIdx.x, blockIdx.y, blockIdx.z, src);
     // printf("tile offset = (%zu, %zu), num_tiles_in_axis =  %zu\n",
@@ -586,31 +585,34 @@ __global__ __launch_bounds__(1024) void local_transpose(
 #pragma unroll
     for(int i = 0; i < ITEMS_PER_THREAD; i++)
     {
-        auto glb_y                                   = tile_y;
-        lds[threadIdx.y + i * NUM_ROWS][threadIdx.x] = idata[glb_y * N + glb_x];
-        printf("lds[%u][%u] = idata[%zu] = %f\n",
-               threadIdx.y + i * NUM_ROWS,
-               threadIdx.x,
-               glb_y * N + glb_x,
-               idata[glb_y * N + glb_x]);
+        auto glb_y = tile_y + threadIdx.y * ITEMS_PER_THREAD + i;
+        lds[threadIdx.y * ITEMS_PER_THREAD + i][threadIdx.x] = idata[glb_y * N + glb_x];
+        // printf("\ni = %d, tid = (%u, %u)\nlds[%u][%u] = idata[%zu] = %f\n",
+        //        i,
+        //        threadIdx.x,
+        //        threadIdx.y,
+        //        threadIdx.y * ITEMS_PER_THREAD + i,
+        //        threadIdx.x,
+        //        glb_y * N + glb_x,
+        //        idata[glb_y * N + glb_x]);
     }
 
     __syncthreads();
 
-    tile_x = tile_y_offset * tile_size + threadIdx.x;
-    tile_y = tile_x_offset * tile_size + threadIdx.y;
+    tile_x = tile_y_offset * tile_size;
+    tile_y = tile_x_offset * tile_size;
 
 #pragma unroll
     for(int i = 0; i < ITEMS_PER_THREAD; i++)
     {
-        glb_x                    = tile_x + blockIdx.x * sub_block_size;
-        auto glb_y               = tile_y;
-        odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y + i * NUM_ROWS];
-        printf("odata[%zu] = lds[%u][%u] = %f\n",
-               glb_y * N + glb_x,
-               threadIdx.x,
-               threadIdx.y + i * NUM_ROWS,
-               lds[threadIdx.x][threadIdx.y + i * NUM_ROWS]);
+        glb_x                    = threadIdx.x + tile_x + blockIdx.x * sub_block_size;
+        auto glb_y               = tile_y + threadIdx.y * ITEMS_PER_THREAD + i;
+        odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y * ITEMS_PER_THREAD + i];
+        // printf("odata[%zu] = lds[%u][%u] = %f\n",
+        //        glb_y * N + glb_x,
+        //        threadIdx.x,
+        //        threadIdx.y * ITEMS_PER_THREAD + i,
+        //        lds[threadIdx.x][threadIdx.y * ITEMS_PER_THREAD + i]);
     }
     // }
 }
@@ -641,17 +643,17 @@ float naive_copy_transpose(const benchmark_context& ctx,
     const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
 
     // For local_transpose:
-    const uint32_t num_sub_blocks   = ngpus;
+    const uint32_t num_sub_blocks   = ngpus; // Per gpubuf
     const uint32_t sub_block_size   = N / ngpus; // Length of block in each transfer
     const uint32_t actual_tile_size = min(MAX_TILE_SIZE, sub_block_size);
     const uint32_t num_threads_x    = actual_tile_size;
-    const uint32_t num_threads_y    = actual_tile_size;
-    const uint32_t num_blocks
+    const uint32_t num_threads_y    = actual_tile_size / ITEMS_PER_THREAD;
+    const uint32_t num_tiles
         = ceildiv(sub_block_size * sub_block_size,
-                  MAX_TILE_SIZE * MAX_TILE_SIZE); // How many total blocks needed for all sub blocks
+                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
     // const uint32_t num_blocks_x = std::sqrt(num_blocks);
     // const uint32_t num_blocks_y = std::sqrt(num_blocks);
-    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_blocks};
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
     const dim3 block_dim{num_threads_x, num_threads_y};
     // std::cout << "num_blocks_x = " << ngpus << ", num_blocks_y = " << ngpus
     //           << ", num_threads_x = " << num_threads_x << ", num_threads_y = " << num_threads_y
