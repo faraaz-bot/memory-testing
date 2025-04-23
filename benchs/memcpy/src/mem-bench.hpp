@@ -11,7 +11,7 @@
 #include <vector>
 
 // Constants for transpose tiling
-constexpr int MAX_TILE_SIZE    = 4;
+constexpr int MAX_TILE_SIZE    = 32;
 constexpr int ITEMS_PER_THREAD = 1;
 constexpr int NUM_ROWS         = MAX_TILE_SIZE / ITEMS_PER_THREAD;
 
@@ -555,21 +555,20 @@ __global__ __launch_bounds__(1024) void local_transpose(
     __shared__ Tfloat lds[MAX_TILE_SIZE][MAX_TILE_SIZE + 1]; // Offset to avoid bank conflicts
 
     // Block off everything, focus on one block
-    // if(blockIdx.x == 0 && blockIdx.y == 0 && (blockIdx.z == 0 || blockIdx.z == 2))
+    // if(blockIdx.x == 0 && blockIdx.y == 0)
     // {
 
     // Determine which GPU buffers to use as input and output
-    const auto num_tiles_in_buf = gridDim.x * gridDim.y / ngpus;
-    const auto src              = (blockIdx.y * ngpus + blockIdx.x) / ngpus;
+    const size_t num_tiles_in_axis = std::sqrt(gridDim.z);
+    const size_t src               = (blockIdx.y * ngpus + blockIdx.x) / ngpus;
     // printf("tid = (%u, %u)\n", threadIdx.x, threadIdx.y);
     Tfloat* idata = in_bufs[src];
     Tfloat* odata = out_bufs[src];
 
     // Offsets
-    // Tile x/y when reading in, flip for writing
-    const auto tile_x_offset  = blockIdx.z % num_tiles_in_buf;
-    const auto tile_y_offset  = blockIdx.z / num_tiles_in_buf;
-    const auto row_offset     = N - (tile_size * tile_x_offset);
+    // Tile (x,y) when reading in, flip to (y,x) for writing
+    const auto tile_x_offset  = blockIdx.z % num_tiles_in_axis;
+    const auto tile_y_offset  = blockIdx.z / num_tiles_in_axis;
     const auto sub_block_size = N / ngpus;
 
     // Indices to use
@@ -578,7 +577,10 @@ __global__ __launch_bounds__(1024) void local_transpose(
     auto glb_x  = tile_x + blockIdx.x * sub_block_size;
 
     // printf("bx = %u, by = %u, bz = %u, src = %zu\n", blockIdx.x, blockIdx.y, blockIdx.z, src);
-    // printf("tile_x_offset = %zu, num_tiles_in_buf =  %zu\n", tile_x_offset, num_tiles_in_buf);
+    // printf("tile offset = (%zu, %zu), num_tiles_in_axis =  %zu\n",
+    //        tile_x_offset,
+    //        tile_y_offset,
+    //        num_tiles_in_axis);
 
     // Read in coalesced from global mem
 #pragma unroll
@@ -604,6 +606,11 @@ __global__ __launch_bounds__(1024) void local_transpose(
         glb_x                    = tile_x + blockIdx.x * sub_block_size;
         auto glb_y               = tile_y;
         odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y + i * NUM_ROWS];
+        // printf("odata[%zu] = lds[%u][%u] = %f\n",
+        //        glb_y * N + glb_x,
+        //        threadIdx.x,
+        //        threadIdx.y + i * NUM_ROWS,
+        //        lds[threadIdx.x][threadIdx.y + i * NUM_ROWS]);
     }
     // }
 }

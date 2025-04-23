@@ -108,6 +108,22 @@ void run_benchmark(
                 }
                 total_runs++;
             }
+            else
+            {
+                if(verbose > 1)
+                {
+                    assemble_output_to_host<T>(
+                        N, ngpus, gpubufs_output.data(), h_assembled_output.data());
+                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                    if(!res)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "------------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
+                }
+            }
             // Set output buffers back to all 0s
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
