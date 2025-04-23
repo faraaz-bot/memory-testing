@@ -588,11 +588,11 @@ __global__ __launch_bounds__(1024) void local_transpose(
     {
         auto glb_y                                   = tile_y;
         lds[threadIdx.y + i * NUM_ROWS][threadIdx.x] = idata[glb_y * N + glb_x];
-        // printf("lds[%u][%u] = idata[%zu] = %f\n",
-        //        threadIdx.y + i * NUM_ROWS,
-        //        threadIdx.x,
-        //        glb_y * N + glb_x,
-        //        idata[glb_y * N + glb_x]);
+        printf("lds[%u][%u] = idata[%zu] = %f\n",
+               threadIdx.y + i * NUM_ROWS,
+               threadIdx.x,
+               glb_y * N + glb_x,
+               idata[glb_y * N + glb_x]);
     }
 
     __syncthreads();
@@ -606,11 +606,11 @@ __global__ __launch_bounds__(1024) void local_transpose(
         glb_x                    = tile_x + blockIdx.x * sub_block_size;
         auto glb_y               = tile_y;
         odata[glb_y * N + glb_x] = lds[threadIdx.x][threadIdx.y + i * NUM_ROWS];
-        // printf("odata[%zu] = lds[%u][%u] = %f\n",
-        //        glb_y * N + glb_x,
-        //        threadIdx.x,
-        //        threadIdx.y + i * NUM_ROWS,
-        //        lds[threadIdx.x][threadIdx.y + i * NUM_ROWS]);
+        printf("odata[%zu] = lds[%u][%u] = %f\n",
+               glb_y * N + glb_x,
+               threadIdx.x,
+               threadIdx.y + i * NUM_ROWS,
+               lds[threadIdx.x][threadIdx.y + i * NUM_ROWS]);
     }
     // }
 }
@@ -641,10 +641,9 @@ float naive_copy_transpose(const benchmark_context& ctx,
     const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
 
     // For local_transpose:
-    const uint32_t num_sub_blocks = ngpus;
-    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
-    // const uint32_t actual_tile_size = min(MAX_TILE_SIZE, sub_block_size);
-    const uint32_t actual_tile_size = MAX_TILE_SIZE;
+    const uint32_t num_sub_blocks   = ngpus;
+    const uint32_t sub_block_size   = N / ngpus; // Length of block in each transfer
+    const uint32_t actual_tile_size = min(MAX_TILE_SIZE, sub_block_size);
     const uint32_t num_threads_x    = actual_tile_size;
     const uint32_t num_threads_y    = actual_tile_size;
     const uint32_t num_blocks
