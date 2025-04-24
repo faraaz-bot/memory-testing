@@ -19,12 +19,18 @@ constexpr int ITEMS_PER_THREAD = 4;
  * square matrices only.
  *
  * TODO list:
+ * - Complex data
  * - Implement basic implementations for each method
  *     - Adjust timing to exclude hipMemcpy for input pointers for kernels
  * - Optimize stuff after
  *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
  *     - Pinned memory, HMM?
+ * - Refactoring
+ *     - Pull out common boilerplate code, maybe use RAII more for gpubufs
+ *     - main.cpp:
+ *          - List verbosity details
+ *          - Test/verify (-c) as a subcommand?
  *
  * - Further out tasks to consider
  *     - hipGraph vs stream (ngpus vs ngpus^2 # of streams) async comparison
@@ -595,7 +601,7 @@ __global__ __launch_bounds__(1024) void local_transpose(
 }
 
 /* Block-wide transpose + local transpose implementations */
-// NOTE: Assumes power of two for ngpus & N and (N/ngpus) >= ITEMS_PER_THREAD, does not work for general params
+// Time naive_copy() + local_transpose()
 template <typename Tfloat>
 float naive_copy_transpose(const benchmark_context& ctx,
                            std::vector<Tfloat*>&    in_bufs,
@@ -648,4 +654,132 @@ float naive_copy_transpose(const benchmark_context& ctx,
     HIP_CHECK(hipFree(d_in_bufs));
     HIP_CHECK(hipFree(d_out_bufs));
     return timer.elapsed();
+}
+
+// Time run_memcpy() + local_transpose()
+template <typename Tfloat>
+float run_memcpy_transpose(const benchmark_context& ctx,
+                           std::vector<Tfloat*>&    in_bufs,
+                           std::vector<Tfloat*>&    out_bufs)
+{
+    const size_t N     = ctx.N;
+    const size_t ngpus = ctx.ngpus;
+
+    // Copy over device ptrs stored in in_bufs/out_bufs into device side array
+    Tfloat** d_in_bufs;
+    Tfloat** d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Create intermediate tmp buffer between block transpose and local transpose
+    std::vector<Tfloat*> tmp(ngpus);
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipMalloc(&tmp[i], sizeof(Tfloat) * (N * N / ngpus)));
+        HIP_CHECK(hipMemset(tmp[i], 0, sizeof(Tfloat) * (N * N / ngpus)));
+    }
+    // And also copy it to device for access to internal device ptrs
+    Tfloat** d_tmp_bufs;
+    HIP_CHECK(hipMalloc(&d_tmp_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_tmp_bufs, tmp.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Calculate number of blocks/threads to launch with
+    // For local_transpose:
+    const uint32_t num_sub_blocks = ngpus; // Per gpubuf
+    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
+    const uint32_t actual_tile_size
+        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
+    const uint32_t num_threads_x = actual_tile_size;
+    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
+    const uint32_t num_tiles
+        = ceildiv(sub_block_size * sub_block_size,
+                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
+    const dim3 block_dim{num_threads_x, num_threads_y};
+
+    // Execute block transpose via hipMemcpy2D + local transpose kernel and time them
+    float memcpy_time = run_memcpy(ctx, in_bufs, tmp);
+
+    GPUTimer timer;
+    timer.tick();
+    local_transpose<Tfloat>
+        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, d_tmp_bufs, d_out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
+
+    // Free pointers and tmp buf
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipFree(tmp[i]));
+    }
+    return memcpy_time + timer.elapsed();
+}
+
+// Time run_memcpy_async() + local_transpose()
+template <typename Tfloat>
+float run_memcpy_async_transpose(const benchmark_context& ctx,
+                                 std::vector<Tfloat*>&    in_bufs,
+                                 std::vector<Tfloat*>&    out_bufs)
+{
+    const size_t N     = ctx.N;
+    const size_t ngpus = ctx.ngpus;
+
+    // Copy over device ptrs stored in in_bufs/out_bufs into device side array
+    Tfloat** d_in_bufs;
+    Tfloat** d_out_bufs;
+    HIP_CHECK(hipMalloc(&d_in_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMalloc(&d_out_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_in_bufs, in_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+    HIP_CHECK(
+        hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Create intermediate tmp buffer between block transpose and local transpose
+    std::vector<Tfloat*> tmp(ngpus);
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipMalloc(&tmp[i], sizeof(Tfloat) * (N * N / ngpus)));
+        HIP_CHECK(hipMemset(tmp[i], 0, sizeof(Tfloat) * (N * N / ngpus)));
+    }
+    // And also copy it to device for access to internal device ptrs
+    Tfloat** d_tmp_bufs;
+    HIP_CHECK(hipMalloc(&d_tmp_bufs, sizeof(Tfloat*) * ngpus));
+    HIP_CHECK(hipMemcpy(d_tmp_bufs, tmp.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
+
+    // Calculate number of blocks/threads to launch with
+    // For local_transpose:
+    const uint32_t num_sub_blocks = ngpus; // Per gpubuf
+    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
+    const uint32_t actual_tile_size
+        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
+    const uint32_t num_threads_x = actual_tile_size;
+    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
+    const uint32_t num_tiles
+        = ceildiv(sub_block_size * sub_block_size,
+                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
+    const dim3 block_dim{num_threads_x, num_threads_y};
+
+    // Execute block transpose via hipMemcpy2D + local transpose kernel and time them
+    float memcpy_time = run_memcpy(ctx, in_bufs, tmp);
+
+    GPUTimer timer;
+    timer.tick();
+    local_transpose<Tfloat>
+        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, d_tmp_bufs, d_out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
+
+    // Free pointers and tmp buf
+    HIP_CHECK(hipFree(d_in_bufs));
+    HIP_CHECK(hipFree(d_out_bufs));
+    for(auto i = 0; i < ngpus; i++)
+    {
+        HIP_CHECK(hipFree(tmp[i]));
+    }
+    return memcpy_time + timer.elapsed();
 }

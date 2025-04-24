@@ -157,12 +157,14 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
 {
     // Add benchmarks here
     const std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
-        = {{"hipMemcpy2D", run_memcpy<T>},
-           {"hipMemcpy2DAsync", run_memcpy_async<T>},
+        = {{"memcpy2D", run_memcpy<T>},
+           {"memcpy2D+Transpose", run_memcpy_transpose<T>},
+           {"memcpy2DAsync", run_memcpy_async<T>},
+           {"memcpy2DAsync+Transpose", run_memcpy_async_transpose<T>},
            {"naiveCopy", naive_copy_launcher<T>},
-           // {"ldsCopy", naive_copy_launcher<T>},
-           // {"naiveCopy+FusedTranspose", naive_copy_transpose<T>},
            {"naiveCopy+Transpose", naive_copy_transpose<T>}};
+    // {"naiveCopy+FusedTranspose", naive_copy_transpose<T>},
+    // {"ldsCopy", naive_copy_launcher<T>},
 
     bool run_all = enabled_benchmarks.count("all");
     for(const auto& kv : all_benchmarks)
@@ -178,12 +180,19 @@ int main(int argc, char* argv[])
     // Parse args
     CLI::App app{"Memcpy bench"};
 
-    std::set<std::string> valid_benchmarks
-        = {"all", "hipMemcpy2D", "hipMemcpy2DAsync", "naiveCopy", "ldsCopy", "naiveCopy+Transpose"};
+    // Note: also edit map in add_benchmarks() if editing this set
+    std::set<std::string> valid_benchmarks = {"all",
+                                              "memcpy2D",
+                                              "memcpy2DAsync",
+                                              "naiveCopy",
+                                              "ldsCopy",
+                                              "naiveCopy+Transpose",
+                                              "memcpy2D+Transpose",
+                                              "memcpy2DAsync+Transpose"};
 
     std::string run_bench_helper
-        = "Benchmarks to run, i.e: --run-benchmark hipMemcpy2D "
-          "hipMemcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
+        = "Benchmarks to run, i.e: --runBenchmark memcpy2D "
+          "memcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
 
     for(const auto& x : valid_benchmarks)
         run_bench_helper += x + "\n";
@@ -203,7 +212,7 @@ int main(int argc, char* argv[])
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
-    app.add_option("-r, --run-benchmark", param_enabled_benchmarks, run_bench_helper)
+    app.add_option("-r, --runBenchmark", param_enabled_benchmarks, run_bench_helper)
         ->default_val("all");
 
     precision p;
