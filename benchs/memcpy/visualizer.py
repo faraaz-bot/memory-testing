@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import os
 import argparse
 
-def visualie(storage):
+def visualize(storage):
 
     num_tests = len(storage[0]['name'])
 
@@ -47,7 +47,7 @@ def visualize_csv(input_dir):
 
     storage.sort(key=lambda x : x['size'])
 
-    visualie(storage)
+    visualize(storage)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
