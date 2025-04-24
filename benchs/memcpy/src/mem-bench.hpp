@@ -25,10 +25,6 @@ constexpr int ITEMS_PER_THREAD = 4;
  *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
  *     - Pinned memory, HMM?
- * - Perform local transpose on data as well
- *
- * - Display/write output timings/other metrics, allow ntrials
- *     - Add Google Benchmark
  *
  * - Further out tasks to consider
  *     - hipGraph vs stream (ngpus vs ngpus^2 # of streams) async comparison
@@ -177,7 +173,7 @@ bool is_same_matrix(const int                  N,
     return true;
 }
 
-// Reference impl on CPU that does not perform local transpose (out-of-place)
+// Reference impl of block transpose on CPU that does not perform local transpose (out-of-place)
 template <typename Tfloat>
 void host_copy(const size_t N, const size_t ngpus, const Tfloat* input, Tfloat* output)
 {
@@ -346,8 +342,12 @@ struct gpubuf
 };
 
 /* Implementations */
-// Host function ("launcher" in case of kernel benchmark) is passed in to benchmark
-// float return value is the time in ms that was recorded for one execution
+// These perform a block transpose between `ngpus` # of buffers, with each each block
+// being a square of length (N / ngpus), where N is the length of the original
+// square matrix, which is split across all GPU devices.
+//
+// Host function ("launcher" in case of kernel benchmark) is passed in to run_benchmark,
+// with float return value being time in ms that was recorded for one execution
 
 // (1.1) hipMemcpy2D between two devices
 template <typename Tfloat>
@@ -420,6 +420,8 @@ float run_memcpy_async(const benchmark_context& ctx,
     return timer.elapsed();
 }
 
+// (1.3) hipMemcpy2d using hipGraph
+
 // (2) Copy kernels
 template <typename Tfloat>
 __global__ void naive_copy(const size_t N,
@@ -444,7 +446,8 @@ __global__ void naive_copy(const size_t N,
     }
 }
 
-// Try to improve on naive with LDS usage
+// FIXME: Seems to have some kind of synchronization issue, where part of data is missing...?
+// Try to improve on naive with LDS usage (not expected to actually provide improvement)
 // This variant will map blocks to gpus, and have each thread operates on one "sub_block"
 template <typename Tfloat>
 __global__ void lds_copy(const size_t N, const size_t ngpus, Tfloat** in_bufs, Tfloat** out_bufs)
@@ -591,7 +594,7 @@ __global__ __launch_bounds__(1024) void local_transpose(
     }
 }
 
-// Block-wide transpose + local transpose implementations
+/* Block-wide transpose + local transpose implementations */
 // NOTE: Assumes power of two for ngpus & N and (N/ngpus) >= ITEMS_PER_THREAD, does not work for general params
 template <typename Tfloat>
 float naive_copy_transpose(const benchmark_context& ctx,
