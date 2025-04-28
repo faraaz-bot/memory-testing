@@ -6,8 +6,10 @@
 mkdir strong_scaling # Same N, varying ngpus
 mkdir weak_scaling   # N scales alongside ngpus
 
-ntrials = 10
-benchmarks = "all"
+ntrials=10
+benchmarks="all"
+
+# TODO: Assuming the data is all good currently, just rearrange/copy to get strong + weak scaling data from just one run per n/g combination
 
 # Build it!
 
@@ -19,6 +21,7 @@ benchmarks = "all"
 # Strong scaling tests - graph per each N value
 for n in {512,1024,2048,4096,8192,16384}
 do
+    echo "Strong Scaling - N = ${n}"
     mkdir ./strong_scaling/${n}
     for g in {1,2,4,8}
     do
@@ -30,6 +33,7 @@ done
 # Weak scaling tests - aggregate everything into one output graph
 for n in {512,1024,2048,4096,8192,16384}
 do
+    echo "Weak Scaling - N = ${n}"
     for g in {1,2,4,8}
     do
         ./build/membench -n ${n} -g ${g} -t ${ntrials} -r ${benchmarks} --benchmark_format=csv > ./weak_scaling/output-n${n}-g${g}.csv
