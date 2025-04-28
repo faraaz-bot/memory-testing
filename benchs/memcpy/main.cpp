@@ -139,6 +139,7 @@ void run_benchmark(
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
     state.counters["Dimension (N x N)"] = benchmark::Counter(N);
+    state.counters["Device Count"]      = benchmark::Counter(ngpus);
 
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
