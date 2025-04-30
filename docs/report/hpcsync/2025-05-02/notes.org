@@ -1,0 +1,1 @@
+asy -f pdf datagraphs.asy -V -u'legendlist="single";filenames="1024_3_dp.dat"'
