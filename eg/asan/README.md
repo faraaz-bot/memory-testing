@@ -5,7 +5,7 @@ sudo apt install hsa-rocr-asan hip-runtime-amd-asan openmp-extras-asan rocm-hip-
 
 # Set up environment and compile:
 export HSA_XNACK=1
-export LIBRARTY_PATH=/opt/rocm/lib/llvm/lib/asan:/opt/rocm/lib/asan
+export LIBRARY_PATH=/opt/rocm/lib/llvm/lib/asan:/opt/rocm/lib/asan
 
 cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=amdclang++ .. && make
 
