@@ -1,13 +1,14 @@
 import os
 import argparse
+import textwrap
 import operator
 import subprocess
 from itertools import accumulate
 
-# This script is designed to run membench multiple times for varying size/# of gpus,
-# and chart the results using the visualizer.py script.
+# This script is designed to wrap and run membench multiple times for varying
+# size/# of gpus, and chart the results using the visualizer.py script.
 
-dir_perms = 0o660  # rw-rw----
+dir_perms = 0o640  # rw-r-----
 
 
 def is_power_of_two(x):
@@ -16,15 +17,30 @@ def is_power_of_two(x):
     return (x & (x - 1) == 0)
 
 
+# Run membench executable for each all combinations of lengths/ngpus
+# Mode determines how the data will be organized and compared:
+#   - Default -> N vs. bw
+#   - Weak    -> ngpus (on scaling N) vs. bw -- this will expect lengths and ngpus to match
+#   - Strong  -> ngpus (on constant N) vs. bw
 def run(lengths, ngpus, executable, log_path, mode):
-    # Default -> N vs. bw
-    # Weak    -> ngpus (on scaling N) vs. bw
-    # Strong  -> ngpus (on constant N) vs. bw
-    if mode == default:
-        # Make a separate graph for each ngpu
+    if mode == 'default':
+        # Make a separate graph for each ngpu run
         for g in ngpus:
             localpath = log_path + f'/{g}'
             os.mkdir(localpath)
+            for n in lengths:
+                subprocess.run(args=[executable, '-g', g, '-n', n])
+    elif mode == 'weak':
+        assert len(lengths) == len(
+            ngpus
+        ), f'Expected same length from --length and --ngpus args for weak scaling'
+        sort(lengths)
+        sort(ngpus)
+        for i in enumerate(ngpus):
+            n = lengths[i]
+
+    else:
+        pass
 
 
 def graph(lengths, ngpus, out_path, mode):
@@ -32,7 +48,9 @@ def graph(lengths, ngpus, out_path, mode):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Multi-GPU Memory Transfer Benchmark',
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         '-n',
         '--lengths',
@@ -40,15 +58,14 @@ if __name__ == '__main__':
         dest='lengths',
         nargs='+',
         default=[512, 1024, 2048],
-        help=
-        'List of power of 2 lengths to run, for 2D matrices. Ex. "--length 128 256" to run on 128^2 and 256^2 matrices'
-    )
+        help=textwrap.dedent(
+            'List of power of 2 lengths to run, for 2D matrices.\nEx. "--length 128 256" to run on 128^2 and 256^2 matrices'
+        ))
     parser.add_argument(
         '-g',
         '--ngpus',
         type=int,
         dest='ngpus',
-        required=False,
         nargs='+',
         default=[1, 2, 4, 8],
         help='List of power of 2 number of gpus to run on. Ex. "--ngpus 2 4 8"'
@@ -57,30 +74,36 @@ if __name__ == '__main__':
         '-x',
         '--exec',
         dest='executable',
-        required=False,
         default="./build/membench",
         help="Path to membench executable, if not located in ./build/membench")
+    parser.add_argument(
+        '-b',
+        '--build',
+        dest='build',
+        action=store_true,
+        default="False",
+        help="Flag to enable building membench from this script")
     parser.add_argument('-l',
                         '--log-path',
                         dest='log_path',
-                        required=False,
                         default="./",
                         help='Destination path for membench output logs')
     parser.add_argument('-o',
                         '--output-path',
                         dest='out_path',
-                        required=False,
                         default="./",
                         help='Destination path for graph output')
-    parser.add_argument(
-        '-m',
-        '--mode',
-        dest='mode',
-        required=False,
-        choices=['default', 'weak', 'strong'],
-        help=
-        'The mode of the benchmark files [default|weak|strong]. Default graphs N vs throughput for fixed # gpus'
-    )
+    parser.add_argument('-m',
+                        '--mode',
+                        dest='mode',
+                        choices=['default', 'weak', 'strong'],
+                        help=textwrap.dedent('''\
+            The mode of the benchmark files [default|weak|strong].
+            - "default" graphs N vs bandwidth per GPU # from --ngpus
+            - "weak" graphs ngpus vs bandwidth for different N per GPU #
+                - Note: # of args in --lengths must correspond to N per --ngpus
+            - "strong" graphs ngpus vs bandwidth per N
+            '''))
 
     args = parser.parse_args()
 
