@@ -263,10 +263,13 @@ basicstyle=\ttfamily\small,
     \begin{itemize}
     \item cuFFTXT interface.
     \item Only supports \lstinline{CUFFT_XT_FORMAT_INPLACE}
+      \begin{itemize}
+      \item 1D regular decomposition
+      \end{itemize}
     \end{itemize}
   \item Multi-prod multi-gpu
     \begin{itemize}
-    \item cuFFTMP inteface.
+    \item cuFFTMP interface.
     \item Built-in slabs: \lstinline{CUFFT_XT_FORMAT_INPLACE}
     \item Custom brick decomposition: \lstinline{CUFFT_XT_FORMAT_DISTRIBUTED_INPUT}
     \item real/complex transforms only support
@@ -280,7 +283,6 @@ basicstyle=\ttfamily\small,
     \item NB: New NVIDIA ARM-based NVPL includes FFT in early access release.
   \end{itemize}
 
-  FIXME: clean this up.
   
 \end{frame}
 
@@ -355,6 +357,7 @@ basicstyle=\ttfamily\small,
   \begin{center}
     \includegraphics{m1024.pdf}
     % asy -f pdf datagraphs.asy -u'legendlist="single,double";filenames="1024_3_sp.dat,1024_3_dp.dat"' -o m1024.pdf
+    
     Execution time for a $1024^3$ complex FFT on Frontier with slab
     decomposition
   \end{center}
@@ -365,6 +368,7 @@ basicstyle=\ttfamily\small,
   \begin{center}
     \includegraphics{m2048.pdf}
     % asy -f pdf datagraphs.asy -u'legendlist="single,double";filenames="2048_3_sp.dat,2048_3_dp.dat"' -o m2048.pdf
+    
     Execution time for a $2048^3$ complex FFT on Frontier with slab
     decomposition
   \end{center}
@@ -375,11 +379,34 @@ basicstyle=\ttfamily\small,
   \begin{center}
     \includegraphics{m4096.pdf}
     % asy -f pdf datagraphs.asy -u'legendlist="single,double";filenames="4096_3_sp.dat,4096_3_dp.dat"' -o m4096.pdf
+    
     Execution time for a $4096^3$ complex FFT on Frontier with slab
     decomposition
   \end{center}
 \end{frame}
 
+\begin{frame}
+  \frametitle{2D FFT regular decomposition}
+
+  Input is decomposed in the $x$ direction, output in the $y$ direction.
+
+  \medskip
+  
+  \begin{enumerate}
+  \item Perform batched 1D FFTs in the $y$ direction
+  \item Transpose the data (eg \texttt{MPI_Alltoall}) so that the $x$
+    direction is contiguous
+  \item Perform batched 1D FFTs in the $x$ direction
+  \end{enumerate}
+
+  \medskip
+
+  \begin{itemize}
+  \item Each device sends $P-1$ messages of size $N^2/P$.
+  \end{itemize}
+  
+\end{frame}
+  
 \begin{frame}
   \frametitle{2D FFT regular decomposition}
   \begin{center}
@@ -390,6 +417,27 @@ basicstyle=\ttfamily\small,
   \end{center}
 \end{frame}
 
+\begin{frame}[fragile]
+  \frametitle{3D FFT with 1D decomposition (``slab'')}
+  
+  Input is decomposed in the $x$ direction, output in the $z$ direction.
+
+ 
+  \medskip
+  
+  \begin{enumerate}
+  \item Perform batched 2D FFTs in the $z/y$ direction
+  \item Transpose the data so that the $x$ direction is contiguous
+  \item Perform batched 1D FFTs in the $x$ direction
+  \end{enumerate}
+
+  \medskip
+
+  \begin{itemize}
+  \item Each device sends $P-1$ messages of size $N^3/P$.
+  \end{itemize}
+    
+\end{frame}
 
 \begin{frame}[fragile]
   \frametitle{3D FFT with 1D decomposition (``slab'')}
@@ -442,7 +490,32 @@ for(int pidx = 0; pidx < P; ++pidx) {
 \end{frame}
 
 \begin{frame}[fragile]
-  \frametitle{3D FFT with 2D decomposition (``pencil)}
+  \frametitle{3D FFT with 2D decomposition (``pencil'')}
+  
+  Input is decomposed in the $x/y$ direction, output in the $y/z$ direction.
+
+ 
+  \medskip
+  
+  \begin{enumerate}
+  \item Perform batched 1D FFTs in the $z$ direction
+  \item Transpose the data so that the $y$ direction is contiguous
+  \item Perform batched 1D FFTs in the $y$ direction
+  \item Transpose the data so that the $x$ direction is contiguous
+  \item Perform batched 1D FFTs in the $x$ direction
+  \end{enumerate}
+
+  \medskip
+
+  \begin{itemize}
+  \item Two communication stages
+  \item In each stage, each device sends $\sqrt{P}-1$ messages of size $N^3/P$.
+  \end{itemize}
+      
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{3D FFT with 2D decomposition (``pencil'')}
   \begin{figure}[h]
     \begin{asy}
       import three;
@@ -497,24 +570,21 @@ for(int pxidx = 0; pxidx < P; ++pxidx) {
 
 
 \begin{frame}
-  \frametitle{FIXME}
+  \frametitle{Irregular Decompositions}
 
-  Algorithms and data decomposition.
-  
-\end{frame}
-
-\begin{frame}
-  \frametitle{FIXME}
-
-  FIXME: that LAMMPS picture
-
-  hybrid parallelism improvements
-
-  combinatorical optimisation
-
-  rocSHMEM,RCCL
-
-  Testing infrastructure
+  \texttt{rocFFT} is used for long-range interactions in many particle
+  codes.
+  \begin{itemize}
+  \item The $N$-body computation is the dominant computation
+  \item Domain decomposition is optimised for the particle-particle method
+  \item Example from LAMMPS documentation:
+  \end{itemize}
+  \begin{center}
+    \includegraphics[width=.9\textwidth]{lammps-domain-decomp.png}
+  \end{center}
+  \begin{itemize}
+  \item We can improve performance by intaking this decomposition in rocFFT.
+  \end{itemize}
   
 \end{frame}
 
@@ -536,9 +606,55 @@ for(int pxidx = 0; pxidx < P; ++pxidx) {
   
 \end{frame}
 
+
+\begin{frame}
+  \frametitle{Prioritization}
+
+  \begin{center}
+    Q: Lots of work to be done: what should be done first?
+  \end{center}
+
+  \pause
+  
+  \begin{center}
+    A: Testing infrastructure.  \pause But then?
+  \end{center}
+
+  \pause
+  
+  \begin{enumerate}
+  \item Irregular data decompositions
+    \begin{itemize}
+    \item First pass: move data to a regular decomposition
+    \item Second pass: heuristic to reduce communication costs
+    \item Third pass: heuristic to reduce transform time
+    \end{itemize}
+  \item Sparse data
+    \begin{itemize}
+    \item Some bricks could have all-zero data.
+    \end{itemize}
+  \item Hybrid parallelism
+    \begin{itemize}
+    \item Multiple GPUs per rank is an optimisation target
+    \end{itemize}
+  \item Communication libraries
+    \begin{itemize}
+    \item rocSHMEM (large effort for rocFFT)
+    \item RCCL
+    \item MPI extensions (eg: streams)
+    \end{itemize}
+  \end{enumerate}
+  
+\end{frame}
+
+
 \end{document}
 
-
-% LocalWords:  bg fg frametitle footline lR rocFFT proc rocfft MPI
-% LocalWords:  OpenMPI cmake openmpi mpich GROMACS mpi backend FFT
-% LocalWords:  alltoall alltoallv ROCm rtl
+% LocalWords:  bg fg frametitle footline lR rocFFT proc rocfft MPI XT
+% LocalWords:  cuFFT gpu cuFFTXT INPLACE cuFFTMP nvshmem NVPL FFT mpi
+% LocalWords:  cufftMpMakePlanDecomposition OpenMPI cmake rtl openmpi
+% LocalWords:  mpich Ialltoallv Ialltoall FFTs eg Alltoall surfpen
+% LocalWords:  lightgreen lightblue pblock idx sblock pidx pxidx GPUs
+% LocalWords:  pyidx Decompositions optimised LAMMPS intaking ROCm
+% LocalWords:  alltoall alltoallv decompositions optimisation RCCL
+% LocalWords:  rocSHMEM

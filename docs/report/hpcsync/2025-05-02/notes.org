@@ -1,1 +1,7 @@
-asy -f pdf datagraphs.asy -V -u'legendlist="single";filenames="1024_3_dp.dat"'
+Do compile the document, first run doasy.sh.
+
+Then, run latexmk -pdf on the tex file
+Then, find any files that looks like 
+ rocfft_mpi_hpcsync2025-05-1.asy
+and run asy on those.
+Then run latexmk -pdf on the tex file again.
