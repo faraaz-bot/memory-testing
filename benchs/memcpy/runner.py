@@ -17,16 +17,17 @@ def is_power_of_two(x):
     return (x & (x - 1) == 0)
 
 
-def run_membench(n, g, trials, executable, bench_filter, file_path):
+# Execute and store output to designated file
+# Send stderr to dev/null since it contains gbench preamble
+def run_membench(n, g, trials, executable, bench_filter, file):
     proc = subprocess.run(args=[
         executable, '-n',
         str(n), '-g',
         str(g), '-t',
-        str(trials), '-r', bench_filter, '--benchmark_out_format=csv',
-        f'--benchmark_out={file_path}'
+        str(trials), '-r', bench_filter, '--benchmark_format=csv'
     ],
                           timeout=300,
-                          stdout=open(os.devnull, 'wb'),
+                          stdout=file,
                           stderr=open(os.devnull, 'wb'))
 
 
@@ -36,27 +37,46 @@ def run_membench(n, g, trials, executable, bench_filter, file_path):
 #   - Weak    -> ngpus (on scaling N) vs. bw -- this will expect lengths and ngpus to match
 #   - Strong  -> ngpus (on constant N) vs. bw
 def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
+    total_runs = len(lengths) * len(ngpus)
+    current_runs = 1
+
+    def execute(n, g, path):
+        nonlocal current_runs
+        print(
+            f'[{current_runs}/{total_runs}] Running {executable} on size {n} x {n}, across {g} GPUs'
+        )
+        with (open(localpath + f'/log{n}', 'w')) as file:
+            run_membench(n, g, trials, executable, bench_filter, file)
+        current_runs += 1
+
     if mode == 'default':
+
         # Make a separate graph for each ngpu run
         for g in ngpus:
-            localpath = log_path + f'/{g}'
+            localpath = log_path + f'/default/{g}'
             os.makedirs(localpath, dir_perms, exist_ok=True)
             for n in lengths:
-                print(f'Running membench on size {n} x {n}, across {g} GPUs')
-                run_membench(n, g, trials, executable, bench_filter,
-                             localpath + f'/log{n}')
+                execute(n, g, localpath)
 
     elif mode == 'weak':
+        # Single graph will be made using all run data
         assert len(lengths) == len(
             ngpus
         ), f'Expected same length from --length and --ngpus args for weak scaling'
         sort(lengths)
         sort(ngpus)
-        for i in enumerate(ngpus):
+        localpath = log_path + f'/weak_scaling'
+        os.makedirs(localpath, dir_perms, exist_ok=True)
+        for i, g in enumerate(ngpus):
             n = lengths[i]
-
+            execute(n, g, localpath)
     else:
-        pass
+        # Graph per each N in lengths
+        for n in lengths:
+            localpath = log_path + f'/strong_scaling/{n}'
+            os.makedirs(localpath, dir_perms, exist_ok=True)
+            for g in ngpus:
+                execute(n, g, localpath)
 
 
 def graph(lengths, ngpus, out_path, mode):
@@ -154,6 +174,14 @@ if __name__ == '__main__':
     assert os.path.exists(
         args.out_path
     ), f'Membench output path: {args.out_path} is not a valid path'
+
+    print(f'''Executing membench with the following args:
+    Lengths\t= {lengths}
+    GPUs\t= {ngpus}
+    Executable\t= {args.executable}
+    Filter\t= {args.filter}
+    Mode\t= {args.mode}
+          ''')
 
     run(lengths, ngpus, args.trials, args.executable, args.log_path,
         args.filter, args.mode)

@@ -291,8 +291,9 @@ int main(int argc, char* argv[])
     }
 
     const size_t N = ctx.N;
-    std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
-              << " gpus." << std::endl;
+    if(ctx.verbose)
+        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
+                  << " gpus." << std::endl;
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
