@@ -17,19 +17,35 @@ def is_power_of_two(x):
     return (x & (x - 1) == 0)
 
 
+def run_membench(n, g, trials, executable, bench_filter, file_path):
+    proc = subprocess.run(args=[
+        executable, '-n',
+        str(n), '-g',
+        str(g), '-t',
+        str(trials), '-r', bench_filter, '--benchmark_out_format=csv',
+        f'--benchmark_out={file_path}'
+    ],
+                          timeout=300,
+                          stdout=open(os.devnull, 'wb'),
+                          stderr=open(os.devnull, 'wb'))
+
+
 # Run membench executable for each all combinations of lengths/ngpus
 # Mode determines how the data will be organized and compared:
 #   - Default -> N vs. bw
 #   - Weak    -> ngpus (on scaling N) vs. bw -- this will expect lengths and ngpus to match
 #   - Strong  -> ngpus (on constant N) vs. bw
-def run(lengths, ngpus, executable, log_path, mode):
+def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
     if mode == 'default':
         # Make a separate graph for each ngpu run
         for g in ngpus:
             localpath = log_path + f'/{g}'
-            os.mkdir(localpath)
+            os.makedirs(localpath, dir_perms, exist_ok=True)
             for n in lengths:
-                subprocess.run(args=[executable, '-g', g, '-n', n])
+                print(f'Running membench on size {n} x {n}, across {g} GPUs')
+                run_membench(n, g, trials, executable, bench_filter,
+                             localpath + f'/log{n}')
+
     elif mode == 'weak':
         assert len(lengths) == len(
             ngpus
@@ -70,19 +86,24 @@ if __name__ == '__main__':
         default=[1, 2, 4, 8],
         help='List of power of 2 number of gpus to run on. Ex. "--ngpus 2 4 8"'
     )
-    parser.add_argument(
-        '-x',
-        '--exec',
-        dest='executable',
-        default="./build/membench",
-        help="Path to membench executable, if not located in ./build/membench")
+    parser.add_argument('-t',
+                        '--trials',
+                        type=int,
+                        dest='trials',
+                        default=10,
+                        help='Number of trials to run per benchmark type')
+    parser.add_argument('-x',
+                        '--exec',
+                        dest='executable',
+                        default="./build/membench",
+                        help='Path to membench executable')
     parser.add_argument(
         '-b',
         '--build',
         dest='build',
         action='store_true',
-        default="False",
-        help="Flag to enable building membench from this script")
+        default=False,
+        help='Flag to enable building membench from this script')
     parser.add_argument('-l',
                         '--log-path',
                         dest='log_path',
@@ -96,6 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('-m',
                         '--mode',
                         dest='mode',
+                        default='default',
                         choices=['default', 'weak', 'strong'],
                         help=textwrap.dedent('''\
             The mode of the benchmark files [default|weak|strong].
@@ -107,6 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('-f',
                         '--filter',
                         dest='filter',
+                        default='all',
                         help=textwrap.dedent('''\
                                 Filter for which benchmarks to run, taken as space-separated list of benchmark names.
                                 Refer to output of `./membench -h` for up-to-date list of benchmarks.'''
@@ -132,5 +155,6 @@ if __name__ == '__main__':
         args.out_path
     ), f'Membench output path: {args.out_path} is not a valid path'
 
-    run(lengths, ngpus, args.executable, args.log_path, args.mode)
+    run(lengths, ngpus, args.trials, args.executable, args.log_path,
+        args.filter, args.mode)
     graph(lengths, ngpus, args.out_path, args.mode)
