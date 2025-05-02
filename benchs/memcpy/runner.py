@@ -80,7 +80,7 @@ if __name__ == '__main__':
         '-b',
         '--build',
         dest='build',
-        action=store_true,
+        action='store_true',
         default="False",
         help="Flag to enable building membench from this script")
     parser.add_argument('-l',
@@ -104,6 +104,13 @@ if __name__ == '__main__':
                 - Note: # of args in --lengths must correspond to N per --ngpus
             - "strong" graphs ngpus vs bandwidth per N
             '''))
+    parser.add_argument('-f',
+                        '--filter',
+                        dest='filter',
+                        help=textwrap.dedent('''\
+                                Filter for which benchmarks to run, taken as space-separated list of benchmark names.
+                                Refer to output of `./membench -h` for up-to-date list of benchmarks.'''
+                                             ))
 
     args = parser.parse_args()
 
