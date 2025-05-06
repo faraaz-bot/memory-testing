@@ -4,6 +4,7 @@ import textwrap
 import operator
 import subprocess
 from itertools import accumulate
+from visualizer import *
 
 # This script is designed to wrap and run membench multiple times for varying
 # size/# of gpus, and chart the results using the visualizer.py script.
@@ -37,7 +38,7 @@ def run_membench(n, g, trials, executable, bench_filter, file):
 #   - Weak    -> ngpus (on scaling N) vs. bw -- this will expect lengths and ngpus to match
 #   - Strong  -> ngpus (on constant N) vs. bw
 def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
-    total_runs = len(lengths) * len(ngpus)
+    total_runs = len(ngpus) if mode == 'weak' else len(lengths) * len(ngpus)
     current_runs = 1
 
     def execute(n, g, path):
@@ -45,12 +46,11 @@ def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
         print(
             f'[{current_runs}/{total_runs}] Running {executable} on size {n} x {n}, across {g} GPUs'
         )
-        with (open(localpath + f'/log{n}', 'w')) as file:
+        with (open(localpath + f'/log{n}-{g}.csv', 'w')) as file:
             run_membench(n, g, trials, executable, bench_filter, file)
         current_runs += 1
 
     if mode == 'default':
-
         # Make a separate graph for each ngpu run
         for g in ngpus:
             localpath = log_path + f'/default/{g}'
@@ -63,8 +63,8 @@ def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
         assert len(lengths) == len(
             ngpus
         ), f'Expected same length from --length and --ngpus args for weak scaling'
-        sort(lengths)
-        sort(ngpus)
+        lengths.sort()
+        ngpus.sort()
         localpath = log_path + f'/weak_scaling'
         os.makedirs(localpath, dir_perms, exist_ok=True)
         for i, g in enumerate(ngpus):
@@ -77,10 +77,6 @@ def run(lengths, ngpus, trials, executable, log_path, bench_filter, mode):
             os.makedirs(localpath, dir_perms, exist_ok=True)
             for g in ngpus:
                 execute(n, g, localpath)
-
-
-def graph(lengths, ngpus, out_path, mode):
-    pass
 
 
 if __name__ == '__main__':
@@ -127,12 +123,12 @@ if __name__ == '__main__':
     parser.add_argument('-l',
                         '--log-path',
                         dest='log_path',
-                        default="./",
+                        default=".",
                         help='Destination path for membench output logs')
     parser.add_argument('-o',
                         '--output-path',
                         dest='out_path',
-                        default="./",
+                        default=".",
                         help='Destination path for graph output')
     parser.add_argument('-m',
                         '--mode',
@@ -181,8 +177,13 @@ if __name__ == '__main__':
     Executable\t= {args.executable}
     Filter\t= {args.filter}
     Mode\t= {args.mode}
+    Log Path\t= {args.log_path}
+    Output Path\t= {args.out_path}
           ''')
+
+    path_suffix = '/default' if args.mode == 'default' else f'/{args.mode}_scaling'
+    full_log_path = args.log_path + path_suffix
 
     run(lengths, ngpus, args.trials, args.executable, args.log_path,
         args.filter, args.mode)
-    graph(lengths, ngpus, args.out_path, args.mode)
+    parse(full_log_path, args.out_path, args.mode)
