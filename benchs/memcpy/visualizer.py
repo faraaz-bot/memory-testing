@@ -1,6 +1,7 @@
 from glob import glob
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib import ticker as ticker
 import os
 import argparse
 
@@ -9,6 +10,7 @@ import argparse
 def graph_default(storage, out_dir):
     num_tests = len(storage[0]['name'])
     ngpus = storage[0]['ngpus']
+    length = storage[0]['size']
 
     x_axis = []
     for i in range(num_tests):
@@ -22,6 +24,7 @@ def graph_default(storage, out_dir):
                 x_axis.append(s['size'])
             y_axis.append(s['gbps'][i])
         plt.plot(x_axis, y_axis, label=name)
+        print(x_axis, y_axis, name)
 
     plt.xscale('log', base=2)
     plt.yscale('log', base=2)
@@ -29,13 +32,16 @@ def graph_default(storage, out_dir):
     plt.ylabel('Throughput (GB/s)')
     plt.title(f'Throughput for copying data between {ngpus} GPUs')
     plt.legend(fontsize=10)
-    plt.savefig(output_dir + '/visual.png')
+    plt.savefig(out_dir + f'/default{length}-{ngpus}.png')
 
 
 # Graph for weak or strong scaling (# of GPUs vs bw)
 def graph_scaling(storage, out_dir, mode):
     num_tests = len(storage[0]['name'])
     ngpus = storage[0]['ngpus']
+    length = storage[0]['size']
+
+    fig, ax = plt.subplots()
 
     x_axis = []
     for i in range(num_tests):
@@ -50,20 +56,16 @@ def graph_scaling(storage, out_dir, mode):
             y_axis.append(s['gbps'][i])
         plt.plot(x_axis, y_axis, label=name, marker='o')
 
-    plt.xscale('log', base=2)
-    plt.yscale('log', base=2)
-    plt.xlabel('Number of GPU devices')
-    plt.ylabel('Throughput (GB/s)')
-    plt.title(f'Throughput for copying data between devices, {mode} scaling')
     plt.legend(fontsize=10)
-    plt.savefig(out_dir + f'/{mode}-{ngpus}.png')
+    if mode == 'strong':
+        plt.savefig(out_dir + f'/{mode}-{length}.png')
+    else:
+        plt.savefig(out_dir + f'/{mode}.png')
 
 
 def parse(input_dir, output_dir, mode):
     storage = []
-    print(input_dir)
     files = glob(f'{input_dir}/*.csv', recursive=True)
-    print(files)
 
     for f in files:
         temp = {}
@@ -77,12 +79,10 @@ def parse(input_dir, output_dir, mode):
 
         storage.append(temp)
 
+    print(storage)
     if mode == 'default':
         storage.sort(key=lambda x: x['size'])
-        graph_default(storage, output_dir, mode)
-    elif mode == 'weak':
-        storage.sort(key=lambda x: x['ngpus'])
-        graph_scaling(storage, output_dir, mode)
+        graph_default(storage, output_dir)
     else:
         storage.sort(key=lambda x: x['ngpus'])
         graph_scaling(storage, output_dir, mode)

@@ -27,7 +27,7 @@ def run_membench(n, g, trials, executable, bench_filter, file):
         str(g), '-t',
         str(trials), '-r', bench_filter, '--benchmark_format=csv'
     ],
-                          timeout=300,
+                          timeout=600,
                           stdout=file,
                           stderr=open(os.devnull, 'wb'))
 
@@ -181,9 +181,19 @@ if __name__ == '__main__':
     Output Path\t= {args.out_path}
           ''')
 
-    path_suffix = '/default' if args.mode == 'default' else f'/{args.mode}_scaling'
-    full_log_path = args.log_path + path_suffix
-
-    run(lengths, ngpus, args.trials, args.executable, args.log_path,
-        args.filter, args.mode)
-    parse(full_log_path, args.out_path, args.mode)
+    # print("Starting membench runs to collect data...")
+    # run(lengths, ngpus, args.trials, args.executable, args.log_path,
+    #     args.filter, args.mode)
+    print("Now parsing data and graphing:...")
+    if (args.mode == 'default'):
+        for g in ngpus:
+            full_log_path = args.log_path + f'/default/{g}/'
+            parse(full_log_path, args.out_path, args.mode)
+    elif (args.mode == 'weak'):
+        full_log_path = args.log_path + '/weak_scaling/'
+        parse(full_log_path, args.out_path, args.mode)
+    else:
+        for n in lengths:
+            full_log_path = args.log_path + f'/strong_scaling/{n}/'
+            parse(full_log_path, args.out_path, args.mode)
+    print("Done!")
