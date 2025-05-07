@@ -50,7 +50,7 @@ if(ENABLE_MPI)
     add_compile_definitions(MPI_ENABLED) 
     target_link_libraries(membench hip::host hip::device MPI::MPI_CXX)
     message(STATUS "MPI available and enabled")
-else if(CRAY_MPI_ENABLE)
+elseif(CRAY_MPI_ENABLE)
     get_filename_component(MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
     target_link_directories(membench
         PRIVATE

@@ -786,8 +786,17 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
 
 // (3) MPI Implementation
 // Block transpose
-// #ifdef MPI_ENABLED
+#ifdef MPI_ENABLED
 template <typename Tfloat>
-float mpi_
+float mpi_copy(const benchmark_context& ctx,
+               std::vector<Tfloat*>&    in_bufs,
+               std::vector<Tfloat*>&    out_bufs)
+{
+    float elapsed = 0.f;
+    int   mpi_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
-    // #endif
+    std::cout << "Hello world from rank " << mpi_rank << "!" << std::endl;
+    return elapsed;
+}
+#endif

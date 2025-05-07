@@ -21,7 +21,7 @@ public:
     }
     virtual void ReportRuns(const std::vector<Run>&) {}
     virtual void Finalize() {}
-}
+};
 #endif
 
 /**
@@ -173,7 +173,7 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
                     const std::set<std::string>&                  enabled_benchmarks)
 {
     // Add benchmarks here
-    const std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
+    std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
         = {{"memcpy2D", run_memcpy<T>},
            {"memcpy2D+Transpose", run_memcpy_transpose<T>},
            {"memcpy2DAsync", run_memcpy_async<T>},
@@ -182,6 +182,9 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
            {"naiveCopy+Transpose", naive_copy_transpose<T>}};
     // {"naiveCopy+FusedTranspose", naive_copy_transpose<T>},
     // {"ldsCopy", naive_copy_launcher<T>},
+#ifdef MPI_ENABLED
+    all_benchmarks.insert({"mpiCopy", mpi_copy<T>});
+#endif
 
     bool run_all = enabled_benchmarks.count("all");
     for(const auto& kv : all_benchmarks)
@@ -194,20 +197,6 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
 
 int main(int argc, char* argv[])
 {
-#ifdef ENABLE_MPI
-    MPI_Init(&argc, &argv);
-    MPI_Comm comm = MPI_COMM_WORLD;
-    MPI_Comm_set_errhandler(mpi_comm, MPI_ERRORS_ARE_FATAL);
-    int mpi_rank = 0;
-    // int mp_size;
-
-    MPI_Comm_rank(mpi_comm, &mpi_rank);
-    // MPI_Comm_size(mpi_comm, &mp_size);
-#endif
-
-    // Parse args
-    CLI::App app{"Memcpy bench"};
-
     // Note: also edit map in add_benchmarks() if editing this set
     std::set<std::string> valid_benchmarks = {"all",
                                               "memcpy2D",
@@ -217,6 +206,24 @@ int main(int argc, char* argv[])
                                               "naiveCopy+Transpose",
                                               "memcpy2D+Transpose",
                                               "memcpy2DAsync+Transpose"};
+
+#ifdef MPI_ENABLED
+    // TODO Add some variations using local_transpose() and maybe transpose in MPI?
+    valid_benchmarks.insert("mpiCopy");
+    // valid_benchmarks.insert("mpiCopy+Transpose");
+    // valid_benchmarks.insert("mpiCopy+mpiTranspose");
+    MPI_Init(&argc, &argv);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
+    int mpi_rank = 0;
+    // int mp_size;
+
+    MPI_Comm_rank(comm, &mpi_rank);
+    // MPI_Comm_size(comm, &mp_size);
+#endif
+
+    // Parse args
+    CLI::App app{"Memcpy bench"};
 
     std::string run_bench_helper
         = "Benchmarks to run, i.e: --runBenchmark memcpy2D "
@@ -389,12 +396,14 @@ int main(int argc, char* argv[])
 
     // Only allow root proc to report if using MPI
 #ifdef MPI_ENABLED
-    if(rank == 0)
+    if(mpi_rank == 0)
+    {
         std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;
-    benchmark::RunSpecifiedBenchmarks();
+        benchmark::RunSpecifiedBenchmarks();
+    }
     else
     {
-        std::cout << "Rank " << rank << " is about to run some benchmarks with null reporter!"
+        std::cout << "Rank " << mpi_rank << " is about to run some benchmarks with null reporter!"
                   << std::endl;
         NullReporter null_rep;
         benchmark::RunSpecifiedBenchmarks(&null_rep);
