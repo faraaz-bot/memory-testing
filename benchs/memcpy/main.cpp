@@ -297,15 +297,6 @@ int main(int argc, char* argv[])
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
-    // std::cout << "Before:\n";
-    // for(auto& i : cArgs)
-    //     std::cout << i << " ";
-    // std::cout << std::endl;
-
-    // std::cout << "After:\n";
-    // for(auto& i : cArgs)
-    //     std::cout << i << " ";
-    // std::cout << std::endl;
 
     // Enable peer to peer memory access between GPUs
     for(size_t i = 0; i < ctx.ngpus; i++)
