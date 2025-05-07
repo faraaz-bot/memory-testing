@@ -56,6 +56,14 @@ def graph_scaling(storage, out_dir, mode):
             y_axis.append(s['gbps'][i])
         plt.plot(x_axis, y_axis, label=name, marker='o')
 
+    plt.xscale('log', base=2)
+    plt.yscale('log', base=2)
+    ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+    ax.xaxis.get_major_formatter().set_scientific(False)
+    # plt.ticklabel_format(axis='x', style='plain')
+    plt.xlabel('Number of GPU devices')
+    plt.ylabel('Throughput (GB/s)')
+    plt.title(f'Throughput for copying data between devices, {mode} scaling')
     plt.legend(fontsize=10)
     if mode == 'strong':
         plt.savefig(out_dir + f'/{mode}-{length}.png')
@@ -79,7 +87,6 @@ def parse(input_dir, output_dir, mode):
 
         storage.append(temp)
 
-    print(storage)
     if mode == 'default':
         storage.sort(key=lambda x: x['size'])
         graph_default(storage, output_dir)
