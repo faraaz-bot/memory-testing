@@ -12,6 +12,8 @@ def graph_default(storage, out_dir):
     ngpus = storage[0]['ngpus']
     length = storage[0]['size']
 
+    plt.clf()
+
     x_axis = []
     for i in range(num_tests):
         y_axis = []
@@ -23,8 +25,7 @@ def graph_default(storage, out_dir):
             if i == 0:
                 x_axis.append(s['size'])
             y_axis.append(s['gbps'][i])
-        plt.plot(x_axis, y_axis, label=name)
-        print(x_axis, y_axis, name)
+        plt.plot(x_axis, y_axis, label=name, marker='o')
 
     plt.xscale('log', base=2)
     plt.yscale('log', base=2)
@@ -41,6 +42,7 @@ def graph_scaling(storage, out_dir, mode):
     ngpus = storage[0]['ngpus']
     length = storage[0]['size']
 
+    plt.clf()
     fig, ax = plt.subplots()
 
     x_axis = []

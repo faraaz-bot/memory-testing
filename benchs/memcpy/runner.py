@@ -181,9 +181,9 @@ if __name__ == '__main__':
     Output Path\t= {args.out_path}
           ''')
 
-    # print("Starting membench runs to collect data...")
-    # run(lengths, ngpus, args.trials, args.executable, args.log_path,
-    #     args.filter, args.mode)
+    print("Starting membench runs to collect data...")
+    run(lengths, ngpus, args.trials, args.executable, args.log_path,
+        args.filter, args.mode)
     print("Now parsing data and graphing:...")
     if (args.mode == 'default'):
         for g in ngpus:
