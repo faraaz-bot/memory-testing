@@ -426,9 +426,11 @@ float run_memcpy_async(const benchmark_context& ctx,
     return timer.elapsed();
 }
 
+// TODO
 // (1.3) hipMemcpy2d using hipGraph
 
-// (2) Copy kernels
+// TODO Try adding streams / increase parallelism more?
+// (2) Copy kernels that perform block transpose
 template <typename Tfloat>
 __global__ void naive_copy(const size_t N,
                            const size_t ngpus,
@@ -548,8 +550,6 @@ float lds_copy_launcher(const benchmark_context& ctx,
     HIP_CHECK(hipFree(d_out_bufs));
     return timer.elapsed();
 }
-
-// Kernels on different streams?
 
 // Performs local transposes inside of blocks. Expected to be run after
 // one of the implementations performing block-wise transpose
@@ -783,3 +783,11 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
     }
     return memcpy_time + timer.elapsed();
 }
+
+// (3) MPI Implementation
+// Block transpose
+// #ifdef MPI_ENABLED
+template <typename Tfloat>
+float mpi_
+
+    // #endif

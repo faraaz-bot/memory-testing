@@ -7,6 +7,22 @@
 
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
+#ifdef MPI_ENABLED
+#include <mpi.h>
+
+// Helper class just to avoid benchmark reporting by all MPI ranks
+class NullReporter : public benchmark::BenchmarkReporter
+{
+public:
+    NullReporter() {}
+    virtual bool ReportContext(const Context&)
+    {
+        return true;
+    }
+    virtual void ReportRuns(const std::vector<Run>&) {}
+    virtual void Finalize() {}
+}
+#endif
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -178,6 +194,17 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
 
 int main(int argc, char* argv[])
 {
+#ifdef ENABLE_MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    MPI_Comm_set_errhandler(mpi_comm, MPI_ERRORS_ARE_FATAL);
+    int mpi_rank = 0;
+    // int mp_size;
+
+    MPI_Comm_rank(mpi_comm, &mpi_rank);
+    // MPI_Comm_size(mpi_comm, &mp_size);
+#endif
+
     // Parse args
     CLI::App app{"Memcpy bench"};
 
@@ -360,5 +387,21 @@ int main(int argc, char* argv[])
     terminal_reporter.SetErrorStream(&std::cout);
     terminal_reporter.SetOutputStream(&std::cout);
 
+    // Only allow root proc to report if using MPI
+#ifdef MPI_ENABLED
+    if(rank == 0)
+        std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;
     benchmark::RunSpecifiedBenchmarks();
+    else
+    {
+        std::cout << "Rank " << rank << " is about to run some benchmarks with null reporter!"
+                  << std::endl;
+        NullReporter null_rep;
+        benchmark::RunSpecifiedBenchmarks(&null_rep);
+    }
+
+    MPI_Finalize();
+#else
+    benchmark::RunSpecifiedBenchmarks();
+#endif
 }
