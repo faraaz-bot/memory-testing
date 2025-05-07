@@ -184,7 +184,7 @@ if __name__ == '__main__':
     print("Starting membench runs to collect data...")
     run(lengths, ngpus, args.trials, args.executable, args.log_path,
         args.filter, args.mode)
-    print("Now parsing data and graphing:...")
+    print("Now parsing data and graphing...")
     if (args.mode == 'default'):
         for g in ngpus:
             full_log_path = args.log_path + f'/default/{g}/'
