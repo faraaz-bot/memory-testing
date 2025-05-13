@@ -14,7 +14,9 @@ if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
     set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
 endif()
 
+# list(APPEND CMAKE_PREFIX_PATH $ENV{HOME}/.local)
 # list(APPEND CMAKE_PREFIX_PATH $ENV{ROCM_PATH}/hip $ENV{ROCM_PATH})
+
 find_package(hip REQUIRED)
 
 include_directories(include)
