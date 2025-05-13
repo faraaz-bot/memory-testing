@@ -18,3 +18,9 @@ target_link_libraries(
   GTest::gtest_main
   Boost::program_options
 )
+
+add_executable( garg garg.cpp )
+target_link_libraries(
+  garg
+  GTest::gtest_main
+)
