@@ -320,13 +320,13 @@ void teardown(const int                 ngpus,
 // RAII struct for temporary buffers for intermediate results
 // Used when performing multiple out-of-place operations
 template <typename Tfloat>
-struct gpubuf
+struct gpubufs
 {
     size_t   N;
     size_t   ngpus;
     Tfloat** bufs;
 
-    gpubuf(size_t N, size_t ngpus)
+    gpubufs(size_t N, size_t ngpus)
         : N(N)
         , ngpus(ngpus)
     {
@@ -339,7 +339,7 @@ struct gpubuf
         }
     }
 
-    ~gpubuf()
+    ~gpubufs()
     {
         for(auto i = 0; i < ngpus; i++)
             HIP_CHECK(hipFree(bufs[i]));
@@ -620,7 +620,7 @@ float naive_copy_transpose(const benchmark_context& ctx,
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
 
     // Create intermediate tmp buffer between block transpose and local transpose
-    gpubuf<Tfloat> tmp = gpubuf<Tfloat>(N, ngpus);
+    gpubufs<Tfloat> tmp = gpubufs<Tfloat>(N, ngpus);
 
     // Calculate number of blocks/threads to launch with
     // For naive_copy:
@@ -657,6 +657,7 @@ float naive_copy_transpose(const benchmark_context& ctx,
 }
 
 // Time run_memcpy() + local_transpose()
+// TODO Swap out hipMalloc/hipFree for RAII structs
 template <typename Tfloat>
 float run_memcpy_transpose(const benchmark_context& ctx,
                            std::vector<Tfloat*>&    in_bufs,
@@ -713,6 +714,7 @@ float run_memcpy_transpose(const benchmark_context& ctx,
     // Free pointers and tmp buf
     HIP_CHECK(hipFree(d_in_bufs));
     HIP_CHECK(hipFree(d_out_bufs));
+    HIP_CHECK(hipFree(d_tmp_bufs));
     for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipFree(tmp[i]));
@@ -721,6 +723,7 @@ float run_memcpy_transpose(const benchmark_context& ctx,
 }
 
 // Time run_memcpy_async() + local_transpose()
+// TODO Swap out hipMalloc/hipFree for RAII structs
 template <typename Tfloat>
 float run_memcpy_async_transpose(const benchmark_context& ctx,
                                  std::vector<Tfloat*>&    in_bufs,
@@ -777,6 +780,7 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
     // Free pointers and tmp buf
     HIP_CHECK(hipFree(d_in_bufs));
     HIP_CHECK(hipFree(d_out_bufs));
+    HIP_CHECK(hipFree(d_tmp_bufs));
     for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipFree(tmp[i]));
@@ -787,6 +791,7 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
 // (3) MPI Implementation
 // Block transpose
 #ifdef MPI_ENABLED
+#include <mpi.h>
 template <typename Tfloat>
 float mpi_copy(const benchmark_context& ctx,
                std::vector<Tfloat*>&    in_bufs,
@@ -811,6 +816,7 @@ float mpi_copy(const benchmark_context& ctx,
         if(mpi_rank == i)
         {
             // Locally copy to out_bufs, for same GPU
+            // Not using HIP_CHECK to avoid exiting on this rank to avoid deadlocks
             const size_t pitch_bytes           = ctx.N * sizeof(Tfloat);
             const size_t bytes_to_copy_per_row = sub_block_length * sizeof(Tfloat);
             hipError_t   err                   = hipMemcpy2D(out_bufs[i] + (i * sub_block_size),
@@ -827,7 +833,7 @@ float mpi_copy(const benchmark_context& ctx,
         else
         {
             // Exchange between two different ranks/GPU devices
-            Tfloat* recvbuf = out_bufs[i] + (mpi_rank * sub_block_length);
+            Tfloat*    recvbuf = out_bufs[i] + (mpi_rank * sub_block_length);
             MPI_Status status;
             MPI_Sendrecv(sendbuf,
                          sub_block_size,
@@ -853,7 +859,7 @@ float mpi_copy(const benchmark_context& ctx,
 template <typename Tfloat>
 float mpi_local_transpose(const benchmark_context& ctx,
                           std::vector<Tfloat*>&    in_bufs,
-                          std::vector<Tfloat*>&   out_bufs)
+                          std::vector<Tfloat*>&    out_bufs)
 {
     float elapsed = 0.f;
     int   mpi_rank;
