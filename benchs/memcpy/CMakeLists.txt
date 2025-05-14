@@ -44,15 +44,15 @@ set_source_files_properties(main.cpp src/mem-bench.hpp src/helper.hpp PROPERTIES
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
 
-if(ENABLE_MPI or ENABLE_CRAY_MPI)
+if(ENABLE_MPI OR ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
+    add_compile_definitions(MPI_ENABLED) 
 endif()
 
 if(ENABLE_MPI)
-    add_compile_definitions(MPI_ENABLED) 
     target_link_libraries(membench hip::host hip::device MPI::MPI_CXX)
     message(STATUS "MPI available and enabled")
-elseif(CRAY_MPI_ENABLE)
+elseif(ENABLE_CRAY_MPI)
     get_filename_component(MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
     target_link_directories(membench
         PRIVATE

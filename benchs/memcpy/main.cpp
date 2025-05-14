@@ -33,6 +33,7 @@ public:
 // Execute f under Google Benchmark, for at least trials times
 // Manages device memory management, timing, and verification,
 // but not generating initial input data (h_input).
+//
 template <typename T>
 void run_benchmark(
     benchmark::State&                                                                  state,
@@ -159,6 +160,140 @@ void run_benchmark(
 
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
+
+#ifdef MPI_ENABLED
+// Variant of run_benchmark
+// Distributes initial data and verifies data differently
+template <typename T>
+void run_mpi_benchmark(
+    benchmark::State&                                                                  state,
+    benchmark_context                                                                  ctx,
+    const size_t                                                                       trials,
+    const std::vector<T>&                                                              h_input,
+    std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
+{
+    const size_t N            = ctx.N;
+    int          verbose      = ctx.verbose;
+    std::string  bench_name   = state.name();
+    bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
+
+    // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
+    std::vector<T*> gpubufs_input(ngpus);
+    std::vector<T*> gpubufs_output(ngpus);
+
+    // Compute host-side matrix for correctness check
+    // Can be either block transposed or fully transposed result
+    std::vector<T> h_assembled_output(N * N);
+    std::vector<T> reference_matrix(N * N);
+    if(ctx.verify_results)
+    {
+        if(is_transpose)
+            host_transpose<T>(N, h_input.data(), reference_matrix.data());
+        else
+            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+    }
+
+    // Allocate and init bufs, streams
+    setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
+
+    // Optionally output gpu bufs after distributing data
+    if(verbose > 2)
+    {
+        const size_t buf_height = N / ngpus;
+        for(auto i = 0; i < ngpus; i++)
+        {
+            std::cout << "Input GPU Buffer " << i << ":\n";
+            // print<T><<<1, 1>>>(buf_size, gpubufs_input[i]);
+            print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
+            HIP_CHECK(hipDeviceSynchronize());
+        }
+    }
+
+    // Execute and time the benchmarks
+    float  total_ms     = 0.0f;
+    size_t num_failures = 0;
+    size_t num_pass     = 0;
+    size_t total_runs   = 0;
+    for(auto _ : state)
+    {
+        for(size_t t = 0; t < trials; t++)
+        {
+            float ms = f(ctx, gpubufs_input, gpubufs_output);
+
+            // Get max time across all ranks (note: only rank 0 will report benchmark results)
+            MPI_Reduce(static_cast<void*>(&ms),
+                       static_cast<void*>(total_ms),
+                       1,
+                       MPI_FLOAT,
+                       MPI_MAX,
+                       0,
+                       MPI_COMM_WORLD);
+
+            // Optionally confirm correctness by copying output back and comparing to host-side computation
+            if(ctx.verify_results)
+            {
+                // TODO MPI_Gather instead of assemble_output_to_host()
+                assemble_output_to_host<T>(
+                    N, ngpus, gpubufs_output.data(), h_assembled_output.data());
+                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                if(!res)
+                {
+                    num_failures++;
+                    std::cout << "Incorrect result detected for " << state.name() << ", trial #"
+                              << t << "\n";
+                    if(verbose)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "Host Side Computation:\n";
+                        print_host_2d<T>(N, N, reference_matrix);
+                        std::cout << "----------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
+                }
+                else
+                {
+                    num_pass++;
+                }
+                total_runs++;
+            }
+            else
+            {
+                if(verbose > 1)
+                {
+                    assemble_output_to_host<T>(
+                        N, ngpus, gpubufs_output.data(), h_assembled_output.data());
+                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                    if(!res)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "------------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
+                }
+            }
+            // Set output buffers back to all 0s
+            reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
+        }
+    }
+
+    if(ctx.verify_results)
+        std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
+                  << " runs failed." << std::endl;
+
+    state.SetIterationTime(total_ms / 1000.f);
+    double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
+    state.counters["Throughput (GB/s)"]
+        = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
+
+    state.counters["Dimension (N x N)"] = benchmark::Counter(N);
+    state.counters["Device Count"]      = benchmark::Counter(ngpus);
+
+    teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
+}
+
+#endif
 
 template <typename T>
 using benchmark_fn
@@ -332,7 +467,8 @@ int main(int argc, char* argv[])
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
 
-    // Enable peer to peer memory access between GPUs
+#ifndef MPI_ENABLED
+    // Enable peer to peer memory access between GPUs, if not using MPI
     for(size_t i = 0; i < ctx.ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
@@ -344,6 +480,7 @@ int main(int argc, char* argv[])
                 HIP_CHECK(hipDeviceEnablePeerAccess(j, 0));
         }
     }
+#endif
 
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
