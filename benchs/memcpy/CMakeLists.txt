@@ -44,7 +44,7 @@ set_source_files_properties(main.cpp src/mem-bench.hpp src/helper.hpp PROPERTIES
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
 
-if(ENABLE_MPI)
+if(ENABLE_MPI or ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
 endif()
 
