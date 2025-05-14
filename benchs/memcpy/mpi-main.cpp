@@ -1,41 +1,12 @@
-#include <benchmark/benchmark.h>
-#include <limits.h>
-#include <set>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
-#ifdef MPI_ENABLED
+#include "src/mpi-helper.hpp"
+#include <benchmark/benchmark.h>
 #include <mpi.h>
+#include <vector>
 
-// Helper class just to avoid benchmark reporting by all MPI ranks
-class NullReporter : public benchmark::BenchmarkReporter
-{
-public:
-    NullReporter() {}
-    virtual bool ReportContext(const Context&)
-    {
-        return true;
-    }
-    virtual void ReportRuns(const std::vector<Run>&) {}
-    virtual void Finalize() {}
-};
-#endif
-
-/**
- * Benchmarking tool for comparing speed of various memory copy methods
- * between multiple gpus. Currently will do out-of-place operations on 
- * square matrices only.
- */
-
-// Execute f under Google Benchmark, for at least trials times
-// Manages device memory management, timing, and verification,
-// but not generating initial input data (h_input).
-//
 template <typename T>
-void run_benchmark(
+void run_mpi_benchmark(
     benchmark::State&                                                                  state,
     benchmark_context                                                                  ctx,
     const size_t                                                                       trials,
@@ -43,19 +14,18 @@ void run_benchmark(
     std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
 {
     const size_t N            = ctx.N;
-    const size_t ngpus        = ctx.ngpus;
     int          verbose      = ctx.verbose;
     std::string  bench_name   = state.name();
     bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
 
+    // TODO Each process has its own buffer, no longer a vector
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
     std::vector<T*> gpubufs_input(ngpus);
     std::vector<T*> gpubufs_output(ngpus);
-    std::vector<T>  h_assembled_output(N * N);
-    ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Compute host-side matrix for correctness check
     // Can be either block transposed or fully transposed result
+    std::vector<T> h_assembled_output(N * N);
     std::vector<T> reference_matrix(N * N);
     if(ctx.verify_results)
     {
@@ -75,7 +45,6 @@ void run_benchmark(
         for(auto i = 0; i < ngpus; i++)
         {
             std::cout << "Input GPU Buffer " << i << ":\n";
-            // print<T><<<1, 1>>>(buf_size, gpubufs_input[i]);
             print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
             HIP_CHECK(hipDeviceSynchronize());
         }
@@ -90,17 +59,21 @@ void run_benchmark(
     {
         for(size_t t = 0; t < trials; t++)
         {
-            total_ms += f(ctx, gpubufs_input, gpubufs_output);
+            float ms = f(ctx, gpubufs_input, gpubufs_output);
 
-            for(auto i = 0; i < ngpus; i++)
-            {
-                HIP_CHECK(hipSetDevice(i));
-                HIP_CHECK(hipDeviceSynchronize());
-            }
+            // Get max time across all ranks (note: only rank 0 will report benchmark results)
+            MPI_Reduce(static_cast<void*>(&ms),
+                       static_cast<void*>(total_ms),
+                       1,
+                       MPI_FLOAT,
+                       MPI_MAX,
+                       0,
+                       MPI_COMM_WORLD);
 
             // Optionally confirm correctness by copying output back and comparing to host-side computation
             if(ctx.verify_results)
             {
+                // TODO MPI_Gather instead of assemble_output_to_host()
                 assemble_output_to_host<T>(
                     N, ngpus, gpubufs_output.data(), h_assembled_output.data());
                 bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
@@ -174,15 +147,7 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
                     const std::set<std::string>&                  enabled_benchmarks)
 {
     // Add benchmarks here
-    std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
-        = {{"memcpy2D", run_memcpy<T>},
-           {"memcpy2D+Transpose", run_memcpy_transpose<T>},
-           {"memcpy2DAsync", run_memcpy_async<T>},
-           {"memcpy2DAsync+Transpose", run_memcpy_async_transpose<T>},
-           {"naiveCopy", naive_copy_launcher<T>},
-           {"naiveCopy+Transpose", naive_copy_transpose<T>}};
-    // {"naiveCopy+FusedTranspose", naive_copy_transpose<T>},
-    // {"ldsCopy", naive_copy_launcher<T>},
+    std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks = {{"mpiCopy", mpi_copy<T>}};
 
     bool run_all = enabled_benchmarks.count("all");
     for(const auto& kv : all_benchmarks)
@@ -196,20 +161,23 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
 int main(int argc, char* argv[])
 {
     // Note: also edit map in add_benchmarks() if editing this set
-    std::set<std::string> valid_benchmarks = {"all",
-                                              "memcpy2D",
-                                              "memcpy2DAsync",
-                                              "naiveCopy",
-                                              "ldsCopy",
-                                              "naiveCopy+Transpose",
-                                              "memcpy2D+Transpose",
-                                              "memcpy2DAsync+Transpose"};
+    std::set<std::string> valid_benchmarks = {"all", "mpiCopy"};
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
+    int mpi_rank = 0;
+    int mp_size;
+
+    MPI_Comm_rank(comm, &mpi_rank);
+    MPI_Comm_size(comm, &mp_size);
+
     // Parse args
     CLI::App app{"Memcpy bench"};
 
     std::string run_bench_helper
-        = "Benchmarks to run, i.e: --runBenchmark memcpy2D "
-          "memcpy2DAsync\n\nAvailable Benchmarks:\n------------------------\n";
+        = "Benchmarks to run, i.e: --runBenchmark mpiCopy "
+          "mpiCopy+Transpose\n\nAvailable Benchmarks:\n------------------------\n";
 
     for(const auto& x : valid_benchmarks)
         run_bench_helper += x + "\n";
@@ -220,9 +188,6 @@ int main(int argc, char* argv[])
     size_t                trials;
     std::set<std::string> param_enabled_benchmarks;
     app.add_option("-n, --length", ctx.N, "Length of input square matrix")->default_val(8U);
-    app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")
-        ->default_val(4U)
-        ->check(CLI::PositiveNumber);
     app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
     app.add_flag(
         "-c, --verify", ctx.verify_results, "Toggle correctness checks performed after each trial");
@@ -291,8 +256,8 @@ int main(int argc, char* argv[])
     }
 
     // Check if inputs are valid for benchmark
-    if(!(is_power_of_two(ctx.N)) || !(is_power_of_two(ctx.ngpus)))
-        throw std::runtime_error("N and ngpus should both be powers of two");
+    if(!(is_power_of_two(ctx.N)))
+        throw std::runtime_error("N should be a power of two");
 
     std::set<std::string> enabled_benchmarks;
 
@@ -308,25 +273,11 @@ int main(int argc, char* argv[])
 
     const size_t N = ctx.N;
     if(ctx.verbose)
-        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << ctx.ngpus
+        std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << mp_size
                   << " gpus." << std::endl;
 
     // TODO Better way of handling benchmark args at same time as CLI11?
     // If gbench removes args, then we can allow extras then check leftovers later...
-
-    // Enable peer to peer memory access between GPUs
-    for(size_t i = 0; i < ctx.ngpus; i++)
-    {
-        HIP_CHECK(hipSetDevice(i));
-        for(size_t j = 0; j < ctx.ngpus; j++)
-        {
-            int can_access_peer;
-            HIP_CHECK(hipDeviceCanAccessPeer(&can_access_peer, i, j));
-            if(can_access_peer)
-                HIP_CHECK(hipDeviceEnablePeerAccess(j, 0));
-        }
-    }
-
     // Setup implementations to run in gbenchmarks
     std::vector<benchmark::internal::Benchmark*> benchmarks = {};
 
@@ -376,5 +327,19 @@ int main(int argc, char* argv[])
     terminal_reporter.SetErrorStream(&std::cout);
     terminal_reporter.SetOutputStream(&std::cout);
 
-    benchmark::RunSpecifiedBenchmarks();
+    // Only allow root proc to report if using MPI
+    if(mpi_rank == 0)
+    {
+        std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;
+        benchmark::RunSpecifiedBenchmarks();
+    }
+    else
+    {
+        std::cout << "Rank " << mpi_rank << " is about to run some benchmarks with null reporter!"
+                  << std::endl;
+        NullReporter null_rep;
+        benchmark::RunSpecifiedBenchmarks(&null_rep);
+    }
+
+    MPI_Finalize();
 }
