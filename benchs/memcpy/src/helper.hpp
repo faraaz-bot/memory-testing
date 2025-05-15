@@ -64,6 +64,84 @@ struct benchmark_context
     std::vector<hipStream_t> streams;
 };
 
+// Struct to simplify multi-device hipSetDevice usage
+// Switch temporarily to specified device, then dtor switches back to original
+class scoped_device
+{
+private:
+    int original_dev;
+
+public:
+    scoped_device(int dev)
+    {
+        HIP_CHECK(hipGetDevice(&original_dev));
+        HIP_CHECK(hipSetDevice(dev));
+    }
+
+    ~scoped_device()
+    {
+        HIP_CHECK(hipSetDevice(original_dev));
+    }
+}
+
+// RAII struct for single device buffer
+template <typename Tfloat>
+class gpubuf
+{
+private:
+    size_t  N;
+    Tfloat* buf;
+    int     device = 0;
+
+public:
+    gpubuf(size_t N)
+    {
+        HIP_CHECK(hipMalloc(&buf, sizeof(Tfloat) * N));
+        HIP_CHECK(hipMemset(buf, 0, sizeof(Tfloat) * N));
+    }
+
+    ~gpubuf()
+    {
+        HIP_CHECK(hipFree(buf));
+    }
+
+    Tfloat* data()
+    {
+        return buf;
+    }
+};
+
+// RAII struct for temporary buffers for intermediate results
+// Used when performing multiple out-of-place operations
+// , specifically when storing all device ptrs together
+template <typename Tfloat>
+struct gpubuf_vec
+{
+    size_t   N;
+    size_t   ngpus;
+    Tfloat** bufs;
+
+    gpubufs(size_t N, size_t ngpus)
+        : N(N)
+        , ngpus(ngpus)
+    {
+        HIP_CHECK(hipMalloc(&bufs, sizeof(Tfloat*) * ngpus));
+        const size_t buf_elems = N * N / ngpus;
+        for(auto i = 0; i < ngpus; i++)
+        {
+            HIP_CHECK(hipMalloc(&bufs[i], sizeof(Tfloat) * buf_elems));
+            HIP_CHECK(hipMemset(bufs[i], 0, sizeof(Tfloat) * buf_elems));
+        }
+    }
+
+    ~gpubufs()
+    {
+        for(auto i = 0; i < ngpus; i++)
+            HIP_CHECK(hipFree(bufs[i]));
+        HIP_CHECK(hipFree(bufs));
+    }
+};
+
 // RAII wrapper around hipEvent API for timing
 struct GPUTimer
 {
@@ -386,36 +464,6 @@ void teardown(const int                 ngpus,
             HIP_CHECK(hipStreamDestroy(streams[i * ngpus + j]));
     }
 }
-
-// RAII struct for temporary buffers for intermediate results
-// Used when performing multiple out-of-place operations
-template <typename Tfloat>
-struct gpubufs
-{
-    size_t   N;
-    size_t   ngpus;
-    Tfloat** bufs;
-
-    gpubufs(size_t N, size_t ngpus)
-        : N(N)
-        , ngpus(ngpus)
-    {
-        HIP_CHECK(hipMalloc(&bufs, sizeof(Tfloat*) * ngpus));
-        const size_t buf_elems = N * N / ngpus;
-        for(auto i = 0; i < ngpus; i++)
-        {
-            HIP_CHECK(hipMalloc(&bufs[i], sizeof(Tfloat) * buf_elems));
-            HIP_CHECK(hipMemset(bufs[i], 0, sizeof(Tfloat) * buf_elems));
-        }
-    }
-
-    ~gpubufs()
-    {
-        for(auto i = 0; i < ngpus; i++)
-            HIP_CHECK(hipFree(bufs[i]));
-        HIP_CHECK(hipFree(bufs));
-    }
-};
 
 // Used for CLI11 parsing of precision enum option
 static bool lexical_cast(const std::string& word, precision& p)

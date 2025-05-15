@@ -12,6 +12,8 @@
  * Benchmarking tool for comparing speed of various memory copy methods
  * between multiple gpus. Currently will do out-of-place operations on 
  * square matrices only.
+ *
+ * MPI-specific benchmarks are handled with mpi-main.cpp & mpi-membench.hpp.
  */
 
 // Execute f under Google Benchmark, for at least trials times

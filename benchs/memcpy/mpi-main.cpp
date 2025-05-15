@@ -8,6 +8,9 @@
  * Benchmarking tool for comparing speed of various memory copy methods
  * between multiple gpus. Currently will do out-of-place operations on 
  * square matrices only.
+ *
+ * This file & mpi-membench.hpp only contain MPI benchmarks. 
+ * main.cpp & membench.hpp contain non-MPI benchmarks.
  */
 
 // Execute f under Google Benchmark, for at least trials times
@@ -169,9 +172,6 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
 
 int main(int argc, char* argv[])
 {
-    // Note: also edit map in add_benchmarks() if editing this set
-    std::set<std::string> valid_benchmarks = {"all", "mpiCopy"};
-
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
     MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
@@ -180,6 +180,9 @@ int main(int argc, char* argv[])
 
     MPI_Comm_rank(comm, &mpi_rank);
     MPI_Comm_size(comm, &mp_size);
+
+    // Note: also edit map in add_benchmarks() if editing this set
+    std::set<std::string> valid_benchmarks = {"all", "mpiCopy"};
 
     // Parse args
     CLI::App app{"Memcpy bench"};
@@ -336,6 +339,7 @@ int main(int argc, char* argv[])
     terminal_reporter.SetOutputStream(&std::cout);
 
     // Only allow root proc to report if using MPI
+    // Root should report max time amongst all ranks
     if(mpi_rank == 0)
     {
         std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;

@@ -13,7 +13,6 @@ constexpr int ITEMS_PER_THREAD = 4;
  * TODO list:
  * - Complex data
  * - Implement basic implementations for each method
- *     - Adjust timing to exclude hipMemcpy for input pointers for kernels
  * - Optimize stuff after
  *     - Experiment with async, LDS optimizations, bank conflicts
  *     - Toggling SDMA
