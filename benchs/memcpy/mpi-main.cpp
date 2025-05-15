@@ -204,8 +204,7 @@ int main(int argc, char* argv[])
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
-    app.add_option("-r, --runBenchmark", param_enabled_benchmarks, run_bench_helper)
-        ->default_val("all");
+    app.add_option("-f, --filter", param_enabled_benchmarks, run_bench_helper)->default_val("all");
 
     precision p;
     generator gen;

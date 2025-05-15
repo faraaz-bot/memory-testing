@@ -4,16 +4,25 @@ between multiple gpus. Currently will do out-of-place operations on
 square matrices only.
 
 Implementations to Run:
-- hipMemcpy2D(Async)
+- hipMemcpy2D(+Async)
 - Copy Kernel
-- MPI alltoall(v)
+- MPI alltoall(+v)
 - RCCL
 
 # Build & Usage
-mkdir build\
-cd build\
-cmake ..\
-make -j\
-`./membench`                # using default matrix size, number of gpus\
-`./membench -n 128 -g 4`    # using 128 x 128 matrix, for 4 gpus \
-`./membench -h`             # explore other options like precision, verbosity, etc.\
+The runner.py tool can be used to invoke a passed membench executable for varying 
+`mkdir build` \
+`cd build` \
+`cmake ..` \
+`make -j` \
+`./membench`                                 # using default matrix size, number of gpus \
+`./membench -n 128 -g 4`                     # using 128 x 128 matrix, for 4 gpus \
+`./membench -f memcpy2D naiveCopy+Transpose` # specify filter on benchmarks to run \
+`./membench -h`                              # explore further options \
+
+Due to how MPI is typically ran, the method for utilizing multiple GPU devices
+will not work properly for non-MPI benchmarks, so the executables are split up
+with their respective MPI and non-MPI benchmarks. `membench` and `mpi-membench`
+are the respective make build targets/executables.
+`cmake -DENABLE_MPI=true ..` # tell CMake to look for MPI and add `mpi-membench` target
+`cmake -DENABLE_CRAY_MPI=true ..` # similar, but for specifically CRAY MPI
