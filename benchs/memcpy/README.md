@@ -10,7 +10,10 @@ Implementations to Run:
 - RCCL
 
 # Build & Usage
-The runner.py tool can be used to invoke a passed membench executable for varying 
+The runner.py tool can be used to invoke a built membench executable for varying sizes/GPUs
+or scaling modes, and graph the relevant data. It currently does not support MPI benchmarks.
+
+The following shows examples of running the membench executable directly:
 `mkdir build` \
 `cd build` \
 `cmake ..` \
