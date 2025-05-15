@@ -37,15 +37,15 @@ set(HAVE_STD_REGEX ON)
 set(RUN_HAVE_STD_REGEX 1)
 FetchContent_MakeAvailable(googlebenchmark)
 
-add_executable(membench main.cpp src/mem-bench.hpp)
-set_source_files_properties(main.cpp mpi-main.cpp src/mem-bench.hpp src/mpi-membench.hpp src/helper.hpp src/mpi-helper.hpp PROPERTIES LANGUAGE HIP)
+add_executable(membench main.cpp src/membench.hpp)
+set_source_files_properties(main.cpp mpi-main.cpp src/membench.hpp src/mpi-membench.hpp src/helper.hpp src/mpi-helper.hpp PROPERTIES LANGUAGE HIP)
 
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
 
 if(ENABLE_MPI OR ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
-    add_executable(mpi-membench mpi-main.cpp src/mem-bench.hpp)
+    add_executable(mpi-membench mpi-main.cpp src/mpi-membench.hpp)
     add_compile_definitions(MPI_ENABLED) 
 endif()
 

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "../../eg/argv/CLI11.hpp"
-#include "src/mem-bench.hpp"
+#include "src/membench.hpp"
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods

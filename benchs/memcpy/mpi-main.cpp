@@ -1,6 +1,5 @@
 #include "../../eg/argv/CLI11.hpp"
-#include "src/mem-bench.hpp"
-#include "src/mpi-helper.hpp"
+#include "src/mpi-membench.hpp"
 #include <benchmark/benchmark.h>
 #include <mpi.h>
 #include <vector>
@@ -73,7 +72,7 @@ void run_benchmark(
 
             // Get max time across all ranks (note: only rank 0 will report benchmark results)
             MPI_Reduce(static_cast<void*>(&ms),
-                       static_cast<void*>(total_ms),
+                       static_cast<void*>(&total_ms),
                        1,
                        MPI_FLOAT,
                        MPI_MAX,
