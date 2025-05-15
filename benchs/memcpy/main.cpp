@@ -7,22 +7,6 @@
 
 #include "../../eg/argv/CLI11.hpp"
 #include "src/mem-bench.hpp"
-#ifdef MPI_ENABLED
-#include <mpi.h>
-
-// Helper class just to avoid benchmark reporting by all MPI ranks
-class NullReporter : public benchmark::BenchmarkReporter
-{
-public:
-    NullReporter() {}
-    virtual bool ReportContext(const Context&)
-    {
-        return true;
-    }
-    virtual void ReportRuns(const std::vector<Run>&) {}
-    virtual void Finalize() {}
-};
-#endif
 
 /**
  * Benchmarking tool for comparing speed of various memory copy methods
@@ -33,7 +17,6 @@ public:
 // Execute f under Google Benchmark, for at least trials times
 // Manages device memory management, timing, and verification,
 // but not generating initial input data (h_input).
-//
 template <typename T>
 void run_benchmark(
     benchmark::State&                                                                  state,

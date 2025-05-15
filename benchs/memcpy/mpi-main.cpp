@@ -5,8 +5,17 @@
 #include <mpi.h>
 #include <vector>
 
+/**
+ * Benchmarking tool for comparing speed of various memory copy methods
+ * between multiple gpus. Currently will do out-of-place operations on 
+ * square matrices only.
+ */
+
+// Execute f under Google Benchmark, for at least trials times
+// Manages device memory management, timing, and verification,
+// but not generating initial input data (h_input).
 template <typename T>
-void run_mpi_benchmark(
+void run_benchmark(
     benchmark::State&                                                                  state,
     benchmark_context                                                                  ctx,
     const size_t                                                                       trials,
@@ -14,6 +23,7 @@ void run_mpi_benchmark(
     std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
 {
     const size_t N            = ctx.N;
+    const size_t ngpus        = ctx.ngpus;
     int          verbose      = ctx.verbose;
     std::string  bench_name   = state.name();
     bool         is_transpose = bench_name.find("Transpose") != std::string::npos;

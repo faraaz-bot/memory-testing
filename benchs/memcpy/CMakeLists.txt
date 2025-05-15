@@ -21,9 +21,8 @@ find_package(hip REQUIRED)
 
 include_directories(include)
 include(FetchContent)
-option(ENABLE_MPI "Use MPI (if available)" OFF)
-option(ENABLE_CRAY_MPI "Cray MPI" OFF)
-
+option(ENABLE_MPI "Use MPI" OFF)
+option(ENABLE_CRAY_MPI "Use Cray MPI" OFF)
 
 # Google Benchmark (https://github.com/google/benchmark)
 message(STATUS "Fetching Google Benchmark ....")
@@ -39,27 +38,27 @@ set(RUN_HAVE_STD_REGEX 1)
 FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable(membench main.cpp src/mem-bench.hpp)
-set_source_files_properties(main.cpp src/mem-bench.hpp src/helper.hpp PROPERTIES LANGUAGE HIP)
+set_source_files_properties(main.cpp mpi-main.cpp src/mem-bench.hpp src/mpi-membench.hpp src/helper.hpp src/mpi-helper.hpp PROPERTIES LANGUAGE HIP)
 
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
 
 if(ENABLE_MPI OR ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
+    add_executable(mpi-membench mpi-main.cpp src/mem-bench.hpp)
     add_compile_definitions(MPI_ENABLED) 
 endif()
 
 if(ENABLE_MPI)
-    target_link_libraries(membench hip::host hip::device MPI::MPI_CXX)
+    target_link_libraries(mpi-membench hip::host hip::device benchmark::benchmark MPI::MPI_CXX)
     message(STATUS "MPI available and enabled")
 elseif(ENABLE_CRAY_MPI)
     get_filename_component(MPI_LIBDIR ${MPI_LIBRARY} DIRECTORY)
-    target_link_directories(membench
+    target_link_directories(mpi-membench
         PRIVATE
         ${MPI_LIBDIR}/../../../../gtl/lib)
-    target_link_libraries(membench hip::host hip::device mpi_gtl_hsa MPI::MPI_CXX)
+    target_link_libraries(mpi-membench hip::host hip::device benchmark::benchmark mpi_gtl_hsa MPI::MPI_CXX)
     message(STATUS "Cray MPI available and enabled")
 else()
     message(STATUS "Not using MPI")
-    target_link_libraries(membench hip::host hip::device)
 endif()
