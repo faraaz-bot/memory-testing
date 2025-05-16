@@ -18,7 +18,6 @@ constexpr int ITEMS_PER_THREAD = 4;
  *     - Toggling SDMA
  *     - Pinned memory, HMM?
  * - Refactoring
- *     - Pull out common boilerplate code, maybe use RAII more for gpubufs
  *     - main.cpp:
  *          - List verbosity details
  *          - Test/verify (-c) as a subcommand?
@@ -303,7 +302,7 @@ float naive_copy_transpose(const benchmark_context& ctx,
         hipMemcpy(d_out_bufs, out_bufs.data(), sizeof(Tfloat*) * ngpus, hipMemcpyHostToDevice));
 
     // Create intermediate tmp buffer between block transpose and local transpose
-    gpubufs<Tfloat> tmp = gpubufs<Tfloat>(N, ngpus);
+    gpubuf_vec<Tfloat> tmp = gpubuf_vec<Tfloat>(N, ngpus);
 
     // Calculate number of blocks/threads to launch with
     // For naive_copy:

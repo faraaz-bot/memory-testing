@@ -61,6 +61,7 @@ struct benchmark_context
     size_t                   threads;
     int                      verbose;
     bool                     verify_results = false;
+    int                      mpi_size       = 0;
     std::vector<hipStream_t> streams;
 };
 
@@ -101,7 +102,7 @@ struct gpubuf_vec
     size_t   ngpus;
     Tfloat** bufs;
 
-    gpubufs(size_t N, size_t ngpus)
+    gpubuf_vec(size_t N, size_t ngpus)
         : N(N)
         , ngpus(ngpus)
     {
@@ -114,7 +115,7 @@ struct gpubuf_vec
         }
     }
 
-    ~gpubufs()
+    ~gpubuf_vec()
     {
         for(auto i = 0; i < ngpus; i++)
             HIP_CHECK(hipFree(bufs[i]));

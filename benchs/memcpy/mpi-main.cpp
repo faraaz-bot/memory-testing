@@ -17,48 +17,51 @@
 // Manages device memory management, timing, and verification,
 // but not generating initial input data (h_input).
 template <typename T>
-void run_benchmark(
-    benchmark::State&                                                                  state,
-    benchmark_context                                                                  ctx,
-    const size_t                                                                       trials,
-    const std::vector<T>&                                                              h_input,
-    std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
+void run_benchmark(benchmark::State&                                                      state,
+                   benchmark_context                                                      ctx,
+                   const size_t                                                           trials,
+                   const std::vector<T>&                                                  h_input,
+                   std::function<float(const benchmark_context&, gpubuf<T>&, gpubuf<T>&)> f)
 {
-    const size_t N            = ctx.N;
-    const size_t ngpus        = ctx.ngpus;
-    int          verbose      = ctx.verbose;
-    std::string  bench_name   = state.name();
-    bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
+    const size_t N         = ctx.N;
+    const size_t num_ranks = ctx.mpi_size;
+    std::cout << num_ranks << std::endl;
+    int         verbose      = ctx.verbose;
+    std::string bench_name   = state.name();
+    bool        is_transpose = bench_name.find("Transpose") != std::string::npos;
 
-    // TODO Each process has its own buffer, no longer a vector
-    // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
-    std::vector<T*> gpubufs_input(ngpus);
-    std::vector<T*> gpubufs_output(ngpus);
+    // Initialize and copy data over (currently assume input is evenly divisible over ranks)
+    // Currently expect 1 GPU per rank
+    size_t    buf_size = N * N / num_ranks;
+    gpubuf<T> gpubuf_input(buf_size);
+    gpubuf<T> gpubuf_output(buf_size);
 
     // Compute host-side matrix for correctness check
     // Can be either block transposed or fully transposed result
     std::vector<T> h_assembled_output(N * N);
     std::vector<T> reference_matrix(N * N);
-    if(ctx.verify_results)
-    {
-        if(is_transpose)
-            host_transpose<T>(N, h_input.data(), reference_matrix.data());
-        else
-            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
-    }
+    // if(ctx.verify_results)
+    // {
+    //     if(is_transpose)
+    //         host_transpose<T>(N, h_input.data(), reference_matrix.data());
+    //     else
+    //         host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
+    // }
 
+    // TODO Replace with just a memcpy to gpubuf_input, gpubuf<T> struct is initialized and memset'd already
     // Allocate and init bufs, streams
-    setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
+    // setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
 
     // Optionally output gpu bufs after distributing data
     if(verbose > 2)
     {
-        const size_t buf_height = N / ngpus;
-        for(auto i = 0; i < ngpus; i++)
+        const size_t buf_height = N / num_ranks;
+        for(auto i = 0; i < num_ranks; i++)
         {
             std::cout << "Input GPU Buffer " << i << ":\n";
-            print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
-            HIP_CHECK(hipDeviceSynchronize());
+            // TODO Implement gather + print for root rank
+            // print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
+            // HIP_CHECK(hipDeviceSynchronize());
         }
     }
 
@@ -71,7 +74,7 @@ void run_benchmark(
     {
         for(size_t t = 0; t < trials; t++)
         {
-            float ms = f(ctx, gpubufs_input, gpubufs_output);
+            float ms = f(ctx, gpubuf_input, gpubuf_output);
 
             // Get max time across all ranks (note: only rank 0 will report benchmark results)
             MPI_Reduce(static_cast<void*>(&ms),
@@ -83,57 +86,57 @@ void run_benchmark(
                        MPI_COMM_WORLD);
 
             // Optionally confirm correctness by copying output back and comparing to host-side computation
-            if(ctx.verify_results)
-            {
-                // TODO MPI_Gather instead of assemble_output_to_host()
-                assemble_output_to_host<T>(
-                    N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                if(!res)
-                {
-                    num_failures++;
-                    std::cout << "Incorrect result detected for " << state.name() << ", trial #"
-                              << t << "\n";
-                    if(verbose)
-                    {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "Host Side Computation:\n";
-                        print_host_2d<T>(N, N, reference_matrix);
-                        std::cout << "----------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
-                    }
-                }
-                else
-                {
-                    num_pass++;
-                }
-                total_runs++;
-            }
-            else
-            {
-                if(verbose > 1)
-                {
-                    assemble_output_to_host<T>(
-                        N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                    if(!res)
-                    {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "------------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
-                    }
-                }
-            }
-            // Set output buffers back to all 0s
-            reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
+            // if(ctx.verify_results)
+            // {
+            //     // TODO MPI_Gather instead of assemble_output_to_host()
+            //     assemble_output_to_host<T>(
+            //         N, ngpus, gpubufs_output.data(), h_assembled_output.data());
+            //     bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+            //     if(!res)
+            //     {
+            //         num_failures++;
+            //         std::cout << "Incorrect result detected for " << state.name() << ", trial #"
+            //                   << t << "\n";
+            //         if(verbose)
+            //         {
+            //             std::cout << "Original Input:\n";
+            //             print_host_2d<T>(N, N, h_input);
+            //             std::cout << "Host Side Computation:\n";
+            //             print_host_2d<T>(N, N, reference_matrix);
+            //             std::cout << "----------------------\nDevice Side Computation:\n";
+            //             print_host_2d<T>(N, N, h_assembled_output);
+            //         }
+            //     }
+            //     else
+            //     {
+            //         num_pass++;
+            //     }
+            //     total_runs++;
+            // }
+            // else
+            // {
+            //     if(verbose > 1)
+            //     {
+            //         assemble_output_to_host<T>(
+            //             N, ngpus, gpubufs_output.data(), h_assembled_output.data());
+            //         bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+            //         if(!res)
+            //         {
+            //             std::cout << "Original Input:\n";
+            //             print_host_2d<T>(N, N, h_input);
+            //             std::cout << "------------------------\nDevice Side Computation:\n";
+            //             print_host_2d<T>(N, N, h_assembled_output);
+            //         }
+            //     }
+            // }
+            // // Set output buffers back to all 0s
+            // reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
     }
 
-    if(ctx.verify_results)
-        std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
-                  << " runs failed." << std::endl;
+    // if(ctx.verify_results)
+    //     std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
+    //               << " runs failed." << std::endl;
 
     state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
@@ -141,14 +144,13 @@ void run_benchmark(
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
     state.counters["Dimension (N x N)"] = benchmark::Counter(N);
-    state.counters["Device Count"]      = benchmark::Counter(ngpus);
+    state.counters["Device Count"]      = benchmark::Counter(num_ranks);
 
-    teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
+    // teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
 template <typename T>
-using benchmark_fn
-    = std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)>;
+using benchmark_fn = std::function<float(const benchmark_context&, gpubuf<T>&, gpubuf<T>&)>;
 
 // Register all (valid) provided functions to run as benchmarks
 template <typename T>
@@ -176,10 +178,13 @@ int main(int argc, char* argv[])
     MPI_Comm comm = MPI_COMM_WORLD;
     MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
     int mpi_rank = 0;
-    int mp_size;
+    int mp_size  = 0;
 
     MPI_Comm_rank(comm, &mpi_rank);
     MPI_Comm_size(comm, &mp_size);
+
+    if(mp_size <= 0)
+        throw std::runtime_error("Non-positive MPI rank count detected!");
 
     // Note: also edit map in add_benchmarks() if editing this set
     std::set<std::string> valid_benchmarks = {"all", "mpiCopy"};
@@ -222,6 +227,7 @@ int main(int argc, char* argv[])
         ->default_val(-1.0);
     app.add_option("--max", max_val, "Maximum value to use if generating random input")
         ->default_val(1.0);
+    ctx.mpi_size = mp_size;
 
     /*clang format off*/
     std::string gtest_options

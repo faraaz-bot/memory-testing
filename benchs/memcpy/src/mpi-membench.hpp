@@ -10,17 +10,16 @@
 #ifdef MPI_ENABLED
 #include <mpi.h>
 template <typename Tfloat>
-float mpi_copy(const benchmark_context& ctx,
-               std::vector<Tfloat*>&    in_bufs,
-               std::vector<Tfloat*>&    out_bufs)
+float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tfloat>& out_buf)
 {
-    const int sub_block_length = ctx.N / ctx.ngpus;
-    const int sub_block_size   = sub_block_length * sub_block_length;
-    int       mpi_rank;
+    int mpi_rank = 0;
+    int mp_size  = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mp_size);
     MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
+    std::cout << "mp_size = " << mp_size << std::endl;
+    const int sub_block_size = ctx.N / mp_size;
 
-    Tfloat*      sendbuf = in_bufs[mpi_rank]; // Rank = GPU
     MPI_Datatype strided_type; // Represent data for a sub_block
     MPI_Type_vector(sub_block_size, sub_block_size, ctx.N - sub_block_size, mtype, &strided_type);
 
@@ -28,17 +27,20 @@ float mpi_copy(const benchmark_context& ctx,
     timer.tick();
 
     // Each rank walks along each sub_block it has and exchanges it with another (or itself for diagonal)
-    for(auto i = 0; i < ctx.ngpus; i++)
+    for(auto i = 0; i < mp_size; i++)
     {
         if(mpi_rank == i)
         {
             // Locally copy to out_bufs, for same GPU
             // Not using HIP_CHECK to avoid exiting on this rank to avoid deadlocks
+            std::cout << "out_buf.data() " << out_buf.data() << "\n";
+            std::cout << "in_buf.data() " << in_buf.data() << "\n";
+
             const size_t pitch_bytes           = ctx.N * sizeof(Tfloat);
-            const size_t bytes_to_copy_per_row = sub_block_length * sizeof(Tfloat);
-            hipError_t   err                   = hipMemcpy2D(out_bufs[i] + (i * sub_block_size),
+            const size_t bytes_to_copy_per_row = sub_block_size * sizeof(Tfloat);
+            hipError_t   err                   = hipMemcpy2D(out_buf.data(),
                                          pitch_bytes,
-                                         sendbuf + (i * sub_block_size),
+                                         in_buf.data(),
                                          pitch_bytes,
                                          bytes_to_copy_per_row,
                                          sub_block_size,
@@ -50,9 +52,9 @@ float mpi_copy(const benchmark_context& ctx,
         else
         {
             // Exchange between two different ranks/GPU devices
-            Tfloat*    recvbuf = out_bufs[i] + (mpi_rank * sub_block_length);
+            Tfloat*    recvbuf = out_buf.data() + (mpi_rank * sub_block_size);
             MPI_Status status;
-            MPI_Sendrecv(sendbuf,
+            MPI_Sendrecv(in_buf.data(),
                          sub_block_size,
                          strided_type,
                          i,
@@ -75,8 +77,8 @@ float mpi_copy(const benchmark_context& ctx,
 // Mirror of local_transpose kernel using GPU-aware MPI instead
 template <typename Tfloat>
 float mpi_local_transpose(const benchmark_context& ctx,
-                          std::vector<Tfloat*>&    in_bufs,
-                          std::vector<Tfloat*>&    out_bufs)
+                          gpubuf<Tfloat>&          in_buf,
+                          gpubuf<Tfloat>&          out_buf)
 {
     float elapsed = 0.f;
     int   mpi_rank;
