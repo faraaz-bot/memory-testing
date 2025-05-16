@@ -64,26 +64,6 @@ struct benchmark_context
     std::vector<hipStream_t> streams;
 };
 
-// Struct to simplify multi-device hipSetDevice usage
-// Switch temporarily to specified device, then dtor switches back to original
-class scoped_device
-{
-private:
-    int original_dev;
-
-public:
-    scoped_device(int dev)
-    {
-        HIP_CHECK(hipGetDevice(&original_dev));
-        HIP_CHECK(hipSetDevice(dev));
-    }
-
-    ~scoped_device()
-    {
-        HIP_CHECK(hipSetDevice(original_dev));
-    }
-}
-
 // RAII struct for single device buffer
 template <typename Tfloat>
 class gpubuf
