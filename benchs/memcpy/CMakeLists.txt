@@ -40,6 +40,7 @@ FetchContent_MakeAvailable(googlebenchmark)
 add_executable(membench main.cpp src/membench.hpp)
 set_source_files_properties(main.cpp mpi-main.cpp src/membench.hpp src/mpi-membench.hpp src/helper.hpp src/mpi-helper.hpp PROPERTIES LANGUAGE HIP)
 
+target_compile_options(membench PRIVATE -Wall)
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
 
@@ -62,3 +63,5 @@ elseif(ENABLE_CRAY_MPI)
 else()
     message(STATUS "Not using MPI")
 endif()
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
