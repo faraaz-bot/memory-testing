@@ -12,6 +12,14 @@
         }                                                                                      \
     } while(0)
 
+__global__ void print1d(float* input, const int N, const int rank)
+{
+    printf("Rank %d: [ ", rank);
+    for(int i = 0; i < N; i++)
+        printf("%.6f ", input[i]);
+    printf("]\n");
+}
+
 // RAII struct for single device buffer
 class gpubuf
 {

@@ -5,12 +5,6 @@
 #include <mpi.h>
 #include <numeric>
 
-__global__ void print1d(float* input, const int N, const int rank)
-{
-    for(int i = 0; i < N; i++)
-        printf("Array: Rank %d[%d] = %.f", rank, i, input[i]);
-}
-
 // Program to test the error handling of MPI implementations
 int main(int argc, char* argv[])
 {
@@ -39,12 +33,13 @@ int main(int argc, char* argv[])
                         hipMemcpyHostToDevice));
 
     // Print before
-    print1d<<<1, 1>>>(d_input.data(), elems_per_rank, mpi_rank);
+    // print1d<<<1, 1>>>(d_input.data(), elems_per_rank, mpi_rank);
 
     // Run some collective calls, check error per rank. Try different ways of triggering errors...
     int ret = MPI_Alltoall(
         d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
 
-    print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
+    // Print after
+    // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
     std::cout << "Return: MPI Rank " << mpi_rank << " has return code = " << ret << std::endl;
 }
