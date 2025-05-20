@@ -11,6 +11,7 @@ int main(int argc, char* argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
     // MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
+    MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
 
     int mpi_rank  = -1;
     int num_ranks = -1;
@@ -36,8 +37,14 @@ int main(int argc, char* argv[])
     // print1d<<<1, 1>>>(d_input.data(), elems_per_rank, mpi_rank);
 
     // Run some collective calls, check error per rank. Try different ways of triggering errors...
-    int ret = MPI_Alltoall(
-        d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
+    // int ret = MPI_Alltoall(
+    //     d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
+    int ret = -1;
+    if(mpi_rank == 0)
+        ret = MPI_Alltoall(nullptr, send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
+    else
+        ret = MPI_Alltoall(
+            d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
 
     // Print after
     // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
