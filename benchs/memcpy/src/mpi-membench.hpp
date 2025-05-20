@@ -33,9 +33,6 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
         {
             // Locally copy to out_bufs, for same GPU
             // Not using HIP_CHECK to avoid exiting on this rank to avoid deadlocks
-            std::cout << "out_buf.data() " << out_buf.data() << "\n";
-            std::cout << "in_buf.data() " << in_buf.data() << "\n";
-
             const size_t pitch_bytes           = ctx.N * sizeof(Tfloat);
             const size_t bytes_to_copy_per_row = sub_block_size * sizeof(Tfloat);
             hipError_t   err                   = hipMemcpy2D(out_buf.data(),

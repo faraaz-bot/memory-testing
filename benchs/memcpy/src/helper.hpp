@@ -90,6 +90,17 @@ public:
     {
         return buf;
     }
+
+    // Read-only variant
+    const Tfloat* data*()
+    {
+        return buf;
+    }
+
+    Tfloat* size()
+    {
+        return N;
+    }
 };
 
 // RAII struct for temporary buffers for intermediate results

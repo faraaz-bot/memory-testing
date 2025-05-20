@@ -25,7 +25,8 @@ void run_benchmark(benchmark::State&                                            
 {
     const size_t N         = ctx.N;
     const size_t num_ranks = ctx.mpi_size;
-    std::cout << num_ranks << std::endl;
+    const size_t buf_elems = N * N / num_ranks;
+
     int         verbose      = ctx.verbose;
     std::string bench_name   = state.name();
     bool        is_transpose = bench_name.find("Transpose") != std::string::npos;
@@ -36,21 +37,21 @@ void run_benchmark(benchmark::State&                                            
     gpubuf<T> gpubuf_input(buf_size);
     gpubuf<T> gpubuf_output(buf_size);
 
+    // TODO copy over based on rank number. May want to try MPI_Scatter if we have a device buffer with everything instead...?
+    // HIP_CHECK(hipMemcpy(gpubuf_input.data(), sizeof(T) * num_elems));
+
     // Compute host-side matrix for correctness check
     // Can be either block transposed or fully transposed result
     std::vector<T> h_assembled_output(N * N);
     std::vector<T> reference_matrix(N * N);
-    // if(ctx.verify_results)
-    // {
-    //     if(is_transpose)
-    //         host_transpose<T>(N, h_input.data(), reference_matrix.data());
-    //     else
-    //         host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
-    // }
-
-    // TODO Replace with just a memcpy to gpubuf_input, gpubuf<T> struct is initialized and memset'd already
-    // Allocate and init bufs, streams
-    // setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
+    // Note: num_ranks used in-place of ngpus since they both specify data block layout
+    if(ctx.verify_results)
+    {
+        if(is_transpose)
+            host_transpose<T>(N, h_input.data(), reference_matrix.data());
+        else
+            host_copy<T>(N, num_ranks, h_input.data(), reference_matrix.data());
+    }
 
     // Optionally output gpu bufs after distributing data
     if(verbose > 2)
