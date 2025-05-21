@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
     // Pass in a host side buffer. Not sure if MPI will do some device <-> host magic here though?
     if(mpi_rank == 0)
     {
-        std::vector<float> dummy_host_buf(N);
+        std::vector<float> dummy_host_buf(elems_per_rank);
         ret = MPI_Ialltoall(dummy_host_buf.data(),
                             send_size,
                             MPI_FLOAT,

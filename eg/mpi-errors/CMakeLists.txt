@@ -21,8 +21,8 @@ include_directories(include)
 include(FetchContent)
 option(ENABLE_CRAY_MPI "Use Cray MPI (by default use other MPI library)" OFF)
 
-set(SOURCES normal.cpp nullptr-buf.cpp hip-error.cpp zero-send-size.cpp)
-set(EXECUTABLES normal nullptr-buf hip-error zero-send-size)
+set(SOURCES normal.cpp nullptr-buf.cpp hip-error.cpp negative-send-size.cpp zero-send-size.cpp host-side-buf.cpp)
+set(EXECUTABLES normal nullptr-buf hip-error negative-send-size zero-send-size host-side-buf)
 
 set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
     

@@ -39,11 +39,11 @@ int main(int argc, char* argv[])
     std::vector<MPI_Status>  vstatus;
     std::vector<MPI_Request> vreq;
 
-    // See what happens if 0 is given for size on just rank 0
+    // See what happens if invalid values is given for size (negative)
     if(mpi_rank == 0)
     {
         ret = MPI_Ialltoall(
-            d_input.data(), 0, MPI_FLOAT, d_out.data(), 0, MPI_FLOAT, comm, &mpi_req);
+            d_input.data(), -1, MPI_FLOAT, d_out.data(), -1, MPI_FLOAT, comm, &mpi_req);
     }
     else
         ret = MPI_Ialltoall(d_input.data(),
