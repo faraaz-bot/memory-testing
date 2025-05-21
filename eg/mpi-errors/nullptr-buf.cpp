@@ -10,7 +10,6 @@ int main(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
-    // MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
     // MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
 
     int mpi_rank  = -1;
@@ -33,12 +32,6 @@ int main(int argc, char* argv[])
                         sizeof(float) * elems_per_rank,
                         hipMemcpyHostToDevice));
 
-    // Print before
-    // print1d<<<1, 1>>>(d_input.data(), elems_per_rank, mpi_rank);
-
-    // Run some collective calls, check error per rank. Try different ways of triggering errors...
-    // int ret = MPI_Alltoall(
-    //     d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
     int         ret = -1;
     MPI_Status  mpi_status;
     MPI_Request mpi_req;
@@ -48,7 +41,6 @@ int main(int argc, char* argv[])
 
     if(mpi_rank == 0)
     {
-        // std::vector<float> dummy_host_buf(0);
         ret = MPI_Ialltoall(
             nullptr, send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm, &mpi_req);
     }
@@ -75,8 +67,6 @@ int main(int argc, char* argv[])
 
     int ret2 = MPI_Waitall(vreq.size(), vreq.data(), vstatus.data());
 
-    // Print after
-    // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
     if(ret2 != MPI_SUCCESS)
     {
         char errmsg2[MPI_MAX_ERROR_STRING];
