@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
     // MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
-    MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
+    // MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
 
     int mpi_rank  = -1;
     int num_ranks = -1;
@@ -62,6 +62,14 @@ int main(int argc, char* argv[])
                             comm,
                             &mpi_req);
 
+    if(ret != MPI_SUCCESS)
+    {
+        char errmsg[MPI_MAX_ERROR_STRING];
+        int  errlen = -1;
+        MPI_Error_string(ret, errmsg, &errlen);
+        std::cout << "Return: MPI Rank " << mpi_rank << " has return = " << errmsg << std::endl;
+    }
+
     vstatus.push_back(mpi_status);
     vreq.push_back(mpi_req);
 
@@ -69,8 +77,13 @@ int main(int argc, char* argv[])
 
     // Print after
     // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
-    std::cout << "Return: MPI Rank " << mpi_rank << " has return = " << std::to_string(ret)
-              << ", MPI_Waitall returned " << std::to_string(ret2) << std::endl;
+    if(ret != MPI_SUCCESS)
+    {
+        char errmsg2[MPI_MAX_ERROR_STRING];
+        int  errlen2 = -1;
+        MPI_Error_string(ret2, errmsg2, &errlen2);
+        std::cout << "MPI_Waitall returned " << errmsg2 << std::endl;
+    }
 
     MPI_Finalize();
 }
