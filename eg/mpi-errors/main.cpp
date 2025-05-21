@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
 
     // Print after
     // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
-    if(ret != MPI_SUCCESS)
+    if(ret2 != MPI_SUCCESS)
     {
         char errmsg2[MPI_MAX_ERROR_STRING];
         int  errlen2 = -1;
