@@ -39,14 +39,38 @@ int main(int argc, char* argv[])
     // Run some collective calls, check error per rank. Try different ways of triggering errors...
     // int ret = MPI_Alltoall(
     //     d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
-    int ret = -1;
+    int         ret = -1;
+    MPI_Status  mpi_status;
+    MPI_Request mpi_req;
+
+    std::vector<MPI_Status>  vstatus;
+    std::vector<MPI_Request> vreq;
+
     if(mpi_rank == 0)
-        ret = MPI_Alltoall(nullptr, send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
+    {
+        // std::vector<float> dummy_host_buf(0);
+        ret = MPI_Ialltoall(
+            nullptr, send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm, &mpi_req);
+    }
     else
-        ret = MPI_Alltoall(
-            d_input.data(), send_size, MPI_FLOAT, d_out.data(), send_size, MPI_FLOAT, comm);
+        ret = MPI_Ialltoall(d_input.data(),
+                            send_size,
+                            MPI_FLOAT,
+                            d_out.data(),
+                            send_size,
+                            MPI_FLOAT,
+                            comm,
+                            &mpi_req);
+
+    vstatus.push_back(mpi_status);
+    vreq.push_back(mpi_req);
+
+    int ret2 = MPI_Waitall(vreq.size(), vreq.data(), vstatus.data());
 
     // Print after
     // print1d<<<1, 1>>>(d_out.data(), elems_per_rank, mpi_rank);
-    std::cout << "Return: MPI Rank " << mpi_rank << " has return code = " << ret << std::endl;
+    std::cout << "Return: MPI Rank " << mpi_rank << " has return = " << std::to_string(ret)
+              << ", MPI_Waitall returned " << std::to_string(ret2) << std::endl;
+
+    MPI_Finalize();
 }
