@@ -10,6 +10,7 @@ int main(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
+    MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
 
     int mpi_rank  = -1;
     int num_ranks = -1;
