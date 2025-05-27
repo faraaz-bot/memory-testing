@@ -92,7 +92,7 @@ public:
     }
 
     // Read-only variant
-    const Tfloat* data*()
+    const Tfloat* data() const
     {
         return buf;
     }

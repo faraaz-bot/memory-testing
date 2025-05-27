@@ -3,12 +3,11 @@
 #include <hip/hip_runtime.h>
 #include <iomanip>
 #include <iostream>
+#include <mpi.h>
 #include <vector>
 
 // (3) MPI Implementation
 // Block transpose
-#ifdef MPI_ENABLED
-#include <mpi.h>
 template <typename Tfloat>
 float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tfloat>& out_buf)
 {
@@ -16,12 +15,12 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
     int mp_size  = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mp_size);
-    MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
-    std::cout << "mp_size = " << mp_size << std::endl;
-    const int sub_block_size = ctx.N / mp_size;
+    MPI_Datatype mtype          = get_mpi_type(sizeof(Tfloat));
+    const int    sub_block_size = ctx.N / mp_size;
 
     MPI_Datatype strided_type; // Represent data for a sub_block
     MPI_Type_vector(sub_block_size, sub_block_size, ctx.N - sub_block_size, mtype, &strided_type);
+    MPI_Type_commit(&strided_type);
 
     GPUTimer timer;
     timer.tick();
@@ -82,4 +81,3 @@ float mpi_local_transpose(const benchmark_context& ctx,
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
 }
-#endif
