@@ -26,6 +26,8 @@ void run_benchmark(benchmark::State&                                            
     const size_t N         = ctx.N;
     const size_t num_ranks = ctx.mpi_size;
     const size_t buf_elems = N * N / num_ranks;
+    int          rank      = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     int         verbose      = ctx.verbose;
     std::string bench_name   = state.name();
@@ -59,9 +61,8 @@ void run_benchmark(benchmark::State&                                            
         const size_t buf_height = N / num_ranks;
         for(auto i = 0; i < num_ranks; i++)
         {
-            std::cout << "Input GPU Buffer " << i << ":\n";
-            // TODO Implement gather + print for root rank
-            // print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
+            std::cout << bench_name << " - Input GPU Buffer " << i << ":\n";
+            print2d<T><<<1, 1>>>(buf_height, N, gpubuf_input.data());
             // HIP_CHECK(hipDeviceSynchronize());
         }
     }
@@ -87,57 +88,57 @@ void run_benchmark(benchmark::State&                                            
                        MPI_COMM_WORLD);
 
             // Optionally confirm correctness by copying output back and comparing to host-side computation
-            // if(ctx.verify_results)
-            // {
-            //     // TODO MPI_Gather instead of assemble_output_to_host()
-            //     assemble_output_to_host<T>(
-            //         N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-            //     bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-            //     if(!res)
-            //     {
-            //         num_failures++;
-            //         std::cout << "Incorrect result detected for " << state.name() << ", trial #"
-            //                   << t << "\n";
-            //         if(verbose)
-            //         {
-            //             std::cout << "Original Input:\n";
-            //             print_host_2d<T>(N, N, h_input);
-            //             std::cout << "Host Side Computation:\n";
-            //             print_host_2d<T>(N, N, reference_matrix);
-            //             std::cout << "----------------------\nDevice Side Computation:\n";
-            //             print_host_2d<T>(N, N, h_assembled_output);
-            //         }
-            //     }
-            //     else
-            //     {
-            //         num_pass++;
-            //     }
-            //     total_runs++;
-            // }
-            // else
-            // {
-            //     if(verbose > 1)
-            //     {
-            //         assemble_output_to_host<T>(
-            //             N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-            //         bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-            //         if(!res)
-            //         {
-            //             std::cout << "Original Input:\n";
-            //             print_host_2d<T>(N, N, h_input);
-            //             std::cout << "------------------------\nDevice Side Computation:\n";
-            //             print_host_2d<T>(N, N, h_assembled_output);
-            //         }
-            //     }
-            // }
-            // // Set output buffers back to all 0s
-            // reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
+            if(ctx.verify_results)
+            {
+                // TODO MPI_Gather instead of assemble_output_to_host()
+                assemble_mpi_bufs_to_host<T>(
+                    num_ranks, rank, gpubuf_output, h_assembled_output.data());
+                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                if(!res)
+                {
+                    num_failures++;
+                    std::cout << "Incorrect result detected for " << bench_name << ", trial #" << t
+                              << "\n";
+                    if(verbose)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "Host Side Computation:\n";
+                        print_host_2d<T>(N, N, reference_matrix);
+                        std::cout << "----------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
+                }
+                else
+                {
+                    num_pass++;
+                }
+                total_runs++;
+            }
+            else
+            {
+                if(verbose > 1)
+                {
+                    assemble_mpi_bufs_to_host<T>(
+                        num_ranks, rank, gpubuf_output, h_assembled_output.data());
+                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                    if(!res)
+                    {
+                        std::cout << "Original Input:\n";
+                        print_host_2d<T>(N, N, h_input);
+                        std::cout << "------------------------\nDevice Side Computation:\n";
+                        print_host_2d<T>(N, N, h_assembled_output);
+                    }
+                }
+            }
+            // Set output buffers back to all 0s
+            mpi_buf_reset<T>(rank, gpubuf_output, h_assembled_output);
         }
     }
 
-    // if(ctx.verify_results)
-    //     std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
-    //               << " runs failed." << std::endl;
+    if(ctx.verify_results)
+        std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
+                  << " runs failed." << std::endl;
 
     state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);

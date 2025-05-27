@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <mpi.h>
+#include <optional>
 
 // Helper class just to avoid benchmark reporting by all MPI ranks
 class NullReporter : public benchmark::BenchmarkReporter
@@ -31,24 +32,62 @@ inline MPI_Datatype get_mpi_type(size_t elem_size)
 // Gather bufs, to only rank 0
 // Note: recv_buf is only significant on root (rank 0), so pass nullptr on other ranks
 template <typename Tfloat>
-inline gpubuf<Tfloat> mpi_gather_buf(gpubuf<Tfloat>& buf, int num_ranks, int rank)
+std::optional<gpubuf<Tfloat>> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
-    size_t         N        = buf.size();
-    MPI_Datatype   mpi_type = get_mpi_type(sizeof(Tfloat));
-    gpubuf<Tfloat> recv_buf = (rank == 0) ? gpubuf<Tfloat>(N * num_ranks) : nullptr;
-    MPI_Gather(buf, N, mpi_type, recv_buf, N, mpi_type, 0, MPI_COMM_WORLD);
+    // Note this N is actually (ctx.N * ctx.N) / num_ranks, not same as ctx.N
+    size_t       N        = buf.size();
+    MPI_Datatype mpi_type = get_mpi_type(sizeof(Tfloat));
+    if(rank == 0)
+    {
+        gpubuf<Tfloat> recv_buf = gpubuf<Tfloat>(N * num_ranks);
+        MPI_Gather(buf.data(), N, mpi_type, recv_buf.data(), N, mpi_type, 0, MPI_COMM_WORLD);
+        return recv_buf;
+    }
+    MPI_Gather(buf.data(), N, mpi_type, nullptr, N, mpi_type, 0, MPI_COMM_WORLD);
+    return std::nullopt;
 }
 
 // Print out combined buffer, by wrapping MPI_Gather + print kernel
 template <typename Tfloat>
-inline void mpi_print(const int N, const int M, gpubuf<Tfloat>& buf, int num_ranks, int rank)
+void mpi_print(const int N, const int M, int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
-    const gpubuf<Tfloat> combined_buf = mpi_gather_buf<Tfloat>(buf, num_ranks, rank);
-    print2d<Tfloat><<<1, 1>>>(N, M, combined_buf.data());
+    if(rank == 0)
+    {
+        auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
+        if(!result.has_value())
+            throw std::runtime_error("Rank 0 was unable to gather buf for print!");
+        const gpubuf<Tfloat> combined_buf = result.value();
+        print2d<Tfloat><<<1, 1>>>(N, M, combined_buf.data());
+    }
+    else
+        (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
 }
 
-// Combine buffers and copy to host side
+// Combine buffers and copy to host side to hostbuf_result
+// Note: Currently if memcpy fails we can deadlock here.
 template <typename Tfloat>
-inline void assemble_mpi_bufs_to_host(gpubuf<Tfloat>& buf, int num_ranks, int rank)
+void assemble_mpi_bufs_to_host(int num_ranks, int rank, gpubuf<Tfloat>& buf, Tfloat* hostbuf_result)
 {
+
+    if(rank == 0)
+    {
+        auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
+        if(!result.has_value())
+            throw std::runtime_error("Rank 0 was unable to gather buf for print!");
+        const gpubuf<Tfloat> combined_buf = result.value();
+        HIP_CHECK(hipMemcpy(hostbuf_result,
+                            combined_buf.data(),
+                            combined_buf.size() * sizeof(Tfloat),
+                            hipMemcpyDeviceToHost));
+    }
+    (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
+}
+
+// Clear data in out buffer to zero
+template <typename Tfloat>
+void mpi_buf_reset(const int rank, gpubuf<Tfloat>& gpubuf_output, std::vector<Tfloat>& host_output)
+{
+    HIP_CHECK(hipMemset(gpubuf_output.data(), 0, sizeof(Tfloat) * gpubuf_output.size()));
+    if(rank == 0)
+        std::fill(host_output.begin(), host_output.end(), 0);
 }
