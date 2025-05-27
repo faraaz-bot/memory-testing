@@ -97,7 +97,7 @@ public:
         return buf;
     }
 
-    Tfloat* size()
+    size_t size() const
     {
         return N;
     }
@@ -113,17 +113,20 @@ struct gpubuf_vec
     size_t   ngpus;
     Tfloat** bufs;
 
-    gpubuf_vec(size_t N, size_t ngpus)
-        : N(N)
-        , ngpus(ngpus)
+    gpubuf_vec(size_t N_, size_t ngpus_)
+        : N(N_)
+        , ngpus(ngpus_)
     {
+        HIP_CHECK(hipSetDevice(0));
         HIP_CHECK(hipMalloc(&bufs, sizeof(Tfloat*) * ngpus));
         const size_t buf_elems = N * N / ngpus;
         for(auto i = 0; i < ngpus; i++)
         {
+            HIP_CHECK(hipSetDevice(i));
             HIP_CHECK(hipMalloc(&bufs[i], sizeof(Tfloat) * buf_elems));
             HIP_CHECK(hipMemset(bufs[i], 0, sizeof(Tfloat) * buf_elems));
         }
+        HIP_CHECK(hipSetDevice(0));
     }
 
     ~gpubuf_vec()
