@@ -208,7 +208,12 @@ int main(int argc, char* argv[])
     app.add_option("-g, --ngpus", ctx.ngpus, "Number of gpus")
         ->default_val(4U)
         ->check(CLI::PositiveNumber);
-    app.add_option("-v, --verbose", ctx.verbose, "Adjust output verbosity level")->default_val(0);
+    app.add_option("-v, --verbose",
+                   ctx.verbose,
+                   "Adjust output verbosity level\n1) Basic benchmark details\n2) Matrix data\n3) "
+                   "Initial buffer data")
+        ->default_val(0);
+
     app.add_flag(
         "-c, --verify", ctx.verify_results, "Toggle correctness checks performed after each trial");
     app.add_option(
