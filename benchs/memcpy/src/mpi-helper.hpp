@@ -1,6 +1,8 @@
 #include <benchmark/benchmark.h>
+#include <iomanip>
 #include <mpi.h>
 #include <optional>
+#include <sstream>
 
 // Helper class just to avoid benchmark reporting by all MPI ranks
 class NullReporter : public benchmark::BenchmarkReporter
@@ -42,6 +44,65 @@ inline void MPI_CHECK(int ret_val, int rank)
     }
 }
 
+template <typename Tfloat>
+std::vector<Tfloat> to_hostbuf(gpubuf<Tfloat>& buf)
+{
+    std::vector<Tfloat> res(buf.size());
+    HIP_CHECK(
+        hipMemcpy(res.data(), buf.data(), sizeof(Tfloat) * buf.size(), hipMemcpyDeviceToHost));
+    return res;
+}
+
+template <typename Tfloat>
+std::string buf_to_string(gpubuf<Tfloat>& gpubuf)
+{
+    std::vector<Tfloat> buf = to_hostbuf(gpubuf);
+    const size_t        N   = buf.size();
+    std::stringstream   ss;
+    ss << "[";
+    for(auto i = 0; i < N; i++)
+    {
+        ss << std::setw(6) << buf[i];
+        if(i != N)
+            ss << ", ";
+    }
+    ss << "]";
+    return ss.str();
+}
+
+template <typename Tfloat>
+std::string buf_to_string2d(int N, int M, gpubuf<Tfloat>& gpubuf)
+{
+    std::vector<Tfloat> buf = to_hostbuf(gpubuf);
+    std::stringstream   ss;
+    ss << "[";
+    for(auto i = 0; i < N; i++)
+    {
+        ss << "[";
+        for(auto j = 0; j < M; j++)
+        {
+            ss << buf[i * N + j];
+            if(j != M)
+                ss << std::setw(6) << ", ";
+        }
+        if(i != N)
+            ss << ", ";
+        ss << "]";
+    }
+}
+
+// Print out all individual GPU bufs, in rank-order
+template <typename Tfloat>
+void mpi_print_bufs(int num_ranks, int rank, gpubuf<Tfloat>& buf)
+{
+}
+
+// 2d format variant
+template <typename Tfloat>
+void mpi_print_bufs2d(int num_ranks, int rank, gpubuf<Tfloat>& buf)
+{
+}
+
 // Gather bufs, to only rank 0
 // Note: recv_buf is only significant on root (rank 0), so pass nullptr on other ranks
 template <typename Tfloat>
@@ -62,7 +123,7 @@ std::optional<gpubuf<Tfloat>> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfl
 
 // Print out combined buffer, by wrapping MPI_Gather + print kernel
 template <typename Tfloat>
-void mpi_print(const int N, const int M, int num_ranks, int rank, gpubuf<Tfloat>& buf)
+void mpi_assemble_print(const int N, const int M, int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
     if(rank == 0)
     {

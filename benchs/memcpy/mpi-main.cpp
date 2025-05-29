@@ -166,8 +166,6 @@ void run_benchmark(benchmark::State&                                            
 
     state.counters["Dimension (N x N)"] = benchmark::Counter(N);
     state.counters["Device Count"]      = benchmark::Counter(num_ranks);
-
-    // teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
 
 template <typename T>
