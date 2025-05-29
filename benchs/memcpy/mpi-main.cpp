@@ -25,9 +25,9 @@ void run_benchmark(benchmark::State&                                            
 {
     const size_t N         = ctx.N;
     const size_t num_ranks = ctx.mpi_size;
-    const size_t buf_elems = N * N / num_ranks;
-    int          rank      = 0;
+    int          rank      = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Datatype mpi_type = get_mpi_type(sizeof(T));
 
     int         verbose      = ctx.verbose;
     std::string bench_name   = state.name();
@@ -35,12 +35,34 @@ void run_benchmark(benchmark::State&                                            
 
     // Initialize and copy data over (currently assume input is evenly divisible over ranks)
     // Currently expect 1 GPU per rank
-    size_t    buf_size = N * N / num_ranks;
-    gpubuf<T> gpubuf_input(buf_size);
-    gpubuf<T> gpubuf_output(buf_size);
+    const size_t buf_size = N * N / num_ranks;
+    gpubuf<T>    gpubuf_input(buf_size);
+    gpubuf<T>    gpubuf_output(buf_size);
 
-    // TODO copy over based on rank number. May want to try MPI_Scatter if we have a device buffer with everything instead...?
-    // HIP_CHECK(hipMemcpy(gpubuf_input.data(), sizeof(T) * num_elems));
+    // Copy entire input to device on rank 0, then scatter across all devices
+    int ret = -1;
+    if(rank == 0)
+    {
+        gpubuf<T> tmp_full_buf(h_input.size());
+        HIP_CHECK(hipMemcpy(tmp_full_buf.data(),
+                            h_input.data(),
+                            sizeof(T) * h_input.size(),
+                            hipMemcpyHostToDevice));
+        ret = MPI_Scatter(tmp_full_buf.data(), // Sendbuf
+                          h_input.size() / num_ranks, // Sendcount
+                          mpi_type,
+                          gpubuf_input.data(),
+                          buf_size,
+                          mpi_type,
+                          0,
+                          MPI_COMM_WORLD);
+    }
+    else
+    {
+        ret = MPI_Scatter(
+            nullptr, 0, mpi_type, gpubuf_input.data(), buf_size, mpi_type, 0, MPI_COMM_WORLD);
+    }
+    MPI_CHECK(ret, rank);
 
     // Compute host-side matrix for correctness check
     // Can be either block transposed or fully transposed result
@@ -59,12 +81,9 @@ void run_benchmark(benchmark::State&                                            
     if(verbose > 2)
     {
         const size_t buf_height = N / num_ranks;
-        for(auto i = 0; i < num_ranks; i++)
-        {
-            std::cout << bench_name << " - Input GPU Buffer " << i << ":\n";
-            print2d<T><<<1, 1>>>(buf_height, N, gpubuf_input.data());
-            // HIP_CHECK(hipDeviceSynchronize());
-        }
+        std::cout << bench_name << " - Input GPU Buffer " << rank << ":\n";
+        print2d<T><<<1, 1>>>(buf_height, N, gpubuf_input.data());
+        HIP_CHECK(hipDeviceSynchronize());
     }
 
     // Execute and time the benchmarks
@@ -79,6 +98,7 @@ void run_benchmark(benchmark::State&                                            
             float ms = f(ctx, gpubuf_input, gpubuf_output);
 
             // Get max time across all ranks (note: only rank 0 will report benchmark results)
+            // TODO: Can perform an analysis of rank timings with MPI_Gather instead
             MPI_Reduce(static_cast<void*>(&ms),
                        static_cast<void*>(&total_ms),
                        1,
@@ -90,7 +110,6 @@ void run_benchmark(benchmark::State&                                            
             // Optionally confirm correctness by copying output back and comparing to host-side computation
             if(ctx.verify_results)
             {
-                // TODO MPI_Gather instead of assemble_output_to_host()
                 assemble_mpi_bufs_to_host<T>(
                     num_ranks, rank, gpubuf_output, h_assembled_output.data());
                 bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
@@ -99,7 +118,7 @@ void run_benchmark(benchmark::State&                                            
                     num_failures++;
                     std::cout << "Incorrect result detected for " << bench_name << ", trial #" << t
                               << "\n";
-                    if(verbose)
+                    if(verbose && rank == 0)
                     {
                         std::cout << "Original Input:\n";
                         print_host_2d<T>(N, N, h_input);
@@ -122,7 +141,7 @@ void run_benchmark(benchmark::State&                                            
                     assemble_mpi_bufs_to_host<T>(
                         num_ranks, rank, gpubuf_output, h_assembled_output.data());
                     bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                    if(!res)
+                    if(!res && rank == 0)
                     {
                         std::cout << "Original Input:\n";
                         print_host_2d<T>(N, N, h_input);
@@ -136,7 +155,7 @@ void run_benchmark(benchmark::State&                                            
         }
     }
 
-    if(ctx.verify_results)
+    if(ctx.verify_results && rank == 0)
         std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
                   << " runs failed." << std::endl;
 

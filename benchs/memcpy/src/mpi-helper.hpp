@@ -29,6 +29,19 @@ inline MPI_Datatype get_mpi_type(size_t elem_size)
     return mpi_type;
 }
 
+// Reports an MPI error, assuming MPI_ERRORS_RETURN is set
+// Will not abort or do anything else, other than logging
+inline void MPI_CHECK(int ret_val, int rank)
+{
+    if(ret_val != MPI_SUCCESS)
+    {
+        char errmsg[MPI_MAX_ERROR_STRING];
+        int  errlen = -1;
+        MPI_Error_string(ret_val, errmsg, &errlen);
+        std::cout << "rank " << rank << " error: " << errmsg << std::endl;
+    }
+}
+
 // Gather bufs, to only rank 0
 // Note: recv_buf is only significant on root (rank 0), so pass nullptr on other ranks
 template <typename Tfloat>
@@ -68,13 +81,12 @@ void mpi_print(const int N, const int M, int num_ranks, int rank, gpubuf<Tfloat>
 template <typename Tfloat>
 void assemble_mpi_bufs_to_host(int num_ranks, int rank, gpubuf<Tfloat>& buf, Tfloat* hostbuf_result)
 {
-
     if(rank == 0)
     {
         auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
         if(!result.has_value())
             throw std::runtime_error("Rank 0 was unable to gather buf for print!");
-        const gpubuf<Tfloat> combined_buf = result.value();
+        gpubuf<Tfloat> combined_buf = result.value();
         HIP_CHECK(hipMemcpy(hostbuf_result,
                             combined_buf.data(),
                             combined_buf.size() * sizeof(Tfloat),
