@@ -40,7 +40,8 @@ inline void MPI_CHECK(int ret_val, int rank)
         char errmsg[MPI_MAX_ERROR_STRING];
         int  errlen = -1;
         MPI_Error_string(ret_val, errmsg, &errlen);
-        std::cout << "rank " << rank << " error: " << errmsg << std::endl;
+        std::cout << "rank " << rank << " error: " << errmsg << " from line " << __LINE__
+                  << " in file " << __FILE__ << std::endl;
     }
 }
 
@@ -89,12 +90,48 @@ std::string buf_to_string2d(int N, int M, gpubuf<Tfloat>& gpubuf)
             ss << ", ";
         ss << "]";
     }
+    return ss.str();
 }
 
-// Print out all individual GPU bufs, in rank-order
+// Print out all individual GPU bufs, in ascending rank-order via send/recv pairs
 template <typename Tfloat>
 void mpi_print_bufs(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
+    int ret = -1;
+    if(rank == 0)
+    {
+        // Print own (assuming rank 0 is root and prints first)
+        std::cout << "Rank 0 buffer:\n" << buf_to_string(buf);
+
+        // Receive string from other ranks and print it
+        for(int i = 1; i < num_ranks; i++)
+        {
+            // Figure out what the exact message size is to allocate for it
+            MPI_Status status;
+            int        sent_msg_size = 0;
+            ret                      = MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
+            MPI_CHECK(ret, rank);
+            ret = MPI_Get_count(&status, MPI_INT, &sent_msg_size);
+            MPI_CHECK(ret, rank);
+            std::cout << "Seems like rank " << rank << " is sending a msg of size " << sent_msg_size
+                      << "." << std::endl;
+
+            std::string recv_msg;
+            recv_msg.reserve(sent_msg_size);
+            char* recv_msg_buf = recv_msg.data();
+            ret = MPI_Recv(recv_msg_buf, sent_msg_size, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
+            MPI_CHECK(ret, rank);
+
+            std::cout << "Rank " << i << " buffer:\n" << recv_msg;
+        }
+        std::cout << std::endl;
+    }
+    else
+    {
+        std::string send_msg = buf_to_string(buf);
+        ret = MPI_Send(send_msg.c_str(), send_msg.size(), MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+        MPI_CHECK(ret, rank);
+    }
 }
 
 // 2d format variant
