@@ -82,15 +82,15 @@ std::string buf_to_string2d(int N, int M, gpubuf<Tfloat>& gpubuf)
         ss << "[";
         for(auto j = 0; j < M; j++)
         {
-            ss << buf[i * N + j];
+            ss << std::setw(6) << buf[j + M * i];
             if(j != M - 1)
-                ss << std::setw(6) << ", ";
+                ss << ", ";
         }
+        ss << "]";
         if(i != N - 1)
             ss << ", ";
-        ss << "]";
     }
-    std::cout << ss.str() << std::endl;
+    ss << "]";
     return ss.str();
 }
 
@@ -136,8 +136,42 @@ void mpi_print_bufs(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 
 // 2d format variant
 template <typename Tfloat>
-void mpi_print_bufs2d(int num_ranks, int rank, gpubuf<Tfloat>& buf)
+void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
+    int ret = -1;
+    if(rank == 0)
+    {
+        // Print own (assuming rank 0 is root and prints first)
+        std::cout << "Rank 0 buffer:\n" << buf_to_string2d(N, M, buf) << "\n";
+
+        // Receive string from other ranks and print it
+        for(int i = 1; i < num_ranks; i++)
+        {
+            // Figure out what the exact message size is to allocate for it
+            // Probe for status of incoming MPI_Send and get # of MPI_CHARs from message
+            int        msg_size = -1;
+            MPI_Status status;
+            ret = MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
+            MPI_CHECK(ret, rank);
+            ret = MPI_Get_count(&status, MPI_CHAR, &msg_size);
+            MPI_CHECK(ret, rank);
+
+            char* recv_msg = new char[msg_size + 1]; // Account for null terminator to add
+            ret            = MPI_Recv(recv_msg, msg_size, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
+            MPI_CHECK(ret, rank);
+            recv_msg[msg_size] = '\0';
+
+            std::cout << "Rank " << i << " buffer:\n" << recv_msg << "\n";
+            delete[] recv_msg;
+        }
+        std::cout << std::endl;
+    }
+    else
+    {
+        std::string send_msg = buf_to_string2d(N, M, buf);
+        ret = MPI_Send(send_msg.c_str(), send_msg.size(), MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+        MPI_CHECK(ret, rank);
+    }
 }
 
 // Gather bufs, to only rank 0
