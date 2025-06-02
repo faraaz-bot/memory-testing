@@ -58,13 +58,13 @@ template <typename Tfloat>
 std::string buf_to_string(gpubuf<Tfloat>& gpubuf)
 {
     std::vector<Tfloat> buf = to_hostbuf(gpubuf);
-    const size_t        N   = buf.size();
+    const size_t        N   = gpubuf.size();
     std::stringstream   ss;
     ss << "[";
     for(auto i = 0; i < N; i++)
     {
         ss << std::setw(6) << buf[i];
-        if(i != N)
+        if(i != N - 1)
             ss << ", ";
     }
     ss << "]";
@@ -83,13 +83,14 @@ std::string buf_to_string2d(int N, int M, gpubuf<Tfloat>& gpubuf)
         for(auto j = 0; j < M; j++)
         {
             ss << buf[i * N + j];
-            if(j != M)
+            if(j != M - 1)
                 ss << std::setw(6) << ", ";
         }
-        if(i != N)
+        if(i != N - 1)
             ss << ", ";
         ss << "]";
     }
+    std::cout << ss.str() << std::endl;
     return ss.str();
 }
 
@@ -101,28 +102,27 @@ void mpi_print_bufs(int num_ranks, int rank, gpubuf<Tfloat>& buf)
     if(rank == 0)
     {
         // Print own (assuming rank 0 is root and prints first)
-        std::cout << "Rank 0 buffer:\n" << buf_to_string(buf);
+        std::cout << "Rank 0 buffer:\n" << buf_to_string(buf) << "\n";
 
         // Receive string from other ranks and print it
         for(int i = 1; i < num_ranks; i++)
         {
             // Figure out what the exact message size is to allocate for it
+            // Probe for status of incoming MPI_Send and get # of MPI_CHARs from message
+            int        msg_size = -1;
             MPI_Status status;
-            int        sent_msg_size = 0;
-            ret                      = MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
+            ret = MPI_Probe(i, 0, MPI_COMM_WORLD, &status);
             MPI_CHECK(ret, rank);
-            ret = MPI_Get_count(&status, MPI_INT, &sent_msg_size);
-            MPI_CHECK(ret, rank);
-            std::cout << "Seems like rank " << rank << " is sending a msg of size " << sent_msg_size
-                      << "." << std::endl;
-
-            std::string recv_msg;
-            recv_msg.reserve(sent_msg_size);
-            char* recv_msg_buf = recv_msg.data();
-            ret = MPI_Recv(recv_msg_buf, sent_msg_size, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
+            ret = MPI_Get_count(&status, MPI_CHAR, &msg_size);
             MPI_CHECK(ret, rank);
 
-            std::cout << "Rank " << i << " buffer:\n" << recv_msg;
+            char* recv_msg = new char[msg_size + 1]; // Account for null terminator to add
+            ret            = MPI_Recv(recv_msg, msg_size, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
+            MPI_CHECK(ret, rank);
+            recv_msg[msg_size] = '\0';
+
+            std::cout << "Rank " << i << " buffer:\n" << recv_msg << "\n";
+            delete[] recv_msg;
         }
         std::cout << std::endl;
     }

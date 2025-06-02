@@ -80,10 +80,6 @@ void run_benchmark(benchmark::State&                                            
     // Optionally output gpu bufs after distributing data
     if(verbose > 2)
     {
-        // const size_t buf_height = N / num_ranks;
-        // std::cout << bench_name << " - Input GPU Buffer " << rank << ":\n";
-        // print2d<T><<<1, 1>>>(buf_height, N, gpubuf_input.data());
-        // HIP_CHECK(hipDeviceSynchronize());
         mpi_print_bufs(num_ranks, rank, gpubuf_input);
     }
 
