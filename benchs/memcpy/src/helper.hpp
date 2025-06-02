@@ -75,7 +75,8 @@ private:
     int     device = 0;
 
 public:
-    gpubuf(size_t N)
+    gpubuf(size_t N_)
+        : N(N_)
     {
         HIP_CHECK(hipMalloc(&buf, sizeof(Tfloat) * N));
         HIP_CHECK(hipMemset(buf, 0, sizeof(Tfloat) * N));
