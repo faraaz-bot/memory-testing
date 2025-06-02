@@ -104,32 +104,37 @@ void run_benchmark(benchmark::State&                                            
                        0,
                        MPI_COMM_WORLD);
 
+            // TODO Clean this up, maybe split off to other helper funcs, maybe structs
             // Optionally confirm correctness by copying output back and comparing to host-side computation
             if(ctx.verify_results)
             {
                 assemble_mpi_bufs_to_host<T>(
                     num_ranks, rank, gpubuf_output, h_assembled_output.data());
-                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                if(!res)
+                std::cout << "Done call to assemble_mpi_bufs_to_host on rank " << rank << std::endl;
+                if(rank == 0)
                 {
-                    num_failures++;
-                    std::cout << "Incorrect result detected for " << bench_name << ", trial #" << t
-                              << "\n";
-                    if(verbose && rank == 0)
+                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                    if(!res)
                     {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "Host Side Computation:\n";
-                        print_host_2d<T>(N, N, reference_matrix);
-                        std::cout << "----------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
+                        num_failures++;
+                        std::cout << "Incorrect result detected for " << bench_name << ", trial #"
+                                  << t << "\n";
+                        if(verbose)
+                        {
+                            std::cout << "Original Input:\n";
+                            print_host_2d<T>(N, N, h_input);
+                            std::cout << "Host Side Computation:\n";
+                            print_host_2d<T>(N, N, reference_matrix);
+                            std::cout << "----------------------\nDevice Side Computation:\n";
+                            print_host_2d<T>(N, N, h_assembled_output);
+                        }
                     }
+                    else
+                    {
+                        num_pass++;
+                    }
+                    total_runs++;
                 }
-                else
-                {
-                    num_pass++;
-                }
-                total_runs++;
             }
             else
             {
@@ -137,13 +142,16 @@ void run_benchmark(benchmark::State&                                            
                 {
                     assemble_mpi_bufs_to_host<T>(
                         num_ranks, rank, gpubuf_output, h_assembled_output.data());
-                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                    if(!res && rank == 0)
+                    if(rank == 0)
                     {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "------------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
+                        bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
+                        if(!res && rank == 0)
+                        {
+                            std::cout << "Original Input:\n";
+                            print_host_2d<T>(N, N, h_input);
+                            std::cout << "------------------------\nDevice Side Computation:\n";
+                            print_host_2d<T>(N, N, h_assembled_output);
+                        }
                     }
                 }
             }
@@ -309,7 +317,7 @@ int main(int argc, char* argv[])
     }
 
     const size_t N = ctx.N;
-    if(ctx.verbose)
+    if(ctx.verbose && mpi_rank == 0)
         std::cout << "Comparing on " << N << " x " << N << " size matrix, across " << mp_size
                   << " gpus." << std::endl;
 

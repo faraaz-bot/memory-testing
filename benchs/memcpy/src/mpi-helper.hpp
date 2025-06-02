@@ -177,8 +177,9 @@ void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf
 // Gather bufs, to only rank 0
 // Note: recv_buf is only significant on root (rank 0), so pass nullptr on other ranks
 template <typename Tfloat>
-std::optional<gpubuf<Tfloat>> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
+gpubuf<Tfloat> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
+    std::cout << "Time to gather on rank " << rank << "!" << std::endl;
     // Note this N is actually (ctx.N * ctx.N) / num_ranks, not same as ctx.N
     size_t       N        = buf.size();
     MPI_Datatype mpi_type = get_mpi_type(sizeof(Tfloat));
@@ -189,7 +190,7 @@ std::optional<gpubuf<Tfloat>> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfl
         return recv_buf;
     }
     MPI_Gather(buf.data(), N, mpi_type, nullptr, N, mpi_type, 0, MPI_COMM_WORLD);
-    return std::nullopt;
+    return gpubuf<Tfloat>(1);
 }
 
 // Print out combined buffer, by wrapping MPI_Gather + print kernel
@@ -199,10 +200,10 @@ void mpi_assemble_print(const int N, const int M, int num_ranks, int rank, gpubu
     if(rank == 0)
     {
         auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
-        if(!result.has_value())
-            throw std::runtime_error("Rank 0 was unable to gather buf for print!");
-        const gpubuf<Tfloat> combined_buf = result.value();
-        print2d<Tfloat><<<1, 1>>>(N, M, combined_buf.data());
+        // if(!result.has_value())
+        //     throw std::runtime_error("Rank 0 was unable to gather buf for print!");
+        // const gpubuf<Tfloat> combined_buf = result.value();
+        print2d<Tfloat><<<1, 1>>>(N, M, result.data());
     }
     else
         (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
@@ -215,14 +216,13 @@ void assemble_mpi_bufs_to_host(int num_ranks, int rank, gpubuf<Tfloat>& buf, Tfl
 {
     if(rank == 0)
     {
-        auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
-        if(!result.has_value())
-            throw std::runtime_error("Rank 0 was unable to gather buf for print!");
-        gpubuf<Tfloat> combined_buf = result.value();
-        HIP_CHECK(hipMemcpy(hostbuf_result,
-                            combined_buf.data(),
-                            combined_buf.size() * sizeof(Tfloat),
-                            hipMemcpyDeviceToHost));
+        gpubuf<Tfloat> result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
+        // if(!result.has_value())
+        //     throw std::runtime_error("Rank 0 was unable to gather buf for print!");
+        // gpubuf<Tfloat> combined_buf = result.value();
+        // std::cout << hostbuf_result << std::endl;
+        HIP_CHECK(hipMemcpy(
+            hostbuf_result, result.data(), result.size() * sizeof(Tfloat), hipMemcpyDeviceToHost));
     }
     (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
 }
