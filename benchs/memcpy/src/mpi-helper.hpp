@@ -179,7 +179,6 @@ void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf
 template <typename Tfloat>
 gpubuf<Tfloat> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
-    std::cout << "Time to gather on rank " << rank << "!" << std::endl;
     // Note this N is actually (ctx.N * ctx.N) / num_ranks, not same as ctx.N
     size_t       N        = buf.size();
     MPI_Datatype mpi_type = get_mpi_type(sizeof(Tfloat));
@@ -217,14 +216,11 @@ void assemble_mpi_bufs_to_host(int num_ranks, int rank, gpubuf<Tfloat>& buf, Tfl
     if(rank == 0)
     {
         gpubuf<Tfloat> result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
-        // if(!result.has_value())
-        //     throw std::runtime_error("Rank 0 was unable to gather buf for print!");
-        // gpubuf<Tfloat> combined_buf = result.value();
-        // std::cout << hostbuf_result << std::endl;
         HIP_CHECK(hipMemcpy(
             hostbuf_result, result.data(), result.size() * sizeof(Tfloat), hipMemcpyDeviceToHost));
     }
-    (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
+    else
+        (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
 }
 
 // Clear data in out buffer to zero

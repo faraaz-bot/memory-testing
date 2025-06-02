@@ -110,7 +110,6 @@ void run_benchmark(benchmark::State&                                            
             {
                 assemble_mpi_bufs_to_host<T>(
                     num_ranks, rank, gpubuf_output, h_assembled_output.data());
-                std::cout << "Done call to assemble_mpi_bufs_to_host on rank " << rank << std::endl;
                 if(rank == 0)
                 {
                     bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
@@ -373,16 +372,15 @@ int main(int argc, char* argv[])
     terminal_reporter.SetOutputStream(&std::cout);
 
     // Only allow root proc to report if using MPI
-    // Root should report max time amongst all ranks
     if(mpi_rank == 0)
     {
-        std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;
+        // std::cout << "Rank 0 is about to run some benchmarks with reporter!" << std::endl;
         benchmark::RunSpecifiedBenchmarks();
     }
     else
     {
-        std::cout << "Rank " << mpi_rank << " is about to run some benchmarks with null reporter!"
-                  << std::endl;
+        // std::cout << "Rank " << mpi_rank << " is about to run some benchmarks with null reporter!"
+        //           << std::endl;
         NullReporter null_rep;
         benchmark::RunSpecifiedBenchmarks(&null_rep);
     }
