@@ -80,6 +80,9 @@ void run_benchmark(benchmark::State&                                            
     // Optionally output gpu bufs after distributing data
     if(verbose > 2)
     {
+        if(rank == 0)
+            std::cout << "Input buffers on GPU "
+                         "side:\n";
         mpi_print_bufs2d(N / num_ranks, N, num_ranks, rank, gpubuf_input);
     }
 

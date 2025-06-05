@@ -142,7 +142,8 @@ void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf
     if(rank == 0)
     {
         // Print own (assuming rank 0 is root and prints first)
-        std::cout << "Rank 0 buffer:\n" << buf_to_string2d(N, M, buf) << "\n";
+        std::cout << std::string(100, '=') << "\nRank 0 buffer:\n"
+                  << buf_to_string2d(N, M, buf) << "\n";
 
         // Receive string from other ranks and print it
         for(int i = 1; i < num_ranks; i++)
@@ -164,7 +165,7 @@ void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf
             std::cout << "Rank " << i << " buffer:\n" << recv_msg << "\n";
             delete[] recv_msg;
         }
-        std::cout << std::endl;
+        std::cout << std::string(100, '=') << std::endl;
     }
     else
     {
@@ -176,6 +177,7 @@ void mpi_print_bufs2d(int N, int M, int num_ranks, int rank, gpubuf<Tfloat>& buf
 
 // Gather bufs, to only rank 0
 // Note: recv_buf is only significant on root (rank 0), so pass nullptr on other ranks
+// TODO remove temporary buffer from being allocated on non-root rank, maybe std::optional?
 template <typename Tfloat>
 gpubuf<Tfloat> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
@@ -188,24 +190,20 @@ gpubuf<Tfloat> mpi_gather_buf(int num_ranks, int rank, gpubuf<Tfloat>& buf)
         MPI_Gather(buf.data(), N, mpi_type, recv_buf.data(), N, mpi_type, 0, MPI_COMM_WORLD);
         return recv_buf;
     }
-    MPI_Gather(buf.data(), N, mpi_type, nullptr, N, mpi_type, 0, MPI_COMM_WORLD);
-    return gpubuf<Tfloat>(1);
+    else
+    {
+        MPI_Gather(buf.data(), N, mpi_type, nullptr, N, mpi_type, 0, MPI_COMM_WORLD);
+        return gpubuf<Tfloat>(0);
+    }
 }
 
 // Print out combined buffer, by wrapping MPI_Gather + print kernel
 template <typename Tfloat>
 void mpi_assemble_print(const int N, const int M, int num_ranks, int rank, gpubuf<Tfloat>& buf)
 {
+    auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
     if(rank == 0)
-    {
-        auto result = mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
-        // if(!result.has_value())
-        //     throw std::runtime_error("Rank 0 was unable to gather buf for print!");
-        // const gpubuf<Tfloat> combined_buf = result.value();
         print2d<Tfloat><<<1, 1>>>(N, M, result.data());
-    }
-    else
-        (void)mpi_gather_buf<Tfloat>(num_ranks, rank, buf);
 }
 
 // Combine buffers and copy to host side to hostbuf_result

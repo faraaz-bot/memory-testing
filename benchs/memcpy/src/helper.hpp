@@ -65,6 +65,7 @@ struct benchmark_context
     std::vector<hipStream_t> streams;
 };
 
+// TODO: Can replace usages of raw hipMalloc/hipFree in src/membench.hpp
 // RAII struct for single device buffer
 template <typename Tfloat>
 class gpubuf
@@ -72,14 +73,13 @@ class gpubuf
 private:
     size_t  N;
     Tfloat* buf;
-    int     device = 0;
+    int     device = 0; // May want to use to determine where buf to switch to if needed
 
 public:
     gpubuf(size_t N_)
         : N(N_)
     {
         HIP_CHECK(hipMalloc(&buf, sizeof(Tfloat) * N));
-        HIP_CHECK(hipMemset(buf, 0, sizeof(Tfloat) * N));
     }
 
     ~gpubuf()
