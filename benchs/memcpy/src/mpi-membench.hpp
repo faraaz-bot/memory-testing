@@ -11,59 +11,48 @@
 template <typename Tfloat>
 float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tfloat>& out_buf)
 {
-    int mpi_rank = 0;
-    int mp_size  = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &mp_size);
-    MPI_Datatype mtype          = get_mpi_type(sizeof(Tfloat));
-    const int    sub_block_size = ctx.N / mp_size;
+    int rank      = 0;
+    int num_ranks = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    MPI_Datatype mtype            = get_mpi_type(sizeof(Tfloat));
+    const int    sub_block_length = ctx.N / num_ranks;
+    const int    elems_per_row    = ctx.N;
+    const int    elems_per_col    = sub_block_length;
+    const int    stride           = ctx.N - (sub_block_length);
 
-    MPI_Datatype strided_type; // Represent data for a sub_block
-    MPI_Type_vector(sub_block_size, sub_block_size, ctx.N - sub_block_size, mtype, &strided_type);
+    // Represent strided data with custom type
+    MPI_Datatype strided_type;
+    MPI_Type_vector(sub_block_length, sub_block_length, stride, mtype, &strided_type);
+    // MPI_Type_vector(2, 2, 6, mtype, &strided_type);
     MPI_Type_commit(&strided_type);
 
     GPUTimer timer;
     timer.tick();
 
-    // Each rank walks along each sub_block it has and exchanges it with another (or itself for diagonal)
-    for(auto i = 0; i < mp_size; i++)
-    {
-        if(mpi_rank == i)
-        {
-            // Locally copy to out_bufs, for same GPU
-            // Not using HIP_CHECK to avoid exiting on this rank to avoid deadlocks
-            const size_t pitch_bytes           = ctx.N * sizeof(Tfloat);
-            const size_t bytes_to_copy_per_row = sub_block_size * sizeof(Tfloat);
-            hipError_t   err                   = hipMemcpy2D(out_buf.data(),
-                                         pitch_bytes,
-                                         in_buf.data(),
-                                         pitch_bytes,
-                                         bytes_to_copy_per_row,
-                                         sub_block_size,
-                                         hipMemcpyDeviceToDevice);
-            if(err != hipSuccess)
-                std::cout << "HIP error during hipMemcpy2D: " << hipGetErrorString(err)
-                          << " at line" << __LINE__ << ", " << __FILE__ << ".\n";
-        }
-        else
-        {
-            // Exchange between two different ranks/GPU devices
-            Tfloat*    recvbuf = out_buf.data() + (mpi_rank * sub_block_size);
-            MPI_Status status;
-            MPI_Sendrecv(in_buf.data(),
-                         sub_block_size,
-                         strided_type,
-                         i,
-                         0,
-                         recvbuf,
-                         sub_block_size,
-                         strided_type,
-                         i,
-                         0,
-                         MPI_COMM_WORLD,
-                         &status);
-        }
-    }
+    // Each rank transfers a full "sub_block" or brick of data
+    // to perform a block transpose
+    const int alltoall_count = sub_block_length * sub_block_length;
+    if(rank == 0)
+        printf("ctx.N = %d\nnum_ranks = %d\nsub_block_length = %d\nalltoall_count = %d\n",
+               (int)ctx.N,
+               num_ranks,
+               sub_block_length,
+               alltoall_count);
+    MPI_Alltoall(in_buf.data(),
+                 alltoall_count,
+                 strided_type,
+                 out_buf.data(),
+                 alltoall_count,
+                 strided_type,
+                 MPI_COMM_WORLD);
+    // MPI_Alltoall(in_buf.data(),
+    //              alltoall_count, 4
+    //              strided_type,
+    //              out_buf.data(),
+    //              alltoall_count, 4
+    //              strided_type,
+    //              MPI_COMM_WORLD);
 
     timer.tock();
 
@@ -77,7 +66,7 @@ float mpi_local_transpose(const benchmark_context& ctx,
                           gpubuf<Tfloat>&          out_buf)
 {
     float elapsed = 0.f;
-    int   mpi_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    int   rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
 }
