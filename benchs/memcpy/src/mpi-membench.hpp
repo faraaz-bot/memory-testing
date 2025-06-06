@@ -15,16 +15,30 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
     int num_ranks = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    MPI_Datatype mtype            = get_mpi_type(sizeof(Tfloat));
-    const int    sub_block_length = ctx.N / num_ranks;
-    const int    elems_per_row    = ctx.N;
-    const int    elems_per_col    = sub_block_length;
-    const int    stride           = ctx.N - (sub_block_length);
+    MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
 
-    // Represent strided data with custom type
+    const int N                = static_cast<int>(ctx.N);
+    const int sub_block_length = ctx.N / num_ranks;
+    const int buf_size         = static_cast<int>(in_buf.size()); // size of buf per device/rank
+    const int elems_per_row    = ctx.N;
+    const int elems_per_col    = sub_block_length;
+
+    // Create custom strided 2d type to specify non-contiguous data to move in
+    // MPI_Alltoall call later.
     MPI_Datatype strided_type;
-    MPI_Type_vector(sub_block_length, sub_block_length, stride, mtype, &strided_type);
-    // MPI_Type_vector(2, 2, 6, mtype, &strided_type);
+    // MPI_Type_vector(sub_block_length, sub_block_length, ctx.N, mtype, &strided_type);
+    const int sizes[2]     = {N, N}; // global array lengths
+    const int sub_sizes[2] = {sub_block_length, sub_block_length}; // subarray sizes
+    const int start_offsets[2]
+        = {rank * sub_block_length, 0}; // offset of each rank within global N x N array
+
+    MPI_Type_create_subarray(2, // # of dims
+                             sizes,
+                             sub_sizes,
+                             start_offsets,
+                             MPI_ORDER_C,
+                             mtype,
+                             &strided_type);
     MPI_Type_commit(&strided_type);
 
     GPUTimer timer;
@@ -33,28 +47,18 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
     // Each rank transfers a full "sub_block" or brick of data
     // to perform a block transpose
     const int alltoall_count = sub_block_length * sub_block_length;
-    if(rank == 0)
-        printf("ctx.N = %d\nnum_ranks = %d\nsub_block_length = %d\nalltoall_count = %d\n",
-               (int)ctx.N,
-               num_ranks,
-               sub_block_length,
-               alltoall_count);
-    MPI_Alltoall(in_buf.data(),
-                 alltoall_count,
-                 strided_type,
-                 out_buf.data(),
-                 alltoall_count,
-                 strided_type,
-                 MPI_COMM_WORLD);
-    // MPI_Alltoall(in_buf.data(),
-    //              alltoall_count, 4
-    //              strided_type,
-    //              out_buf.data(),
-    //              alltoall_count, 4
-    //              strided_type,
-    //              MPI_COMM_WORLD);
+    int       ret            = MPI_Alltoall(in_buf.data(),
+                           alltoall_count,
+                           strided_type,
+                           out_buf.data(),
+                           alltoall_count,
+                           strided_type,
+                           MPI_COMM_WORLD);
+    MPI_CHECK(ret, rank);
 
     timer.tock();
+
+    MPI_Type_free(&strided_type);
 
     return timer.elapsed();
 }
