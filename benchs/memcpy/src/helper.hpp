@@ -245,7 +245,6 @@ __global__ void populate_array(const size_t N,
         states[4] = seed >> 4 ^ (tIndex + bIndex * 5);
         states[5] = seed + tIndex + bIndex;
 
-        Tfloat temp;
         for(size_t i = 0; i < 5; i++)
         {
             xorwow_next(states, max, min, temp);

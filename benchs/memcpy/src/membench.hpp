@@ -309,7 +309,6 @@ float naive_copy_transpose(const benchmark_context& ctx,
     const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
 
     // For local_transpose:
-    const uint32_t num_sub_blocks = ngpus; // Per gpubuf
     const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
     const uint32_t actual_tile_size
         = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
@@ -437,7 +436,6 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
 
     // Calculate number of blocks/threads to launch with
     // For local_transpose:
-    const uint32_t num_sub_blocks = ngpus; // Per gpubuf
     const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
     const uint32_t actual_tile_size
         = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
