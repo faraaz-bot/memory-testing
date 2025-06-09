@@ -158,29 +158,34 @@ struct GPUTimer
 
     GPUTimer()
     {
+        HIP_CHECK(hipSetDevice(0));
         HIP_CHECK(hipEventCreate(&start));
         HIP_CHECK(hipEventCreate(&stop));
     }
 
     ~GPUTimer()
     {
+        HIP_CHECK(hipSetDevice(0));
         HIP_CHECK(hipEventDestroy(start));
         HIP_CHECK(hipEventDestroy(stop));
     }
 
     void tick()
     {
+        HIP_CHECK(hipSetDevice(0));
         HIP_CHECK(hipEventRecord(start, 0));
     }
 
     void tock()
     {
+        HIP_CHECK(hipSetDevice(0));
         HIP_CHECK(hipEventRecord(stop, 0));
         HIP_CHECK(hipEventSynchronize(stop));
     }
 
     float elapsed()
     {
+        HIP_CHECK(hipSetDevice(0));
         float elapsed;
         HIP_CHECK(hipEventElapsedTime(&elapsed, start, stop));
         return elapsed;
@@ -550,7 +555,7 @@ void teardown(const int                 ngpus,
 // =========================================
 
 // Used for CLI11 parsing of precision enum option
-static bool lexical_cast(const std::string& word, precision& p)
+inline bool lexical_cast(const std::string& word, precision& p)
 {
     if(word == "single" || word == "0")
         p = p_single;
@@ -566,7 +571,7 @@ static bool lexical_cast(const std::string& word, precision& p)
 }
 
 // Used for CLI11 parsing of input gen enum option
-static bool lexical_cast(const std::string& word, generator& gen)
+inline bool lexical_cast(const std::string& word, generator& gen)
 {
     if(word == "random" || word == "0")
         gen = gen_random;
