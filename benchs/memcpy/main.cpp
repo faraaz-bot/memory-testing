@@ -20,12 +20,11 @@
 // Manages device memory management, timing, and verification,
 // but not generating initial input data (h_input).
 template <typename T>
-void run_benchmark(
-    benchmark::State&                                                                  state,
-    benchmark_context                                                                  ctx,
-    const size_t                                                                       trials,
-    const std::vector<T>&                                                              h_input,
-    std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)> f)
+void run_benchmark(benchmark::State&     state,
+                   benchmark_context     ctx,
+                   const size_t          trials,
+                   const std::vector<T>& h_input,
+                   std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)> f)
 {
     const size_t N            = ctx.N;
     const size_t ngpus        = ctx.ngpus;
@@ -34,9 +33,9 @@ void run_benchmark(
     bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
-    std::vector<T*> gpubufs_input(ngpus);
-    std::vector<T*> gpubufs_output(ngpus);
-    std::vector<T>  h_assembled_output(N * N);
+    gpubuf_vec<T>  gpubufs_input(N, ngpus);
+    gpubuf_vec<T>  gpubufs_output(N, ngpus);
+    std::vector<T> h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
     // Compute host-side matrix for correctness check
@@ -118,8 +117,7 @@ void run_benchmark(
 }
 
 template <typename T>
-using benchmark_fn
-    = std::function<float(const benchmark_context&, std::vector<T*>&, std::vector<T*>&)>;
+using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)>;
 
 // Register all (valid) provided functions to run as benchmarks
 template <typename T>

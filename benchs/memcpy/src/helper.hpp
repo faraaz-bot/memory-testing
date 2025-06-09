@@ -4,6 +4,7 @@
 #include <hip/hip_runtime.h>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <stdio.h>
 #include <vector>
 
@@ -110,11 +111,15 @@ public:
 // Used when performing multiple out-of-place operations
 // , specifically when storing all device ptrs together
 template <typename Tfloat>
-struct gpubuf_vec
+class gpubuf_vec
 {
+private:
     size_t   N;
     size_t   ngpus;
     Tfloat** bufs;
+
+public:
+    gpubuf_vec() {}
 
     gpubuf_vec(size_t N_, size_t ngpus_)
         : N(N_)
@@ -135,8 +140,36 @@ struct gpubuf_vec
     ~gpubuf_vec()
     {
         for(auto i = 0; i < ngpus; i++)
+        {
+            HIP_CHECK(hipSetDevice(i));
             HIP_CHECK(hipFree(bufs[i]));
+        }
         HIP_CHECK(hipFree(bufs));
+    }
+
+    Tfloat* operator[](int idx)
+    {
+        if(idx >= ngpus)
+            throw std::runtime_error("Trying to access OOB pointer in gpubuf_vec struct!");
+        return bufs[idx];
+    }
+
+    const Tfloat* operator[](int idx) const
+    {
+        if(idx >= ngpus)
+            throw std::runtime_error("Trying to access OOB pointer in gpubuf_vec struct!");
+        return bufs[idx];
+    }
+
+    Tfloat** data()
+    {
+        return bufs;
+    }
+
+    // Read-only variant
+    const Tfloat** data() const
+    {
+        return bufs;
     }
 
     size_t length() const
@@ -433,7 +466,7 @@ template <typename Tfloat>
 void verify_results(benchmark_context&         ctx,
                     const std::vector<Tfloat>& original_input,
                     std::vector<Tfloat>&       reference_result,
-                    std::vector<Tfloat*>&      device_output,
+                    gpubuf_vec<Tfloat>&        device_output,
                     std::vector<Tfloat>&       assembled_output,
                     std::string                bench_name,
                     size_t                     trial_num,
@@ -470,7 +503,7 @@ template <typename Tfloat>
 void log_matrices(benchmark_context&         ctx,
                   const std::vector<Tfloat>& original_input,
                   std::vector<Tfloat>&       reference_result,
-                  std::vector<Tfloat*>&      device_output,
+                  gpubuf_vec<Tfloat>&        device_output,
                   std::vector<Tfloat>&       assembled_output)
 {
     assemble_output_to_host<Tfloat>(
@@ -493,8 +526,8 @@ void log_matrices(benchmark_context&         ctx,
 template <typename Tfloat>
 void setup(size_t                     N,
            size_t                     ngpus,
-           std::vector<Tfloat*>&      gpubufs_input,
-           std::vector<Tfloat*>&      gpubufs_output,
+           gpubuf_vec<Tfloat>&        gpubufs_input,
+           gpubuf_vec<Tfloat>&        gpubufs_output,
            const std::vector<Tfloat>& host_input,
            std::vector<hipStream_t>&  streams)
 {
@@ -503,12 +536,10 @@ void setup(size_t                     N,
     for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
-        HIP_CHECK(hipMalloc(&gpubufs_input[i], sizeof(Tfloat) * buf_elems));
         HIP_CHECK(hipMemcpy(gpubufs_input[i],
                             host_input.data() + i * buf_elems,
                             buf_elems * sizeof(Tfloat),
                             hipMemcpyHostToDevice));
-        HIP_CHECK(hipMalloc(&gpubufs_output[i], sizeof(Tfloat) * buf_elems));
         HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_elems));
 
         // Assign streams to current gpus, for each other gpu (including self)
@@ -519,10 +550,10 @@ void setup(size_t                     N,
 
 // Clear data in out buffers to zero
 template <typename Tfloat>
-void reset(const int             N,
-           const int             ngpus,
-           std::vector<Tfloat*>& gpubufs_output,
-           std::vector<Tfloat>&  host_assembled_buf)
+void reset(const int            N,
+           const int            ngpus,
+           gpubuf_vec<Tfloat>&  gpubufs_output,
+           std::vector<Tfloat>& host_assembled_buf)
 {
     const size_t buf_elems = N * N / ngpus; // Number of elements in buf
     for(auto i = 0; i < ngpus; i++)
@@ -535,15 +566,13 @@ void reset(const int             N,
 // Free allocated memory and streams
 template <typename Tfloat>
 void teardown(const int                 ngpus,
-              std::vector<Tfloat*>&     gpubufs_input,
-              std::vector<Tfloat*>&     gpubufs_output,
+              gpubuf_vec<Tfloat>&       gpubufs_input,
+              gpubuf_vec<Tfloat>&       gpubufs_output,
               std::vector<hipStream_t>& streams)
 {
     for(auto i = 0; i < ngpus; i++)
     {
         HIP_CHECK(hipSetDevice(i));
-        HIP_CHECK(hipFree(gpubufs_input[i]));
-        HIP_CHECK(hipFree(gpubufs_output[i]));
         for(auto j = 0; j < ngpus; j++)
             HIP_CHECK(hipStreamDestroy(streams[i * ngpus + j]));
     }
