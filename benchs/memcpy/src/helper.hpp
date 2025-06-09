@@ -76,6 +76,8 @@ private:
     int     device = 0; // May want to use to determine where buf to switch to if needed
 
 public:
+    gpubuf() {} // empty buf for non-important buffers on non-root rank for some MPI calls
+
     gpubuf(size_t N_)
         : N(N_)
     {
@@ -136,6 +138,17 @@ struct gpubuf_vec
             HIP_CHECK(hipFree(bufs[i]));
         HIP_CHECK(hipFree(bufs));
     }
+
+    size_t length() const
+    {
+        return N;
+    }
+
+    // Inner buf size
+    size_t size() const
+    {
+        return N * N / ngpus;
+    }
 };
 
 // RAII wrapper around hipEvent API for timing
@@ -183,7 +196,9 @@ struct GPUTimer
     }
 };
 
-/* Helpers for verifying correctness */
+// =========================================
+// Data generation
+// =========================================
 
 // PRNG for input generation
 #define xorwow_next(states, max, min, val) \
@@ -249,51 +264,38 @@ __global__ void populate_array(const size_t N,
     }
 }
 
-// Helper kernel just to print N consecutive values in gpubuf
+// Generates data of specified type (by gen) on device and transfers to host
 template <typename Tfloat>
-__global__ void print(const int N, const Tfloat* input)
+std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tfloat max)
 {
-    printf("[ ");
-    for(int i = 0; i < N; i++)
-        printf("%.6f ", input[i]);
-    printf("]\n");
+    // TODO add complex data support
+    // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
+    std::vector<Tfloat> input(N * M);
+
+    bool isRandom = gen == gen_random;
+
+    Tfloat* dArr;
+    HIP_CHECK(hipMalloc(&dArr, sizeof(Tfloat) * N * M));
+
+    size_t threads = N <= 1024 ? N : 1024;
+    // size_t itemsPerThread = N <= 1024 ? N : 1024;
+    size_t blocks = std::ceil(static_cast<double>((N * M)) / static_cast<double>((threads * N)));
+
+    auto now    = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+
+    auto   value    = now_ms.time_since_epoch();
+    size_t duration = value.count();
+    populate_array<<<blocks, threads>>>(N, dArr, min, max, isRandom, duration);
+
+    HIP_CHECK(hipMemcpy(input.data(), dArr, sizeof(Tfloat) * N * M, hipMemcpyDeviceToHost));
+
+    return input;
 }
 
-// Helper kernel just to print NxM consecutive values in gpubuf, with 2d formatting
-template <typename Tfloat>
-__global__ void print2d(const int N, const int M, const Tfloat* input)
-{
-    printf("[\n");
-    for(int i = 0; i < N; i++)
-    {
-        printf("\t[ ");
-        for(int j = 0; j < M; j++)
-        {
-            auto idx = j + M * i;
-            printf("%.6f ", input[idx]);
-        }
-        printf("]\n");
-    }
-    printf("]\n");
-}
-
-// Helper to print initial host matrix and transposed matrix
-template <typename Tfloat>
-void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
-{
-    std::cout << "[\n";
-    for(int i = 0; i < N; i++)
-    {
-        std::cout << "  [ ";
-        for(int j = 0; j < M; j++)
-        {
-            auto idx = i * N + j;
-            std::cout << std::setw(6) << input[idx] << " ";
-        }
-        std::cout << " ]\n";
-    }
-    std::cout << "]" << std::endl;
-}
+// =========================================
+// Correctness verification
+// =========================================
 
 // Combine ngpu # of gpubuf partitions back in an N x N matrix on the host
 // * Assumes hostbuf_result has enough memory allocated for it
@@ -371,35 +373,117 @@ void host_transpose(const int N, const Tfloat* input, Tfloat* output)
     }
 }
 
-/* Setup and Teardown helpers */
-// Generates data of specified type (by gen) on device and transfers to host
+// =========================================
+// Print & logging utilities
+// =========================================
+
+// Helper kernel just to print N consecutive values in gpubuf
 template <typename Tfloat>
-std::vector<Tfloat> generate(size_t N, size_t M, generator gen, Tfloat min, Tfloat max)
+__global__ void print(const int N, const Tfloat* input)
 {
-    // TODO add complex data support
-    // bool is_complex = (gen == p_complex_single || gen == p_complex_double);
-    std::vector<Tfloat> input(N * M);
-
-    bool isRandom = gen == gen_random;
-
-    Tfloat* dArr;
-    HIP_CHECK(hipMalloc(&dArr, sizeof(Tfloat) * N * M));
-
-    size_t threads = N <= 1024 ? N : 1024;
-    // size_t itemsPerThread = N <= 1024 ? N : 1024;
-    size_t blocks = std::ceil(static_cast<double>((N * M)) / static_cast<double>((threads * N)));
-
-    auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
-
-    auto   value    = now_ms.time_since_epoch();
-    size_t duration = value.count();
-    populate_array<<<blocks, threads>>>(N, dArr, min, max, isRandom, duration);
-
-    HIP_CHECK(hipMemcpy(input.data(), dArr, sizeof(Tfloat) * N * M, hipMemcpyDeviceToHost));
-
-    return input;
+    printf("[ ");
+    for(int i = 0; i < N; i++)
+        printf("%.6f ", input[i]);
+    printf("]\n");
 }
+
+// Helper kernel just to print NxM consecutive values in gpubuf, with 2d formatting
+template <typename Tfloat>
+__global__ void print2d(const int N, const int M, const Tfloat* input)
+{
+    printf("[\n");
+    for(int i = 0; i < N; i++)
+    {
+        printf("\t[ ");
+        for(int j = 0; j < M; j++)
+        {
+            auto idx = j + M * i;
+            printf("%.6f ", input[idx]);
+        }
+        printf("]\n");
+    }
+    printf("]\n");
+}
+
+// Helper to print initial host matrix and transposed matrix
+template <typename Tfloat>
+void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
+{
+    std::cout << "[\n";
+    for(int i = 0; i < N; i++)
+    {
+        std::cout << "  [ ";
+        for(int j = 0; j < M; j++)
+        {
+            auto idx = i * N + j;
+            std::cout << std::setw(6) << input[idx] << " ";
+        }
+        std::cout << " ]\n";
+    }
+    std::cout << "]" << std::endl;
+}
+
+// Perform correctness check against host computed matrix
+// Assumes assembled_output vector has enough space to transfer data into it
+template <typename Tfloat>
+void verify_results(benchmark_context&         ctx,
+                    const std::vector<Tfloat>& original_input,
+                    std::vector<Tfloat>&       reference_result,
+                    std::vector<Tfloat*>&      device_output,
+                    std::vector<Tfloat>&       assembled_output,
+                    std::string                bench_name,
+                    size_t                     trial_num,
+                    size_t&                    num_pass,
+                    size_t&                    num_failures)
+{
+    assemble_output_to_host<Tfloat>(
+        ctx.N, ctx.ngpus, device_output.data(), assembled_output.data());
+    bool res = is_same_matrix<Tfloat>(ctx.N, reference_result, assembled_output);
+    if(!res)
+    {
+        num_failures++;
+        std::cout << "Incorrect result detected for " << bench_name << ", trial #" << trial_num
+                  << "\n";
+        if(ctx.verbose)
+        {
+            std::cout << "Original Input:\n";
+            print_host_2d<Tfloat>(ctx.N, ctx.N, original_input);
+            std::cout << "Host Side Computation:\n";
+            print_host_2d<Tfloat>(ctx.N, ctx.N, reference_result);
+            std::cout << "----------------------\nDevice Side Computation:\n";
+            print_host_2d<Tfloat>(ctx.N, ctx.N, assembled_output);
+        }
+    }
+    else
+    {
+        num_pass++;
+    }
+}
+
+// Print out original input and device output results, after transferring it to host
+// Assumes assembled_output vector has enough space to transfer data into it
+template <typename Tfloat>
+void log_matrices(benchmark_context&         ctx,
+                  const std::vector<Tfloat>& original_input,
+                  std::vector<Tfloat>&       reference_result,
+                  std::vector<Tfloat*>&      device_output,
+                  std::vector<Tfloat>&       assembled_output)
+{
+    assemble_output_to_host<Tfloat>(
+        ctx.N, ctx.ngpus, device_output.data(), assembled_output.data());
+    bool res = is_same_matrix<Tfloat>(ctx.N, reference_result, assembled_output);
+    if(!res)
+    {
+        std::cout << "Original Input:\n";
+        print_host_2d<Tfloat>(ctx.N, ctx.N, original_input);
+        std::cout << "------------------------\nDevice Side Computation:\n";
+        print_host_2d<Tfloat>(ctx.N, ctx.N, assembled_output);
+    }
+}
+
+// =========================================
+// Benchmark I/O data setup & teardown
+// =========================================
 
 // Allocate and initialize gpu buffers, streams + distribute host input to gpu buffers
 template <typename Tfloat>
@@ -460,6 +544,10 @@ void teardown(const int                 ngpus,
             HIP_CHECK(hipStreamDestroy(streams[i * ngpus + j]));
     }
 }
+
+// =========================================
+// CLI11 enum parsing
+// =========================================
 
 // Used for CLI11 parsing of precision enum option
 static bool lexical_cast(const std::string& word, precision& p)
