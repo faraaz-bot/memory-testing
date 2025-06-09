@@ -60,7 +60,6 @@ void run_benchmark(
         for(auto i = 0; i < ngpus; i++)
         {
             std::cout << "Input GPU Buffer " << i << ":\n";
-            // print<T><<<1, 1>>>(buf_size, gpubufs_input[i]);
             print2d<T><<<1, 1>>>(buf_height, N, gpubufs_input[i]);
             HIP_CHECK(hipDeviceSynchronize());
         }
@@ -83,49 +82,21 @@ void run_benchmark(
                 HIP_CHECK(hipDeviceSynchronize());
             }
 
-            // Optionally confirm correctness by copying output back and comparing to host-side computation
+            // Correctness checks & logging
             if(ctx.verify_results)
-            {
-                assemble_output_to_host<T>(
-                    N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-                bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                if(!res)
-                {
-                    num_failures++;
-                    std::cout << "Incorrect result detected for " << state.name() << ", trial #"
-                              << t << "\n";
-                    if(verbose)
-                    {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "Host Side Computation:\n";
-                        print_host_2d<T>(N, N, reference_matrix);
-                        std::cout << "----------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
-                    }
-                }
-                else
-                {
-                    num_pass++;
-                }
-                total_runs++;
-            }
-            else
-            {
-                if(verbose > 1)
-                {
-                    assemble_output_to_host<T>(
-                        N, ngpus, gpubufs_output.data(), h_assembled_output.data());
-                    bool res = is_same_matrix<T>(N, reference_matrix, h_assembled_output);
-                    if(!res)
-                    {
-                        std::cout << "Original Input:\n";
-                        print_host_2d<T>(N, N, h_input);
-                        std::cout << "------------------------\nDevice Side Computation:\n";
-                        print_host_2d<T>(N, N, h_assembled_output);
-                    }
-                }
-            }
+                verify_results(ctx,
+                               h_input,
+                               reference_matrix,
+                               gpubufs_output,
+                               h_assembled_output,
+                               state.name(),
+                               t,
+                               num_pass,
+                               num_failures);
+            else if(ctx.verbose > 1)
+                log_matrices(ctx, h_input, reference_matrix, gpubufs_output, h_assembled_output);
+            total_runs++;
+
             // Set output buffers back to all 0s
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
