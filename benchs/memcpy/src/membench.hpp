@@ -261,6 +261,41 @@ __global__ __launch_bounds__(1024) void local_transpose(
     }
 }
 
+// Launch local_transpose kernel with standard args
+//
+template <typename Tfloat>
+float local_transpose_launcher(const benchmark_context& ctx,
+                               gpubuf_vec<Tfloat>&      in_bufs,
+                               gpubuf_vec<Tfloat>&      out_bufs)
+{
+    const size_t N     = ctx.N;
+    const size_t ngpus = ctx.ngpus;
+
+    // local_transpose args
+    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
+    const uint32_t actual_tile_size
+        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
+    const uint32_t num_threads_x = actual_tile_size;
+    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
+    const uint32_t num_tiles
+        = ceildiv(sub_block_size * sub_block_size,
+                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
+    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
+    const dim3 block_dim{num_threads_x, num_threads_y};
+
+    // execute kernels and time them
+    GPUTimer timer;
+    timer.tick();
+
+    local_transpose<tfloat>
+        <<<grid_dim, block_dim>>>(n, ngpus, actual_tile_size, tmp.data(), out_bufs.data());
+    timer.sync_all(ngpus); // ensure all gpus have finished their work
+
+    timer.tock();
+
+    return timer.elapsed();
+}
+
 /* Block-wide transpose + local transpose implementations */
 // Time naive_copy() + local_transpose()
 template <typename Tfloat>
