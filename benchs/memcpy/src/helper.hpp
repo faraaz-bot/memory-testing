@@ -39,12 +39,12 @@ inline size_t min(const size_t n, const size_t m)
     return ((n < m) ? n : m);
 }
 
-enum precision
+enum class precision
 {
-    p_single,
-    p_double,
-    p_complex_single,
-    p_complex_double,
+    p_single         = 0,
+    p_double         = 1,
+    p_complex_single = 2,
+    p_complex_double = 3,
 };
 
 enum generator
@@ -586,13 +586,13 @@ void teardown(const int                 ngpus,
 inline bool lexical_cast(const std::string& word, precision& p)
 {
     if(word == "single" || word == "0")
-        p = p_single;
+        p = precision::p_single;
     else if(word == "double" || word == "1")
-        p = p_double;
+        p = precision::p_double;
     else if(word == "c_single" || word == "2")
-        p = p_complex_single;
+        p = precision::p_complex_single;
     else if(word == "c_double" || word == "3")
-        p = p_complex_double;
+        p = precision::p_complex_double;
     else
         throw std::runtime_error("Invalid precision specified");
     return true;

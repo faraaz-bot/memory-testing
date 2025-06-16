@@ -208,7 +208,7 @@ int main(int argc, char* argv[])
         ->default_val(1.0);
 
     /*clang format off*/
-    std::string gtest_options
+    std::string gbench_options
         = std::string("Google Benchmark Options:\n\n") + std::string("--benchmark_filter=<regex>\n")
           + std::string("\tFilters out which benchmarks to run,                         i.e: "
                         "./membench --benchmark_filter=2D\n")
@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
           + std::string("--benchmark_time_unit={ns|us|ms|s}\n") + std::string("--v=<verbosity>");
     /*clang format on*/
 
-    app.footer(gtest_options.c_str());
+    app.footer(gbench_options.c_str());
 
     app.allow_extras();
     try
@@ -293,24 +293,24 @@ int main(int argc, char* argv[])
     // Generate input data and register benchmarks based on precision
     switch(p)
     {
-    case p_single:
+    case precision::p_single:
         add_benchmarks<float>(benchmarks,
                               ctx,
                               trials,
                               generate<float>(N, N, gen, min_val, max_val),
                               enabled_benchmarks);
         break;
-    case p_double:
+    case precision::p_double:
         add_benchmarks<double>(benchmarks,
                                ctx,
                                trials,
                                generate<double>(N, N, gen, min_val, max_val),
                                enabled_benchmarks);
         break;
-    // TODO Complex valued cases
-    case p_complex_single:
+        // TODO Complex valued cases
+    case precision::p_complex_single:
         break;
-    case p_complex_double:
+    case precision::p_complex_double:
         break;
     }
 

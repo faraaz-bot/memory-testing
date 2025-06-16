@@ -37,12 +37,27 @@ set(HAVE_STD_REGEX ON)
 set(RUN_HAVE_STD_REGEX 1)
 FetchContent_MakeAvailable(googlebenchmark)
 
+
+# Google Test
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/release-1.12.1.zip
+)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+
 add_executable(membench main.cpp src/membench.hpp)
 set_source_files_properties(main.cpp mpi-main.cpp src/membench.hpp src/mpi-membench.hpp src/helper.hpp src/mpi-helper.hpp PROPERTIES LANGUAGE HIP)
 
 target_compile_options(membench PRIVATE -Wall)
 target_link_libraries(membench hip::host hip::device)
 target_link_libraries(membench benchmark::benchmark)
+
+add_executable(test-membench test/membench-test.cpp)
+target_link_libraries(test-membench hip::host hip::device GTest::gtest_main)
+include(GoogleTest)
 
 if(ENABLE_MPI OR ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
