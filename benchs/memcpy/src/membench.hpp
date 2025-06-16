@@ -262,7 +262,6 @@ __global__ __launch_bounds__(1024) void local_transpose(
 }
 
 // Launch local_transpose kernel with standard args
-//
 template <typename Tfloat>
 float local_transpose_launcher(const benchmark_context& ctx,
                                gpubuf_vec<Tfloat>&      in_bufs,
@@ -287,8 +286,8 @@ float local_transpose_launcher(const benchmark_context& ctx,
     GPUTimer timer;
     timer.tick();
 
-    local_transpose<tfloat>
-        <<<grid_dim, block_dim>>>(n, ngpus, actual_tile_size, tmp.data(), out_bufs.data());
+    local_transpose<Tfloat>
+        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, in_bufs.data(), out_bufs.data());
     timer.sync_all(ngpus); // ensure all gpus have finished their work
 
     timer.tock();
@@ -303,45 +302,28 @@ float naive_copy_transpose(const benchmark_context& ctx,
                            gpubuf_vec<Tfloat>&      in_bufs,
                            gpubuf_vec<Tfloat>&      out_bufs)
 {
-    const size_t N     = ctx.N;
-    const size_t ngpus = ctx.ngpus;
+    // Calculate number of blocks/threads to launch with
+    const size_t   N        = ctx.N;
+    const size_t   ngpus    = ctx.ngpus;
+    const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
 
     // Create intermediate tmp buffer between block transpose and local transpose
     gpubuf_vec<Tfloat> tmp(N, ngpus);
-
-    // Calculate number of blocks/threads to launch with
-    // For naive_copy:
-    const uint32_t copy_ipt = (N * N) / (ngpus * ngpus);
-
-    // For local_transpose:
-    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
-    const uint32_t actual_tile_size
-        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
-    const uint32_t num_threads_x = actual_tile_size;
-    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
-    const uint32_t num_tiles
-        = ceildiv(sub_block_size * sub_block_size,
-                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
-    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
-    const dim3 block_dim{num_threads_x, num_threads_y};
 
     // Execute kernels and time them
     GPUTimer timer;
     timer.tick();
 
     naive_copy<Tfloat><<<ngpus, ngpus>>>(N, ngpus, copy_ipt, in_bufs.data(), tmp.data());
-    timer.sync_all(ngpus); // Is this needed before local_tranpose?
-    local_transpose<Tfloat>
-        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, tmp.data(), out_bufs.data());
-    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.sync_all(ngpus);
+    float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
 
     timer.tock();
 
-    return timer.elapsed();
+    return timer.elapsed() + transpose_time;
 }
 
 // Time run_memcpy() + local_transpose()
-// TODO Swap out hipMalloc/hipFree for RAII structs
 template <typename Tfloat>
 float run_memcpy_transpose(const benchmark_context& ctx,
                            gpubuf_vec<Tfloat>&      in_bufs,
@@ -353,35 +335,14 @@ float run_memcpy_transpose(const benchmark_context& ctx,
     // Create intermediate tmp buffer between block transpose and local transpose
     gpubuf_vec<Tfloat> tmp(N, ngpus);
 
-    // Calculate number of blocks/threads to launch with
-    // For local_transpose:
-    const uint32_t num_sub_blocks = ngpus; // Per gpubuf
-    const uint32_t sub_block_size = N / num_sub_blocks; // Length of block in each transfer
-    const uint32_t actual_tile_size
-        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
-    const uint32_t num_threads_x = actual_tile_size;
-    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
-    const uint32_t num_tiles
-        = ceildiv(sub_block_size * sub_block_size,
-                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
-    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
-    const dim3 block_dim{num_threads_x, num_threads_y};
-
     // Execute block transpose via hipMemcpy2D + local transpose kernel and time them
-    float memcpy_time = run_memcpy(ctx, in_bufs, tmp);
+    float memcpy_time    = run_memcpy(ctx, in_bufs, tmp);
+    float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
 
-    GPUTimer timer;
-    timer.tick();
-    local_transpose<Tfloat>
-        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, tmp.data(), out_bufs.data());
-    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
-    timer.tock();
-
-    return memcpy_time + timer.elapsed();
+    return memcpy_time + transpose_time;
 }
 
 // Time run_memcpy_async() + local_transpose()
-// TODO Swap out hipMalloc/hipFree for RAII structs
 template <typename Tfloat>
 float run_memcpy_async_transpose(const benchmark_context& ctx,
                                  gpubuf_vec<Tfloat>&      in_bufs,
@@ -393,28 +354,9 @@ float run_memcpy_async_transpose(const benchmark_context& ctx,
     // Create intermediate tmp buffer between block transpose and local transpose
     gpubuf_vec<Tfloat> tmp(N, ngpus);
 
-    // Calculate number of blocks/threads to launch with
-    // For local_transpose:
-    const uint32_t sub_block_size = N / ngpus; // Length of block in each transfer
-    const uint32_t actual_tile_size
-        = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
-    const uint32_t num_threads_x = actual_tile_size;
-    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
-    const uint32_t num_tiles
-        = ceildiv(sub_block_size * sub_block_size,
-                  actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
-    const dim3 grid_dim{(uint32_t)ngpus, (uint32_t)ngpus, num_tiles};
-    const dim3 block_dim{num_threads_x, num_threads_y};
-
     // Execute block transpose via hipMemcpy2D + local transpose kernel and time them
-    float memcpy_time = run_memcpy(ctx, in_bufs, tmp);
+    float memcpy_time    = run_memcpy(ctx, in_bufs, tmp);
+    float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
 
-    GPUTimer timer;
-    timer.tick();
-    local_transpose<Tfloat>
-        <<<grid_dim, block_dim>>>(N, ngpus, actual_tile_size, tmp.data(), out_bufs.data());
-    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
-    timer.tock();
-
-    return memcpy_time + timer.elapsed();
+    return memcpy_time + transpose_time;
 }

@@ -128,8 +128,10 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
                     const std::set<std::string>&                  enabled_benchmarks)
 {
     // Add benchmarks here
+    // Note: also modify set in main() with new strings
     std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
-        = {{"memcpy2D", run_memcpy<T>},
+        = {{"localTranspose", local_transpose_launcher<T>},
+           {"memcpy2D", run_memcpy<T>},
            {"memcpy2D+Transpose", run_memcpy_transpose<T>},
            {"memcpy2DAsync", run_memcpy_async<T>},
            {"memcpy2DAsync+Transpose", run_memcpy_async_transpose<T>},
@@ -154,7 +156,7 @@ int main(int argc, char* argv[])
                                               "memcpy2D",
                                               "memcpy2DAsync",
                                               "naiveCopy",
-                                              "ldsCopy",
+                                              "localTranspose",
                                               "naiveCopy+Transpose",
                                               "memcpy2D+Transpose",
                                               "memcpy2DAsync+Transpose"};
