@@ -58,11 +58,8 @@ struct benchmark_context
 {
     size_t                   N;
     size_t                   ngpus;
-    size_t                   blocks;
-    size_t                   threads;
     int                      verbose;
-    bool                     verify_results = false;
-    int                      mpi_size       = 0;
+    int                      mpi_size = 0;
     std::vector<hipStream_t> streams;
 };
 
@@ -463,7 +460,9 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 // Perform correctness check against host computed matrix
 // Assumes assembled_output vector has enough space to transfer data into it
 template <typename Tfloat>
-void verify_results(benchmark_context&         ctx,
+void verify_results(size_t                     N,
+                    size_t                     ngpus,
+                    int                        verbose,
                     const std::vector<Tfloat>& original_input,
                     std::vector<Tfloat>&       reference_result,
                     gpubuf_vec<Tfloat>&        device_output,
@@ -473,22 +472,21 @@ void verify_results(benchmark_context&         ctx,
                     size_t&                    num_pass,
                     size_t&                    num_failures)
 {
-    assemble_output_to_host<Tfloat>(
-        ctx.N, ctx.ngpus, device_output.data(), assembled_output.data());
-    bool res = is_same_matrix<Tfloat>(ctx.N, reference_result, assembled_output);
+    assemble_output_to_host<Tfloat>(N, ngpus, device_output.data(), assembled_output.data());
+    bool res = is_same_matrix<Tfloat>(N, reference_result, assembled_output);
     if(!res)
     {
         num_failures++;
         std::cout << "Incorrect result detected for " << bench_name << ", trial #" << trial_num
                   << "\n";
-        if(ctx.verbose)
+        if(verbose)
         {
             std::cout << "Original Input:\n";
-            print_host_2d<Tfloat>(ctx.N, ctx.N, original_input);
+            print_host_2d<Tfloat>(N, N, original_input);
             std::cout << "Host Side Computation:\n";
-            print_host_2d<Tfloat>(ctx.N, ctx.N, reference_result);
+            print_host_2d<Tfloat>(N, N, reference_result);
             std::cout << "----------------------\nDevice Side Computation:\n";
-            print_host_2d<Tfloat>(ctx.N, ctx.N, assembled_output);
+            print_host_2d<Tfloat>(N, N, assembled_output);
         }
     }
     else

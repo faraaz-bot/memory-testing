@@ -16,6 +16,9 @@
  * MPI-specific benchmarks are handled with mpi-main.cpp & mpi-membench.hpp.
  */
 
+template <typename T>
+using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)>;
+
 // Execute f under Google Benchmark, for at least trials times
 // Manages device memory management, timing, and verification,
 // but not generating initial input data (h_input).
@@ -24,13 +27,12 @@ void run_benchmark(benchmark::State&     state,
                    benchmark_context     ctx,
                    const size_t          trials,
                    const std::vector<T>& h_input,
-                   std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)> f)
+                   benchmark_fn<T>       f)
 {
-    const size_t N            = ctx.N;
-    const size_t ngpus        = ctx.ngpus;
-    int          verbose      = ctx.verbose;
-    std::string  bench_name   = state.name();
-    bool         is_transpose = bench_name.find("Transpose") != std::string::npos;
+    const size_t N          = ctx.N;
+    const size_t ngpus      = ctx.ngpus;
+    int          verbose    = ctx.verbose;
+    std::string  bench_name = state.name();
 
     // Initialize and copy data over (currently assume input is evenly divisible over ngpus)
     gpubuf_vec<T>  gpubufs_input(N, ngpus);
@@ -41,13 +43,6 @@ void run_benchmark(benchmark::State&     state,
     // Compute host-side matrix for correctness check
     // Can be either block transposed or fully transposed result
     std::vector<T> reference_matrix(N * N);
-    if(ctx.verify_results)
-    {
-        if(is_transpose)
-            host_transpose<T>(N, h_input.data(), reference_matrix.data());
-        else
-            host_copy<T>(N, ngpus, h_input.data(), reference_matrix.data());
-    }
 
     // Allocate and init bufs, streams
     setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
@@ -65,10 +60,7 @@ void run_benchmark(benchmark::State&     state,
     }
 
     // Execute and time the benchmarks
-    float  total_ms     = 0.0f;
-    size_t num_failures = 0;
-    size_t num_pass     = 0;
-    size_t total_runs   = 0;
+    float total_ms = 0.0f;
     for(auto _ : state)
     {
         for(size_t t = 0; t < trials; t++)
@@ -81,29 +73,10 @@ void run_benchmark(benchmark::State&     state,
                 HIP_CHECK(hipDeviceSynchronize());
             }
 
-            // Correctness checks & logging
-            if(ctx.verify_results)
-                verify_results(ctx,
-                               h_input,
-                               reference_matrix,
-                               gpubufs_output,
-                               h_assembled_output,
-                               state.name(),
-                               t,
-                               num_pass,
-                               num_failures);
-            else if(ctx.verbose > 1)
-                log_matrices(ctx, h_input, reference_matrix, gpubufs_output, h_assembled_output);
-            total_runs++;
-
             // Set output buffers back to all 0s
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);
         }
     }
-
-    if(ctx.verify_results)
-        std::cout << num_pass << "/" << total_runs << " runs passed. " << num_failures
-                  << " runs failed." << std::endl;
 
     state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
@@ -115,9 +88,6 @@ void run_benchmark(benchmark::State&     state,
 
     teardown<T>(ngpus, gpubufs_input, gpubufs_output, ctx.streams);
 }
-
-template <typename T>
-using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)>;
 
 // Register all (valid) provided functions to run as benchmarks
 template <typename T>
@@ -184,9 +154,6 @@ int main(int argc, char* argv[])
                    "Adjust output verbosity level\n1) Basic benchmark details\n2) Matrix data\n3) "
                    "Initial buffer data")
         ->default_val(0);
-
-    app.add_flag(
-        "-c, --verify", ctx.verify_results, "Toggle correctness checks performed after each trial");
     app.add_option(
            "-t, --trials", trials, "The amount of minimum trials to run per function (default 20)")
         ->default_val(20);
