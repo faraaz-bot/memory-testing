@@ -7,11 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if (NOT DEFINED ENV{ROCM_PATH})
-    set (ENV{ROCM_PATH} "/opt/rocm")
+    set(ENV{ROCM_PATH} "/opt/rocm")
 endif()
 
 if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
-    set (ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
+    set(ENV{CMAKE_PREFIX_PATH} "/opt/rocm")
 endif()
 
 # list(APPEND CMAKE_PREFIX_PATH $ENV{HOME}/.local)
@@ -79,4 +79,4 @@ else()
     message(STATUS "Not using MPI")
 endif()
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_COMPILER "/opt/rocm/bin/amdclang++")
