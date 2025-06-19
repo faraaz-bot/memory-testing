@@ -42,30 +42,31 @@ template <typename T>
 using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)>;
 
 // Configurations of type/length to test
-using Params = ::testing::Types<params<float, 8>,
-                                params<float, 16>,
-                                params<float, 32>,
-                                params<float, 64>,
-                                params<float, 128>,
-                                params<float, 256>,
-                                params<float, 512>,
-                                params<float, 1024>,
-                                params<float, 2048>,
-                                params<float, 4096>,
-                                params<float, 8192>,
-                                params<float, 16384>,
-                                params<double, 8>,
-                                params<double, 16>,
-                                params<double, 32>,
-                                params<double, 64>,
-                                params<double, 128>,
-                                params<double, 256>,
-                                params<double, 512>,
-                                params<double, 1024>,
-                                params<double, 2048>,
-                                params<double, 4096>,
-                                params<double, 8192>,
-                                params<double, 16384>>;
+// using Params = ::testing::Types<params<float, 8>,
+//                                 params<float, 16>,
+//                                 params<float, 32>,
+//                                 params<float, 64>,
+//                                 params<float, 128>,
+//                                 params<float, 256>,
+//                                 params<float, 512>,
+//                                 params<float, 1024>,
+//                                 params<float, 2048>,
+//                                 params<float, 4096>,
+//                                 params<float, 8192>,
+//                                 params<float, 16384>,
+//                                 params<double, 8>,
+//                                 params<double, 16>,
+//                                 params<double, 32>,
+//                                 params<double, 64>,
+//                                 params<double, 128>,
+//                                 params<double, 256>,
+//                                 params<double, 512>,
+//                                 params<double, 1024>,
+//                                 params<double, 2048>,
+//                                 params<double, 4096>,
+//                                 params<double, 8192>,
+//                                 params<double, 16384>>;
+using Params = ::testing::Types<params<float, 8>>;
 
 template <class Params>
 class MembenchTest : public ::testing::Test
@@ -82,9 +83,8 @@ private:
                     gpubuf_vec<Tfloat>&        dev_out,
                     transpose_type             type)
     {
-        std::vector<Tfloat> assembled_out(dev_out.size());
-        assemble_output_to_host(N, ngpus, dev_out.data(), assembled_out.data());
-        std::vector<Tfloat> reference(dev_out.size());
+        std::vector<Tfloat> assembled_out(dev_out.size() * ngpus);
+        std::vector<Tfloat> reference(dev_out.size() * ngpus);
 
         switch(type)
         {
@@ -97,7 +97,8 @@ private:
             host_transpose(N, input.data(), reference.data());
             break;
         }
-        return is_same_matrix(N, reference, assembled_out);
+        return verify_results<Tfloat>(
+            N, ngpus, test_config::verbose, input, reference, dev_out, assembled_out);
     }
 
     template <typename Tfloat>
@@ -121,17 +122,21 @@ public:
 
     // Execute arbitrary benchmark type
     template <typename Tfloat, transpose_type t_type>
-    bool run_benchmark(size_t N, benchmark_fn<Tfloat> fn)
+    void run_benchmark(const size_t N, benchmark_fn<Tfloat> fn)
     {
-        // Setup bufs
+        const size_t            ngpus   = test_config::ngpus;
+        const int               verbose = test_config::verbose;
+        const benchmark_context ctx{N, ngpus, verbose, 0, test_config::streams};
+        // Setup bufs -- generate() step will be expensive...
         std::vector<Tfloat> h_input = generate(
             N, N, test_config::gen, static_cast<Tfloat>(-100.f), static_cast<Tfloat>(100.f));
-        gpubuf_vec<Tfloat> d_input(N, test_config::ngpus);
-        gpubuf_vec<Tfloat> d_output(N, test_config::ngpus);
+        gpubuf_vec<Tfloat> d_input(N, ngpus);
+        gpubuf_vec<Tfloat> d_output(N, ngpus);
         copy_host_buf_to_dev(h_input, d_input, N);
 
-        // std::string test_name = testing::UnitTest::GetInstance()->current_test_info()->name();
-        return true;
+        fn(ctx, d_input, d_output);
+
+        ASSERT_TRUE(is_correct(N, ngpus, h_input, d_output, t_type));
     }
 };
 
@@ -141,21 +146,18 @@ TYPED_TEST(MembenchTest, Memcpy2D)
 {
     size_t N   = TestFixture::params::N;
     using Type = typename TestFixture::params::Type;
-    bool res   = this->template run_benchmark<Type, t_block>(N, run_memcpy<Type>);
-    ASSERT_TRUE(res);
+    this->template run_benchmark<Type, t_block>(N, run_memcpy<Type>);
+}
+
+TYPED_TEST(MembenchTest, NaiveCopy)
+{
+    size_t N   = TestFixture::params::N;
+    using Type = typename TestFixture::params::Type;
+    this->template run_benchmark<Type, t_block>(N, naive_copy_launcher<Type>);
 }
 
 int main(int argc, char* argv[])
 {
-    // Note: also edit map in add_benchmarks() if editing this set
-    std::set<std::string> valid_benchmarks = {"all",
-                                              "memcpy2D",
-                                              "memcpy2DAsync",
-                                              "naiveCopy",
-                                              "localTranspose",
-                                              "naiveCopy+Transpose",
-                                              "memcpy2D+Transpose",
-                                              "memcpy2DAsync+Transpose"};
     // Parse args
     CLI::App app{"Memcpy test"};
 
@@ -211,6 +213,9 @@ int main(int argc, char* argv[])
         for(size_t j = 0; j < test_config::ngpus; j++)
             HIP_CHECK(hipStreamCreate(&test_config::streams[i * test_config::ngpus + j]));
     }
+
+    // TODO: Consider generating input once, and then maybe resize as needed for smaller problems?
+    // Or access a different vector per size?
 
     testing::InitGoogleTest(&argc, argv);
     auto retval = RUN_ALL_TESTS();

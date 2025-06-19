@@ -460,25 +460,18 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 // Perform correctness check against host computed matrix
 // Assumes assembled_output vector has enough space to transfer data into it
 template <typename Tfloat>
-void verify_results(size_t                     N,
+bool verify_results(size_t                     N,
                     size_t                     ngpus,
                     int                        verbose,
                     const std::vector<Tfloat>& original_input,
                     std::vector<Tfloat>&       reference_result,
                     gpubuf_vec<Tfloat>&        device_output,
-                    std::vector<Tfloat>&       assembled_output,
-                    std::string                bench_name,
-                    size_t                     trial_num,
-                    size_t&                    num_pass,
-                    size_t&                    num_failures)
+                    std::vector<Tfloat>&       assembled_output)
 {
     assemble_output_to_host<Tfloat>(N, ngpus, device_output.data(), assembled_output.data());
     bool res = is_same_matrix<Tfloat>(N, reference_result, assembled_output);
     if(!res)
     {
-        num_failures++;
-        std::cout << "Incorrect result detected for " << bench_name << ", trial #" << trial_num
-                  << "\n";
         if(verbose)
         {
             std::cout << "Original Input:\n";
@@ -487,12 +480,10 @@ void verify_results(size_t                     N,
             print_host_2d<Tfloat>(N, N, reference_result);
             std::cout << "----------------------\nDevice Side Computation:\n";
             print_host_2d<Tfloat>(N, N, assembled_output);
+            std::cout << std::endl;
         }
     }
-    else
-    {
-        num_pass++;
-    }
+    return res;
 }
 
 // Print out original input and device output results, after transferring it to host
