@@ -460,13 +460,12 @@ void print_host_2d(const int N, const int M, const std::vector<Tfloat>& input)
 // Perform correctness check against host computed matrix
 // Assumes assembled_output vector has enough space to transfer data into it
 template <typename Tfloat>
-bool verify_results(size_t                     N,
-                    size_t                     ngpus,
-                    int                        verbose,
-                    const std::vector<Tfloat>& original_input,
-                    std::vector<Tfloat>&       reference_result,
-                    gpubuf_vec<Tfloat>&        device_output,
-                    std::vector<Tfloat>&       assembled_output)
+bool verify_results(size_t               N,
+                    size_t               ngpus,
+                    int                  verbose,
+                    std::vector<Tfloat>& reference_result,
+                    gpubuf_vec<Tfloat>&  device_output,
+                    std::vector<Tfloat>& assembled_output)
 {
     assemble_output_to_host<Tfloat>(N, ngpus, device_output.data(), assembled_output.data());
     bool res = is_same_matrix<Tfloat>(N, reference_result, assembled_output);
@@ -474,8 +473,6 @@ bool verify_results(size_t                     N,
     {
         if(verbose)
         {
-            std::cout << "Original Input:\n";
-            print_host_2d<Tfloat>(N, N, original_input);
             std::cout << "Host Side Computation:\n";
             print_host_2d<Tfloat>(N, N, reference_result);
             std::cout << "----------------------\nDevice Side Computation:\n";
@@ -491,20 +488,15 @@ bool verify_results(size_t                     N,
 template <typename Tfloat>
 void log_matrices(benchmark_context&         ctx,
                   const std::vector<Tfloat>& original_input,
-                  std::vector<Tfloat>&       reference_result,
                   gpubuf_vec<Tfloat>&        device_output,
                   std::vector<Tfloat>&       assembled_output)
 {
     assemble_output_to_host<Tfloat>(
         ctx.N, ctx.ngpus, device_output.data(), assembled_output.data());
-    bool res = is_same_matrix<Tfloat>(ctx.N, reference_result, assembled_output);
-    if(!res)
-    {
-        std::cout << "Original Input:\n";
-        print_host_2d<Tfloat>(ctx.N, ctx.N, original_input);
-        std::cout << "------------------------\nDevice Side Computation:\n";
-        print_host_2d<Tfloat>(ctx.N, ctx.N, assembled_output);
-    }
+    std::cout << "Original Input:\n";
+    print_host_2d<Tfloat>(ctx.N, ctx.N, original_input);
+    std::cout << "------------------------\nDevice Side Computation:\n";
+    print_host_2d<Tfloat>(ctx.N, ctx.N, assembled_output);
 }
 
 // =========================================
@@ -547,7 +539,9 @@ void reset(const int            N,
     const size_t buf_elems = N * N / ngpus; // Number of elements in buf
     for(auto i = 0; i < ngpus; i++)
     {
+        HIP_CHECK(hipSetDevice(i));
         HIP_CHECK(hipMemset(gpubufs_output[i], 0, sizeof(Tfloat) * buf_elems));
+        HIP_CHECK(hipDeviceSynchronize());
     }
     std::fill(host_assembled_buf.begin(), host_assembled_buf.end(), 0);
 }

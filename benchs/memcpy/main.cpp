@@ -40,10 +40,6 @@ void run_benchmark(benchmark::State&     state,
     std::vector<T> h_assembled_output(N * N);
     ctx.streams = std::vector<hipStream_t>(ngpus * ngpus);
 
-    // Compute host-side matrix for correctness check
-    // Can be either block transposed or fully transposed result
-    std::vector<T> reference_matrix(N * N);
-
     // Allocate and init bufs, streams
     setup<T>(ctx.N, ngpus, gpubufs_input, gpubufs_output, h_input, ctx.streams);
 
@@ -72,6 +68,9 @@ void run_benchmark(benchmark::State&     state,
                 HIP_CHECK(hipSetDevice(i));
                 HIP_CHECK(hipDeviceSynchronize());
             }
+
+            if(verbose > 1)
+                log_matrices(ctx, h_input, gpubufs_output, h_assembled_output);
 
             // Set output buffers back to all 0s
             reset<T>(N, ngpus, gpubufs_output, h_assembled_output);

@@ -98,7 +98,7 @@ private:
             break;
         }
         return verify_results<Tfloat>(
-            N, ngpus, test_config::verbose, input, reference, dev_out, assembled_out);
+            N, ngpus, test_config::verbose, reference, dev_out, assembled_out);
     }
 
     template <typename Tfloat>
