@@ -142,18 +142,48 @@ public:
 
 TYPED_TEST_SUITE(MembenchTest, Params);
 
-TYPED_TEST(MembenchTest, Memcpy2D)
+// Block transpose impls
+TYPED_TEST(MembenchTest, Memcpy2DBlock)
 {
     size_t N   = TestFixture::params::N;
     using Type = typename TestFixture::params::Type;
     this->template run_benchmark<Type, t_block>(N, run_memcpy<Type>);
 }
 
-TYPED_TEST(MembenchTest, NaiveCopy)
+TYPED_TEST(MembenchTest, Memcpy2DAsyncBlock)
+{
+    size_t N   = TestFixture::params::N;
+    using Type = typename TestFixture::params::Type;
+    this->template run_benchmark<Type, t_block>(N, run_memcpy_async<Type>);
+}
+
+TYPED_TEST(MembenchTest, NaiveCopyBlock)
 {
     size_t N   = TestFixture::params::N;
     using Type = typename TestFixture::params::Type;
     this->template run_benchmark<Type, t_block>(N, naive_copy_launcher<Type>);
+}
+
+// Block + Local (normal transpose) impls
+TYPED_TEST(MembenchTest, Memcpy2DTranspose)
+{
+    size_t N   = TestFixture::params::N;
+    using Type = typename TestFixture::params::Type;
+    this->template run_benchmark<Type, t_normal>(N, run_memcpy_transpose<Type>);
+}
+
+TYPED_TEST(MembenchTest, Memcpy2DAsyncTranspose)
+{
+    size_t N   = TestFixture::params::N;
+    using Type = typename TestFixture::params::Type;
+    this->template run_benchmark<Type, t_normal>(N, run_memcpy_async_transpose<Type>);
+}
+
+TYPED_TEST(MembenchTest, NaiveCopyTranspose)
+{
+    size_t N   = TestFixture::params::N;
+    using Type = typename TestFixture::params::Type;
+    this->template run_benchmark<Type, t_normal>(N, naive_copy_transpose<Type>);
 }
 
 int main(int argc, char* argv[])
