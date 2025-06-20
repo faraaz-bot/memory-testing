@@ -275,7 +275,9 @@ float local_transpose_launcher(const benchmark_context& ctx,
     const uint32_t actual_tile_size
         = min(MAX_TILE_SIZE, sub_block_size); // Clamp it for small sizes
     const uint32_t num_threads_x = actual_tile_size;
-    const uint32_t num_threads_y = actual_tile_size / ITEMS_PER_THREAD;
+    const uint32_t num_threads_y = (actual_tile_size < ITEMS_PER_THREAD)
+                                       ? actual_tile_size
+                                       : actual_tile_size / ITEMS_PER_THREAD;
     const uint32_t num_tiles
         = ceildiv(sub_block_size * sub_block_size,
                   actual_tile_size * actual_tile_size); // How many total tiles needed per sub_block
@@ -317,8 +319,6 @@ float naive_copy_transpose(const benchmark_context& ctx,
     naive_copy<Tfloat><<<ngpus, ngpus>>>(N, ngpus, copy_ipt, in_bufs.data(), tmp.data());
     timer.sync_all(ngpus); // Ensure all GPUs have finished their work
     timer.tock();
-    for(auto i = 0; i < ngpus; i++)
-        print2d<Tfloat><<<1, 1>>>(N / ngpus, N, in_bufs[i]);
     float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
     timer.sync_all(ngpus); // Ensure all GPUs have finished their work
 

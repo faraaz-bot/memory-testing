@@ -66,7 +66,7 @@ using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>
 //                                 params<double, 4096>,
 //                                 params<double, 8192>,
 //                                 params<double, 16384>>;
-using Params = ::testing::Types<params<float, 8>>;
+using Params = ::testing::Types<params<float, 8>, params<float, 16>>;
 
 template <class Params>
 class MembenchTest : public ::testing::Test
