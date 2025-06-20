@@ -65,8 +65,8 @@ float run_memcpy(const benchmark_context& ctx,
                                   hipMemcpyDeviceToDevice));
         }
     }
-    timer.tock();
     timer.sync_all(ngpus); // Ensure all GPUs have finished their work
+    timer.tock();
     return timer.elapsed();
 }
 
@@ -315,10 +315,12 @@ float naive_copy_transpose(const benchmark_context& ctx,
     timer.tick();
 
     naive_copy<Tfloat><<<ngpus, ngpus>>>(N, ngpus, copy_ipt, in_bufs.data(), tmp.data());
-    timer.sync_all(ngpus);
-    float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
-
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
     timer.tock();
+    for(auto i = 0; i < ngpus; i++)
+        print2d<Tfloat><<<1, 1>>>(N / ngpus, N, in_bufs[i]);
+    float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
+    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
 
     return timer.elapsed() + transpose_time;
 }

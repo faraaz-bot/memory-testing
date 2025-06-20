@@ -85,6 +85,7 @@ private:
     {
         std::vector<Tfloat> assembled_out(dev_out.size() * ngpus);
         std::vector<Tfloat> reference(dev_out.size() * ngpus);
+        assemble_output_to_host(N, ngpus, dev_out.data(), assembled_out.data());
 
         switch(type)
         {
@@ -113,7 +114,6 @@ private:
                                 h_bufs.data() + i * buf_elems,
                                 buf_elems * sizeof(Tfloat),
                                 hipMemcpyHostToDevice));
-            HIP_CHECK(hipMemset(d_bufs[i], 0, sizeof(Tfloat) * buf_elems));
         }
     }
 
@@ -127,6 +127,7 @@ public:
         const size_t            ngpus   = test_config::ngpus;
         const int               verbose = test_config::verbose;
         const benchmark_context ctx{N, ngpus, verbose, 0, test_config::streams};
+        GPUTimer                timer;
         // Setup bufs -- generate() step will be expensive...
         std::vector<Tfloat> h_input = generate(
             N, N, test_config::gen, static_cast<Tfloat>(-100.f), static_cast<Tfloat>(100.f));
@@ -134,8 +135,10 @@ public:
         gpubuf_vec<Tfloat> d_output(N, ngpus);
         copy_host_buf_to_dev(h_input, d_input, N);
 
-        fn(ctx, d_input, d_output);
+        // for(auto i = 0; i < ngpus; i++)
+        //     print2d<Tfloat><<<1, 1>>>(N / ngpus, N, d_input[i]);
 
+        fn(ctx, d_input, d_output);
         ASSERT_TRUE(is_correct(N, ngpus, h_input, d_output, t_type));
     }
 };

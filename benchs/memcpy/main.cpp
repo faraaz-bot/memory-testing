@@ -63,12 +63,6 @@ void run_benchmark(benchmark::State&     state,
         {
             total_ms += f(ctx, gpubufs_input, gpubufs_output);
 
-            for(auto i = 0; i < ngpus; i++)
-            {
-                HIP_CHECK(hipSetDevice(i));
-                HIP_CHECK(hipDeviceSynchronize());
-            }
-
             if(verbose > 1)
                 log_matrices(ctx, h_input, gpubufs_output, h_assembled_output);
 
