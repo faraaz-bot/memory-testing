@@ -130,6 +130,7 @@ public:
             HIP_CHECK(hipSetDevice(i));
             HIP_CHECK(hipMalloc(&bufs[i], sizeof(Tfloat) * buf_elems));
             HIP_CHECK(hipMemset(bufs[i], 0, sizeof(Tfloat) * buf_elems));
+            HIP_CHECK(hipDeviceSynchronize());
         }
         HIP_CHECK(hipSetDevice(0));
     }

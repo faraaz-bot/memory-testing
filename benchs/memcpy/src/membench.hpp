@@ -320,7 +320,6 @@ float naive_copy_transpose(const benchmark_context& ctx,
     timer.sync_all(ngpus); // Ensure all GPUs have finished their work
     timer.tock();
     float transpose_time = local_transpose_launcher(ctx, tmp, out_bufs);
-    timer.sync_all(ngpus); // Ensure all GPUs have finished their work
 
     return timer.elapsed() + transpose_time;
 }

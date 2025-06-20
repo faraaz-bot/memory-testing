@@ -7,7 +7,7 @@
 #include "../../../eg/argv/CLI11.hpp"
 #include "../src/membench.hpp"
 
-// Params for entire execution
+// Params for entire execution -- some can be modified with CLI
 class test_config
 {
 public:
@@ -23,6 +23,7 @@ std::vector<hipStream_t> test_config::streams;
 generator                test_config::gen = gen_random;
 
 // Params varying between tests
+// This will be passed in via gtest to provide a separate test run per type & N value
 template <class T, size_t length>
 struct params
 {
@@ -30,6 +31,8 @@ struct params
     static constexpr size_t N = length;
 };
 
+// Indicate what type of host reference should be computed
+// for a given implementation from membench
 enum transpose_type
 {
     t_block,
@@ -42,31 +45,30 @@ template <typename T>
 using benchmark_fn = std::function<float(const benchmark_context&, gpubuf_vec<T>&, gpubuf_vec<T>&)>;
 
 // Configurations of type/length to test
-// using Params = ::testing::Types<params<float, 8>,
-//                                 params<float, 16>,
-//                                 params<float, 32>,
-//                                 params<float, 64>,
-//                                 params<float, 128>,
-//                                 params<float, 256>,
-//                                 params<float, 512>,
-//                                 params<float, 1024>,
-//                                 params<float, 2048>,
-//                                 params<float, 4096>,
-//                                 params<float, 8192>,
-//                                 params<float, 16384>,
-//                                 params<double, 8>,
-//                                 params<double, 16>,
-//                                 params<double, 32>,
-//                                 params<double, 64>,
-//                                 params<double, 128>,
-//                                 params<double, 256>,
-//                                 params<double, 512>,
-//                                 params<double, 1024>,
-//                                 params<double, 2048>,
-//                                 params<double, 4096>,
-//                                 params<double, 8192>,
-//                                 params<double, 16384>>;
-using Params = ::testing::Types<params<float, 8>, params<float, 16>>;
+using Params = ::testing::Types<params<float, 8>,
+                                params<float, 16>,
+                                params<float, 32>,
+                                params<float, 64>,
+                                params<float, 128>,
+                                params<float, 256>,
+                                params<float, 512>,
+                                params<float, 1024>,
+                                params<float, 2048>,
+                                params<float, 4096>,
+                                params<float, 8192>,
+                                params<float, 16384>,
+                                params<double, 8>,
+                                params<double, 16>,
+                                params<double, 32>,
+                                params<double, 64>,
+                                params<double, 128>,
+                                params<double, 256>,
+                                params<double, 512>,
+                                params<double, 1024>,
+                                params<double, 2048>,
+                                params<double, 4096>,
+                                params<double, 8192>,
+                                params<double, 16384>>;
 
 template <class Params>
 class MembenchTest : public ::testing::Test
@@ -134,9 +136,6 @@ public:
         gpubuf_vec<Tfloat> d_input(N, ngpus);
         gpubuf_vec<Tfloat> d_output(N, ngpus);
         copy_host_buf_to_dev(h_input, d_input, N);
-
-        // for(auto i = 0; i < ngpus; i++)
-        //     print2d<Tfloat><<<1, 1>>>(N / ngpus, N, d_input[i]);
 
         fn(ctx, d_input, d_output);
         ASSERT_TRUE(is_correct(N, ngpus, h_input, d_output, t_type));
