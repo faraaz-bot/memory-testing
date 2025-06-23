@@ -331,24 +331,24 @@ int main(int argc, char* argv[])
     // Generate input data and register benchmarks based on precision
     switch(p)
     {
-    case p_single:
+    case precision::p_single:
         add_benchmarks<float>(benchmarks,
                               ctx,
                               trials,
                               generate<float>(N, N, gen, min_val, max_val),
                               enabled_benchmarks);
         break;
-    case p_double:
+    case precision::p_double:
         add_benchmarks<double>(benchmarks,
                                ctx,
                                trials,
                                generate<double>(N, N, gen, min_val, max_val),
                                enabled_benchmarks);
         break;
-    // TODO Complex valued cases
-    case p_complex_single:
+        // TODO Complex valued cases
+    case precision::p_complex_single:
         break;
-    case p_complex_double:
+    case precision::p_complex_double:
         break;
     }
 

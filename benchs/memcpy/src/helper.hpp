@@ -61,6 +61,8 @@ struct benchmark_context
     int                      verbose;
     int                      mpi_size = 0;
     std::vector<hipStream_t> streams;
+    bool                     verify_results
+        = false; // Unused for main, only for mpi-membench which has no dedicated test suite
 };
 
 // TODO: Can replace usages of raw hipMalloc/hipFree in src/membench.hpp
