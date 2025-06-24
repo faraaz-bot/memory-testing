@@ -23,42 +23,53 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
     const int elems_per_row    = ctx.N;
     const int elems_per_col    = sub_block_length;
 
-    // Create custom strided 2d type to specify non-contiguous data to move in
-    // MPI_Alltoall call later.
-    MPI_Datatype strided_type;
-    // MPI_Type_vector(sub_block_length, sub_block_length, ctx.N, mtype, &strided_type);
-    const int sizes[2]     = {N, N}; // global array lengths
-    const int sub_sizes[2] = {sub_block_length, sub_block_length}; // subarray sizes
-    const int start_offsets[2]
-        = {rank * sub_block_length, 0}; // offset of each rank within global N x N array
+    // Setup MPI subarray for each block to be transferred
+    const int                 sizes[2]     = {N, N / num_ranks}; // gpubuf dims
+    const int                 sub_sizes[2] = {sub_block_length, sub_block_length}; // subarray sizes
+    std::vector<MPI_Datatype> subarrays(num_ranks);
+    for(auto i = 0; i < num_ranks; i++)
+    {
+        const int start_offsets[2]
+            = {i * sub_block_length, 0}; // offset to start of each block within global N x N array
+        MPI_Datatype subarray_type;
+        MPI_Type_create_subarray(2, // # of dims
+                                 sizes,
+                                 sub_sizes,
+                                 start_offsets,
+                                 MPI_ORDER_FORTRAN, // For HIP programming
+                                 mtype,
+                                 &subarray_type);
+        MPI_Type_commit(&subarray_type);
+        subarrays[i] = subarray_type;
+    }
 
-    MPI_Type_create_subarray(2, // # of dims
-                             sizes,
-                             sub_sizes,
-                             start_offsets,
-                             MPI_ORDER_C,
-                             mtype,
-                             &strided_type);
-    MPI_Type_commit(&strided_type);
+    // Each rank sends/recvs from each rank
+    std::vector<int> counts(num_ranks);
+    std::fill(counts.begin(), counts.end(), num_ranks);
+    // Let subarray handle displacements, so set to 0
+    std::vector<int> displs(num_ranks);
+    std::fill(displs.begin(), displs.end(), 0);
 
     GPUTimer timer;
     timer.tick();
 
-    // Each rank transfers a full "sub_block" or brick of data
-    // to perform a block transpose
-    const int alltoall_count = sub_block_length * sub_block_length;
-    int       ret            = MPI_Alltoall(in_buf.data(),
-                           alltoall_count,
-                           strided_type,
-                           out_buf.data(),
-                           alltoall_count,
-                           strided_type,
-                           MPI_COMM_WORLD);
+    // Each rank transfers a "sub_block" or brick of data
+    // to each rank to perform a block transpose
+    int ret = MPI_Alltoallw(in_buf.data(),
+                            counts.data(), // 0,0,0,...,0
+                            displs.data(), // 0,0,0,...,0
+                            subarrays.data(), // types for block 1, block 2,..., block {num_rank}.
+                            out_buf.data(),
+                            counts.data(),
+                            displs.data(),
+                            subarrays.data(),
+                            MPI_COMM_WORLD);
     MPI_CHECK(ret, rank);
 
     timer.tock();
 
-    MPI_Type_free(&strided_type);
+    for(auto& type : subarrays)
+        MPI_Type_free(&type);
 
     return timer.elapsed();
 }

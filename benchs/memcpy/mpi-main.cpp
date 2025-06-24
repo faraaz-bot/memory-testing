@@ -203,8 +203,8 @@ int main(int argc, char* argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm comm = MPI_COMM_WORLD;
     MPI_Comm_set_errhandler(comm, MPI_ERRORS_ARE_FATAL);
-    int mpi_rank = 0;
-    int mp_size  = 0;
+    int mpi_rank = -1;
+    int mp_size  = -1;
 
     MPI_Comm_rank(comm, &mpi_rank);
     MPI_Comm_size(comm, &mp_size);
