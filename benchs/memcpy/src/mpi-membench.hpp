@@ -19,9 +19,6 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
 
     const int N                = static_cast<int>(ctx.N);
     const int sub_block_length = ctx.N / num_ranks;
-    const int buf_size         = static_cast<int>(in_buf.size()); // size of buf per device/rank
-    const int elems_per_row    = ctx.N;
-    const int elems_per_col    = sub_block_length;
 
     // Setup MPI subarray for each block to be transferred
     const int                 sizes[2]     = {N, N / num_ranks}; // gpubuf dims
@@ -43,9 +40,10 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
         subarrays[i] = subarray_type;
     }
 
-    // Each rank sends/recvs from each rank
+    // Each rank sends/recvs a block from each rank
     std::vector<int> counts(num_ranks);
     std::fill(counts.begin(), counts.end(), 1);
+
     // Let subarray handle displacements, so set to 0
     std::vector<int> displs(num_ranks);
     std::fill(displs.begin(), displs.end(), 0);
@@ -72,16 +70,4 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
         MPI_Type_free(&type);
 
     return timer.elapsed();
-}
-
-// Mirror of local_transpose kernel using GPU-aware MPI instead
-template <typename Tfloat>
-float mpi_local_transpose(const benchmark_context& ctx,
-                          gpubuf<Tfloat>&          in_buf,
-                          gpubuf<Tfloat>&          out_buf)
-{
-    float elapsed = 0.f;
-    int   rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Datatype mtype = get_mpi_type(sizeof(Tfloat));
 }
