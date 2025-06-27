@@ -45,7 +45,7 @@ float mpi_copy(const benchmark_context& ctx, gpubuf<Tfloat>& in_buf, gpubuf<Tflo
 
     // Each rank sends/recvs from each rank
     std::vector<int> counts(num_ranks);
-    std::fill(counts.begin(), counts.end(), num_ranks);
+    std::fill(counts.begin(), counts.end(), 1);
     // Let subarray handle displacements, so set to 0
     std::vector<int> displs(num_ranks);
     std::fill(displs.begin(), displs.end(), 0);
