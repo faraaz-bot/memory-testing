@@ -168,6 +168,8 @@ void run_benchmark(benchmark::State&                                            
 
     state.SetIterationTime(total_ms / 1000.f);
     double bytesProcessed = trials * state.iterations() * N * N * sizeof(T);
+    if(bench_name.find("+Transpose") != std::string::npos)
+        bytesProcessed *= 2;
     state.counters["Throughput (GB/s)"]
         = benchmark::Counter(bytesProcessed / (1024 * 1024 * 1024), benchmark::Counter::kIsRate);
 
