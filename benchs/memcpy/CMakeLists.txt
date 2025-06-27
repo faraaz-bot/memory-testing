@@ -57,11 +57,13 @@ target_link_libraries(membench benchmark::benchmark)
 
 add_executable(test-membench test/membench-test.cpp)
 target_link_libraries(test-membench hip::host hip::device GTest::gtest_main)
+target_compile_options(test-membench PRIVATE -Wall)
 include(GoogleTest)
 
 if(ENABLE_MPI OR ENABLE_CRAY_MPI)
     find_package(MPI REQUIRED)
     add_executable(mpi-membench mpi-main.cpp src/mpi-membench.hpp)
+    target_compile_options(mpi-membench PRIVATE -Wall)
     add_compile_definitions(MPI_ENABLED) 
 endif()
 
