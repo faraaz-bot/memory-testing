@@ -187,7 +187,8 @@ void add_benchmarks(std::vector<benchmark::internal::Benchmark*>& benchmarks,
                     const std::set<std::string>&                  enabled_benchmarks)
 {
     // Add benchmarks here
-    std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks = {{"mpiCopy", mpi_copy<T>}};
+    std::unordered_map<std::string, benchmark_fn<T>> all_benchmarks
+        = {{"mpiCopy", mpi_copy<T>}, {"mpiCopy+Transpose", mpi_copy_transpose<T>}};
 
     bool run_all = enabled_benchmarks.count("all");
     for(const auto& kv : all_benchmarks)
@@ -213,7 +214,7 @@ int main(int argc, char* argv[])
         throw std::runtime_error("Non-positive MPI rank count detected!");
 
     // Note: also edit map in add_benchmarks() if editing this set
-    std::set<std::string> valid_benchmarks = {"all", "mpiCopy"};
+    std::set<std::string> valid_benchmarks = {"all", "mpiCopy", "mpiCopy+Transpose"};
 
     // Parse args
     CLI::App app{"Memcpy bench"};

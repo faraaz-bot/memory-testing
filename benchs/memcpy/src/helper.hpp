@@ -82,6 +82,8 @@ public:
         : N(N_)
     {
         HIP_CHECK(hipMalloc(&buf, sizeof(Tfloat) * N));
+        HIP_CHECK(hipMemset(buf, 0, sizeof(Tfloat) * N));
+        HIP_CHECK(hipDeviceSynchronize());
     }
 
     ~gpubuf()
