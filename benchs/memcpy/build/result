@@ -1,4 +1,5 @@
-2025-06-30T17:25:40-04:00
+ffaraazm@ctr-cx66-mi300x-02:~/rocFFT-misc/benchs/memcpy/build$ ./membench -n 1024 -g 4 -t 20 # Do 20 trials on 1024x1024 matrix, with 4 GPUs
+2025-06-30T17:35:16-04:00
 Running ./membench
 Run on (384 X 3707.81 MHz CPU s)
 CPU Caches:
@@ -6,17 +7,17 @@ CPU Caches:
   L1 Instruction 32 KiB (x192)
   L2 Unified 1024 KiB (x192)
   L3 Unified 32768 KiB (x24)
-Load Average: 0.63, 0.44, 0.37
-***WARNING*** CPU scaling is enabled, the benchmark real time measurements may be noisy and wil>
+Load Average: 0.02, 0.12, 0.23
+***WARNING*** CPU scaling is enabled, the benchmark real time measurements may be noisy and will incur extra overhead.
 ***WARNING*** Library was built as DEBUG. Timings may be affected.
------------------------------------------------------------------------------------------------>
-Benchmark                                    Time             CPU   Iterations Device Count Dim>
------------------------------------------------------------------------------------------------>
-naiveCopy+Transpose/manual_time          0.043 s         0.048 s             1            4    >
-naiveCopy/manual_time                    0.037 s         0.039 s             1            4    >
-memcpy2DAsync+Transpose/manual_time      0.004 s         0.009 s             1            4    >
-memcpy2DAsync/manual_time                0.009 s         0.011 s             1            4    >
-memcpy2D+Transpose/manual_time           0.004 s         0.009 s             1            4    >
-memcpy2D/manual_time                     0.003 s         0.005 s             1            4    >
-localTranspose/manual_time               0.001 s         0.004 s             1            4    >
-ffaraazm@ctr-cx66-mi300x-02:~/rocFFT-misc/benchs/memcpy/build$
+-------------------------------------------------------------------------------------------------------------------------------
+Benchmark                                    Time             CPU   Iterations Device Count Dimension (N x N) Throughput (GB/s)
+-------------------------------------------------------------------------------------------------------------------------------
+naiveCopy+Transpose/manual_time           2.29 s          2.32 s             1            4            1.024k       0.0680978/s
+naiveCopy/manual_time                     2.28 s          2.30 s             1            4            1.024k       0.0342113/s
+memcpy2DAsync+Transpose/manual_time      0.006 s         0.029 s             1            4            1.024k         24.9803/s
+memcpy2DAsync/manual_time                0.009 s         0.028 s             1            4            1.024k         8.86662/s
+memcpy2D+Transpose/manual_time           0.006 s         0.029 s             1            4            1.024k         24.8065/s
+memcpy2D/manual_time                     0.004 s         0.024 s             1            4            1.024k         18.4429/s
+localTranspose/manual_time               0.002 s         0.022 s             1            4            1.024k         36.6762/s
+ffaraazm@ctr-cx66-mi300x-02:~/rocFFT-misc/benchs/memcpy/build$ 
