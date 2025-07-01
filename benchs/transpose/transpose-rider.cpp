@@ -25,7 +25,7 @@
 namespace po = boost::program_options;
 
 #include <hip/hip_ext.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <hip/hip_runtime_api.h>
 
 #ifdef TRANSPOSE_RUNTIME_COMPILE

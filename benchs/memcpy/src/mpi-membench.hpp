@@ -1,6 +1,6 @@
 #include "helper.hpp"
 #include "mpi-helper.hpp"
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <iomanip>
 #include <iostream>
 #include <mpi.h>

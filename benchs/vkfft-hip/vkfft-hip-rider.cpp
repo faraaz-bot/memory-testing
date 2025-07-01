@@ -4,7 +4,7 @@
 #define __HIP_PLATFORM_HCC__
 #endif
 #include <hip/hip_complex.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <hip/hip_runtime_api.h>
 #include <hip/hiprtc.h>
 

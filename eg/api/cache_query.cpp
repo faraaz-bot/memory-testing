@@ -1,5 +1,5 @@
 #include <array>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <hsa/hsa.h>
 #include <iostream>
 #include <vector>

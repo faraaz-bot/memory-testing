@@ -7,7 +7,7 @@
 namespace po = boost::program_options;
 
 #include <hip/hiprtc.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 
 #define XSTR(x) STR(x)
 #define STR(x) #x

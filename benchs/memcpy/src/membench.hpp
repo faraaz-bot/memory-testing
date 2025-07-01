@@ -1,6 +1,6 @@
 #include "helper.hpp"
 #include <cstdint>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <vector>
 
 // Constants for transpose tiling

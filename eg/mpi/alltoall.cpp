@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <mpi.h>
 #include <vector>
 #include <iostream>

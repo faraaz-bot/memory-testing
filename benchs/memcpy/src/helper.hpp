@@ -1,7 +1,7 @@
 #include <cmath>
 #include <cstring>
 #include <ctime>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>

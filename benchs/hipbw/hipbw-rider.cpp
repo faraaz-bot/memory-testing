@@ -27,7 +27,7 @@ namespace po = boost::program_options;
 #include "clients/fft_params.h"
 #include "shared/gpubuf.h"
 
-#include<hip/hip_runtime.h>
+#include"hip_to_cuda.h"
 #include<hip/hip_runtime_api.h>
 
 

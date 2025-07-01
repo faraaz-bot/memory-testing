@@ -1,7 +1,7 @@
 // OMPI_CC=hipcc mpicc -o ./gpu-aware ./gpu-aware.cpp
 
 #include <stdio.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <mpi.h>
 #include <vector>
 #include <iostream>

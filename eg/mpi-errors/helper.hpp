@@ -1,4 +1,4 @@
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 
 #define HIP_CHECK(cmd)                                                                         \
     do                                                                                         \

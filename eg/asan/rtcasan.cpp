@@ -6,7 +6,7 @@
 namespace po = boost::program_options;
 
 #include <hip/hiprtc.h>
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 
 static constexpr auto kernelstr{
     R"(

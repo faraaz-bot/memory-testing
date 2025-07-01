@@ -1,8 +1,8 @@
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 
 #ifndef COMMON_H
 #define COMMON_H
-#include <hip/hip_runtime.h>
+#include "hip_to_cuda.h"
 #include <hip/hip_vector_types.h>
 
 #ifdef WIN32
