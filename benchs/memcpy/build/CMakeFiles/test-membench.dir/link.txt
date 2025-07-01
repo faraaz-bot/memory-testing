@@ -1,1 +1,0 @@
-/opt/rocm/bin/amdclang++ "CMakeFiles/test-membench.dir/test/membench-test.cpp.o" -o test-membench  -Wl,-rpath,/opt/rocm/lib lib/libgtest_main.a /opt/rocm/lib/libamdhip64.so.6.5.60500 --hip-link --offload-arch=gfx942 lib/libgtest.a
