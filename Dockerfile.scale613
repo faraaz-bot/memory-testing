@@ -1,0 +1,50 @@
+# Dockerfile.scale613  ─ ROCm 6.3.1 + SCALE unstable
+# ---------------------------------------------------
+
+FROM rocm/dev-ubuntu-24.04:6.3.1-complete
+
+ARG CUSTOMER_NAME
+ARG CUSTOMER_PASSWORD
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── basic build utilities ───────────────────────────
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential cmake git wget ca-certificates gnupg && \
+    rm -rf /var/lib/apt/lists/*
+
+# ── add SCALE repo & install scale-unstable ─────────
+RUN printf 'machine unstable-nonfree-pkgs.scale-lang.com\nlogin %s\npassword %s\n' \
+        "$CUSTOMER_NAME" "$CUSTOMER_PASSWORD" > /etc/apt/auth.conf.d/scale.conf && \
+    chmod 600 /etc/apt/auth.conf.d/scale.conf && \
+    wget --quiet --http-user="$CUSTOMER_NAME" --http-password="$CUSTOMER_PASSWORD" \
+         https://unstable-nonfree-pkgs.scale-lang.com/${CUSTOMER_NAME}/deb/dists/noble/main/binary-all/scale-repos.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        -o Dpkg::Options::="--force-confdef"  \
+        -o Dpkg::Options::="--force-confold"  \
+        -o Dpkg::Options::="--force-overwrite" \
+        ./scale-repos.deb && \
+    rm scale-repos.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        -o Dpkg::Options::="--force-confdef"  \
+        -o Dpkg::Options::="--force-confold"  \
+        -o Dpkg::Options::="--force-overwrite" \
+        scale-unstable && \
+    rm -rf /var/lib/apt/lists/*
+
+# ── env vars ────────────────────────────────────────
+ENV PATH=/opt/scale/bin:/opt/rocm/bin:$PATH \
+    LD_LIBRARY_PATH=/opt/scale/lib:$LD_LIBRARY_PATH
+
+# ── GPU-access groups ───────────────────────────────
+RUN groupadd -f render && groupadd -f video && usermod -aG render,video root
+
+WORKDIR /workspace
+COPY . /workspace
+
+# use bash for later interactive steps
+SHELL ["/bin/bash", "-c"]
+
+CMD ["bash"]
