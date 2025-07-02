@@ -3,7 +3,7 @@
 //======================================================================
 //  System / third-party headers – hip_to_cuda first
 //======================================================================
-#include "hip_to_cuda.h"          // Scale shim – keep at very top
+#include "hip_to_cuda.h"          // Scale shim – keep at top
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -19,16 +19,16 @@
 //  HIP_CHECK – guard against double definition
 //======================================================================
 #ifndef HIP_CHECK
-#define HIP_CHECK(cmd)                                                                         \
-    do                                                                                         \
-    {                                                                                          \
-        hipError_t _e = (cmd);                                                                 \
-        if(_e != hipSuccess)                                                                   \
-        {                                                                                      \
-            std::cerr << "HIP error (" << hipGetErrorString(_e)                                \
-                      << ") at " << __FILE__ << ':' << __LINE__ << '\n';                       \
-            std::exit(EXIT_FAILURE);                                                           \
-        }                                                                                      \
+#define HIP_CHECK(cmd)                                                         \
+    do                                                                          \
+    {                                                                           \
+        hipError_t _e = (cmd);                                                  \
+        if(_e != hipSuccess)                                                    \
+        {                                                                       \
+            std::cerr << "HIP error (" << hipGetErrorString(_e)                 \
+                      << ") at " << __FILE__ << ':' << __LINE__ << '\n';        \
+            std::exit(EXIT_FAILURE);                                            \
+        }                                                                       \
     } while(0)
 #endif
 
@@ -37,7 +37,7 @@
 //======================================================================
 inline size_t ceildiv(size_t n, size_t d)    { return (n + d - 1) / d; }
 inline bool   is_power_of_two(size_t v)      { return v && !(v & (v-1)); }
-using std::min;  using std::max;                               // avoid custom overloads
+using std::min;  using std::max;                             // avoid custom overloads
 
 //======================================================================
 //  Public enums
@@ -80,6 +80,11 @@ public:
         HIP_CHECK(hipMalloc(&ptr_, sizeof(T)*N_));
         HIP_CHECK(hipMemset(ptr_, 0, sizeof(T)*N_));
     }
+    gpubuf(const gpubuf&) = delete;
+    gpubuf& operator=(const gpubuf&) = delete;
+    gpubuf(gpubuf&& other) noexcept : N_(other.N_), ptr_(other.ptr_) { other.ptr_ = nullptr; }
+    gpubuf& operator=(gpubuf&&) = delete;
+
     ~gpubuf(){ if(ptr_) HIP_CHECK(hipFree(ptr_)); }
 
     T*       data()       { return ptr_; }
@@ -90,54 +95,51 @@ public:
 template <typename T>
 class gpubuf_vec
 {
-    size_t   N_{};          // matrix dimension (N×N)
-    size_t   ngpus_{};      // number of GPUs
-    T**      dev_ptrs_{};   // device-resident pointer array
+    size_t   N_{}; size_t ngpus_{};  T** buf_{}; T** host_ptrs_{};  // host shadow
 
 public:
     gpubuf_vec() = default;
-
     gpubuf_vec(size_t N, size_t ngpus) : N_(N), ngpus_(ngpus)
     {
         HIP_CHECK(hipSetDevice(0));
-        HIP_CHECK(hipMalloc(&dev_ptrs_, sizeof(T*) * ngpus_));
+        HIP_CHECK(hipMalloc(&buf_, sizeof(T*)*ngpus_));
+        host_ptrs_ = static_cast<T**>(std::malloc(sizeof(T*)*ngpus_));
+        size_t per = N_*N_ / ngpus_;
 
-        size_t per = N_ * N_ / ngpus_;
-        for(int g = 0; g < static_cast<int>(ngpus_); ++g)
+        for(int g=0; g<(int)ngpus_; ++g)
         {
             HIP_CHECK(hipSetDevice(g));
-            HIP_CHECK(hipMalloc(&dev_ptrs_[g], per * sizeof(T)));
-            HIP_CHECK(hipMemset(dev_ptrs_[g], 0, per * sizeof(T)));
+            HIP_CHECK(hipMalloc(&buf_[g], per*sizeof(T)));
+            HIP_CHECK(hipMemset(buf_[g], 0, per*sizeof(T)));
+            host_ptrs_[g] = buf_[g];
         }
         HIP_CHECK(hipSetDevice(0));
     }
+    gpubuf_vec(const gpubuf_vec&) = delete;
+    gpubuf_vec& operator=(const gpubuf_vec&) = delete;
+    gpubuf_vec(gpubuf_vec&&) = delete;
+    gpubuf_vec& operator=(gpubuf_vec&&) = delete;
 
     ~gpubuf_vec()
     {
-        if(!dev_ptrs_) return;
-        for(int g = 0; g < static_cast<int>(ngpus_); ++g)
+        if(!buf_) return;
+        for(int g=0; g<(int)ngpus_; ++g)
         {
             HIP_CHECK(hipSetDevice(g));
-            HIP_CHECK(hipFree(dev_ptrs_[g]));
+            HIP_CHECK(hipFree(buf_[g]));
         }
-        HIP_CHECK(hipFree(dev_ptrs_));
+        HIP_CHECK(hipFree(buf_));
+        std::free(host_ptrs_);
     }
 
-    //------------------------------------------------------------------
-    //  accessors
-    //------------------------------------------------------------------
-    T*       operator[](int i)       { return dev_ptrs_[i]; }
-    const T* operator[](int i) const { return dev_ptrs_[i]; }
+    T*       operator[](int i)       { return host_ptrs_[i]; }
+    const T* operator[](int i) const { return host_ptrs_[i]; }
 
-    T**       data()       { return dev_ptrs_; }
-    const T** data() const { return dev_ptrs_; }
-
-    /* host-side mirror (identical pointer value, but const-qualified) */
-    T* const* host_ptrs()       { return dev_ptrs_; }
-    T* const* host_ptrs() const { return dev_ptrs_; }
+    T**       data()       { return host_ptrs_; }
+    const T** data() const { return host_ptrs_; }
 
     size_t length() const { return N_; }
-    size_t size()   const { return N_ * N_ / ngpus_; }
+    size_t size()   const { return N_*N_/ngpus_; }
 };
 
 //======================================================================
@@ -149,12 +151,20 @@ struct GPUTimer
     GPUTimer(){ HIP_CHECK(hipEventCreate(&start)); HIP_CHECK(hipEventCreate(&stop)); }
     ~GPUTimer(){ HIP_CHECK(hipEventDestroy(start)); HIP_CHECK(hipEventDestroy(stop)); }
 
-    void  tick()          { HIP_CHECK(hipEventRecord(start,0)); }
-    void  tock()          { HIP_CHECK(hipEventRecord(stop,0));  HIP_CHECK(hipEventSynchronize(stop)); }
-    float elapsed_ms()    const { float ms=0; HIP_CHECK(hipEventElapsedTime(&ms,start,stop)); return ms; }
-
+    void tick(){ HIP_CHECK(hipEventRecord(start,0)); }
+    void tock(){ HIP_CHECK(hipEventRecord(stop,0));  HIP_CHECK(hipEventSynchronize(stop)); }
+    float elapsed_ms() const
+    {
+        float ms=0; HIP_CHECK(hipEventElapsedTime(&ms,start,stop)); return ms;
+    }
     static void sync_all(size_t g)
-    { for(size_t i=0;i<g;++i){ HIP_CHECK(hipSetDevice(i)); HIP_CHECK(hipDeviceSynchronize()); } }
+    {
+        for(size_t i=0;i<g;++i)
+        {
+            HIP_CHECK(hipSetDevice(i));
+            HIP_CHECK(hipDeviceSynchronize());
+        }
+    }
 };
 
 //======================================================================
@@ -172,7 +182,7 @@ struct GPUTimer
 } while(0)
 
 //======================================================================
-//  CUDA / HIP kernels
+//  CUDA / HIP kernel – populate_array
 //======================================================================
 template <typename Tfloat>
 __global__ void populate_array(size_t N,
@@ -210,7 +220,7 @@ __global__ void populate_array(size_t N,
 }
 
 //======================================================================
-//  Host-side helpers (generate / assemble / verify / logging)
+//  Host helpers (generate / assemble / verify / logging)
 //======================================================================
 template <typename Tfloat>
 std::vector<Tfloat> generate(size_t N,size_t M,
@@ -233,11 +243,14 @@ std::vector<Tfloat> generate(size_t N,size_t M,
 }
 
 template <typename Tfloat>
-void assemble_output_to_host(size_t N,size_t ngpus,T* const* d,Tfloat* h)
+void assemble_output_to_host(size_t N,size_t ngpus,
+                             Tfloat* const* d,   // FIXED TYPE
+                             Tfloat*        h)
 {
     size_t per = N*N/ngpus;
     for(size_t g=0; g<ngpus; ++g)
-        HIP_CHECK(hipMemcpy(h+g*per, d[g], per*sizeof(Tfloat), hipMemcpyDeviceToHost));
+        HIP_CHECK(hipMemcpy(h + g*per, d[g],
+                            per*sizeof(Tfloat), hipMemcpyDeviceToHost));
 }
 
 template <typename Tfloat>
@@ -249,122 +262,3 @@ bool is_same_matrix(size_t N,const std::vector<Tfloat>& a,const std::vector<Tflo
 
 template <typename Tfloat>
 void print2d_host(size_t N,const std::vector<Tfloat>& v)
-{
-    std::cout<<"[\n";
-    for(size_t r=0;r<N;++r)
-    {
-        std::cout<<"  [ ";
-        for(size_t c=0;c<N;++c) std::cout<<std::setw(6)<<v[r*N+c]<<' ';
-        std::cout<<"]\n";
-    }
-    std::cout<<"]\n";
-}
-
-template <typename Tfloat>
-void log_matrices(const benchmark_context& ctx,
-                  const std::vector<Tfloat>& original_input,
-                  gpubuf_vec<Tfloat>&        device_output,
-                  std::vector<Tfloat>&       assembled_output)
-{
-    assemble_output_to_host<Tfloat>(ctx.N, ctx.ngpus,
-                                    device_output.host_ptrs(), assembled_output.data());
-
-    std::cout << "Original Input:\n";
-    print2d_host<Tfloat>(ctx.N, original_input);
-
-    std::cout << "------------------------\nDevice Side Computation:\n";
-    print2d_host<Tfloat>(ctx.N, assembled_output);
-}
-
-//======================================================================
-//  I/O helpers (setup / reset / teardown)
-//======================================================================
-template <typename Tfloat>
-void setup(size_t N,size_t ngpus,
-           gpubuf_vec<Tfloat>& in,
-           gpubuf_vec<Tfloat>& out,
-           const std::vector<Tfloat>& h,
-           std::vector<hipStream_t>& streams)
-{
-    size_t per = N*N/ngpus;
-    in   = gpubuf_vec<Tfloat>(N,ngpus);
-    out  = gpubuf_vec<Tfloat>(N,ngpus);
-    streams.resize(ngpus*ngpus);
-
-    for(size_t g=0; g<ngpus; ++g)
-    {
-        HIP_CHECK(hipSetDevice(g));
-        HIP_CHECK(hipMemcpy(in[g], h.data()+g*per,
-                            per*sizeof(Tfloat), hipMemcpyHostToDevice));
-        for(size_t s=0;s<ngpus;++s) HIP_CHECK(hipStreamCreate(&streams[g*ngpus+s]));
-    }
-    HIP_CHECK(hipSetDevice(0));
-}
-
-template <typename Tfloat>
-void reset(size_t N,size_t ngpus,
-           gpubuf_vec<Tfloat>& out,
-           std::vector<Tfloat>& h)
-{
-    size_t per=N*N/ngpus;
-    for(size_t g=0;g<ngpus;++g)
-    {
-        HIP_CHECK(hipSetDevice(g));
-        HIP_CHECK(hipMemset(out[g],0,per*sizeof(Tfloat)));
-    }
-    std::fill(h.begin(),h.end(),0);
-}
-
-template <typename Tfloat>
-void teardown(size_t ngpus,
-              gpubuf_vec<Tfloat>& in,
-              gpubuf_vec<Tfloat>& out,
-              std::vector<hipStream_t>& streams)
-{
-    for(size_t g=0; g<ngpus; ++g)
-    {
-        HIP_CHECK(hipSetDevice(g));
-        for(size_t s=0;s<ngpus;++s) HIP_CHECK(hipStreamDestroy(streams[g*ngpus+s]));
-    }
-    streams.clear();
-    in  = gpubuf_vec<Tfloat>();
-    out = gpubuf_vec<Tfloat>();
-}
-
-//======================================================================
-//  Device-side print helper (for verbose debugging)
-//======================================================================
-template <typename Tfloat>
-__global__ void print2d(int rows,int cols,const Tfloat* d)
-{
-    printf("[\n");
-    for(int r=0;r<rows;++r)
-    {
-        printf("  [ ");
-        for(int c=0;c<cols;++c) printf("%6.3f ", (double)d[r*cols+c]);
-        printf("]\n");
-    }
-    printf("]\n");
-}
-
-//======================================================================
-//  CLI lexical cast helpers
-//======================================================================
-inline bool lexical_cast(const std::string& w, precision& p)
-{
-    if(w=="single"||w=="0")            p=precision::p_single;
-    else if(w=="double"||w=="1")       p=precision::p_double;
-    else if(w=="c_single"||w=="2")     p=precision::p_complex_single;
-    else if(w=="c_double"||w=="3")     p=precision::p_complex_double;
-    else throw std::runtime_error("invalid precision");
-    return true;
-}
-inline bool lexical_cast(const std::string& w, generator& g)
-{
-    if(w=="random"||w=="0")        g=gen_random;
-    else if(w=="ordered"||w=="1")  g=gen_ordered;
-    else throw std::runtime_error("invalid generator");
-    return true;
-}
-
-#endif /* MEMBENCH_HELPER_HPP */
