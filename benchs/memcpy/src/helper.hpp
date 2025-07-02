@@ -1,10 +1,5 @@
 #pragma once
-/*─────────────────────────────────────────────────────────────
- * helper.hpp  –  host / device utilities for membench
- *  (single-GPU version, patched for Scale)
- *
- *  – pointer list now lives in host memory (malloc / free)
- *─────────────────────────────────────────────────────────────*/
+
 
 #include <algorithm>
 #include <cmath>
