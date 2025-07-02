@@ -8,7 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>     // malloc / free   <-- CHANGED
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -83,26 +83,24 @@ public:
 };
 
 /* =====================================================================
- *  gpubuf_vec  –  pointer-table now lives in host RAM  (SEGFAULT FIX)
+ *  gpubuf_vec  –  host-side pointer table  (SEGFAULT FIX)
  * ===================================================================*/
 template <typename T>
 class gpubuf_vec
 {
     size_t   N_{};        // matrix dimension
     size_t   ngpus_{};    // number of GPUs
-    T**      buf_{};      // host array of device pointers   <-- CHANGED
+    T**      buf_{};      // host array of device pointers
 
 public:
     gpubuf_vec() = default;
 
     gpubuf_vec(size_t N, size_t ngpus) : N_(N), ngpus_(ngpus)
     {
-        /* host-allocate the pointer table */
         buf_ = static_cast<T**>(std::malloc(sizeof(T*) * ngpus_));
         if(!buf_) throw std::bad_alloc();
 
         size_t per = N_ * N_ / ngpus_;
-
         for(int g=0; g<(int)ngpus_; ++g)
         {
             HIP_CHECK(hipSetDevice(g));
@@ -119,7 +117,7 @@ public:
             HIP_CHECK(hipSetDevice(g));
             HIP_CHECK(hipFree(buf_[g]));
         }
-        std::free(buf_);                         // <-- CHANGED
+        std::free(buf_);
     }
 
     T*       operator[](int i)       { return buf_[i]; }
@@ -132,7 +130,7 @@ public:
 };
 
 //======================================================================
-//  GPUTimer   (unchanged)
+//  GPUTimer
 //======================================================================
 struct GPUTimer
 {
@@ -153,11 +151,215 @@ struct GPUTimer
     }
 };
 
-/* --------------------------------------------------------------------
- *  =====  everything below here is IDENTICAL to your previous file  ===
- *  (kernels, generate(), assemble, verify, setup/reset/teardown …)
- * ------------------------------------------------------------------ */
+//======================================================================
+//  Forward declarations (visible to main.cpp before definitions)
+//======================================================================
+template <typename T> void setup   (size_t,size_t,
+                                    gpubuf_vec<T>&,gpubuf_vec<T>&,
+                                    const std::vector<T>&,std::vector<hipStream_t>&);
+template <typename T> void reset   (size_t,size_t,gpubuf_vec<T>&,std::vector<T>&);
+template <typename T> void teardown(size_t,gpubuf_vec<T>&,gpubuf_vec<T>&,std::vector<hipStream_t>&);
+template <typename T> std::vector<T> generate(size_t,size_t,generator,T,T);
 
-/* …  (keep the rest of the file exactly as you already have it) … */
+//======================================================================
+//  xorwow PRNG kernel
+//======================================================================
+#define XORWOW_NEXT(states,maxv,minv,val)            do {                    \
+    uint32_t t__ = states[4];                                               \
+    uint32_t s__ = states[0];                                               \
+    states[4]=states[3]; states[3]=states[2]; states[2]=states[1]; states[1]=s__; \
+    t__ ^= t__ >> 2; t__ ^= t__ << 1; t__ ^= s__ ^ (s__ << 4);              \
+    states[0]=t__; states[5]+=362437u;                                      \
+    uint32_t tmp__ = t__ + states[5];                                       \
+    val = minv + (static_cast<Tfloat>(tmp__)*(maxv-minv)) /                 \
+                 static_cast<Tfloat>(0xFFFFFFFFu);                          \
+} while(0)
+
+template <typename Tfloat>
+__global__ void populate_array(size_t N, Tfloat* out,
+                               Tfloat minv, Tfloat maxv,
+                               bool rnd, size_t seed)
+{
+    size_t items = N;
+    size_t start = threadIdx.x*items + blockIdx.x*items*blockDim.x;
+
+    if(rnd)
+    {
+        uint32_t st[6] = {
+            static_cast<uint32_t>(seed ^ start),
+            static_cast<uint32_t>((seed>>1) ^ (start+1)),
+            static_cast<uint32_t>((seed>>2) ^ (start+2)),
+            static_cast<uint32_t>((seed>>3) ^ (start+3)),
+            static_cast<uint32_t>((seed>>4) ^ (start+4)),
+            static_cast<uint32_t>(seed + start)
+        };
+        Tfloat dummy{};
+        for(int i=0;i<5;++i) XORWOW_NEXT(st,maxv,minv,dummy);
+        for(size_t i=0;i<items && start+i<N*N;++i)
+            XORWOW_NEXT(st,maxv,minv,out[start+i]);
+    }
+    else
+    {
+        for(size_t i=0;i<items && start+i<N*N;++i)
+            out[start+i] = static_cast<Tfloat>(start+i);
+    }
+}
+
+//======================================================================
+//  Host helpers  (generate / assemble / verify / logging)
+//======================================================================
+template <typename Tfloat>
+std::vector<Tfloat> generate(size_t N,size_t M,
+                             generator g,Tfloat mn,Tfloat mx)
+{
+    std::vector<Tfloat> h(N*M);
+    Tfloat* d=nullptr;
+    HIP_CHECK(hipMalloc(&d,sizeof(Tfloat)*N*M));
+
+    size_t threads = std::min<size_t>(N,1024);
+    size_t blocks  = ceildiv(N*M,threads*N);
+
+    auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+
+    populate_array<<<blocks,threads>>>(N,d,mn,mx,g==gen_random,seed);
+    HIP_CHECK(hipMemcpy(h.data(),d,sizeof(Tfloat)*N*M,hipMemcpyDeviceToHost));
+    HIP_CHECK(hipFree(d));
+    return h;
+}
+
+template <typename Tfloat>
+void assemble_output_to_host(size_t N,size_t ngpus,Tfloat** d,Tfloat* h)
+{
+    size_t per = N*N/ngpus;
+    for(size_t g=0; g<ngpus; ++g)
+        HIP_CHECK(hipMemcpy(h+g*per, d[g], per*sizeof(Tfloat), hipMemcpyDeviceToHost));
+}
+
+template <typename Tfloat>
+bool is_same_matrix(size_t N,const std::vector<Tfloat>& a,const std::vector<Tfloat>& b)
+{
+    for(size_t i=0;i<N*N;++i) if(a[i]!=b[i]) return false;
+    return true;
+}
+
+template <typename Tfloat>
+void print2d_host(size_t N,const std::vector<Tfloat>& v)
+{
+    std::cout<<"[\n";
+    for(size_t r=0;r<N;++r)
+    {
+        std::cout<<"  [ ";
+        for(size_t c=0;c<N;++c) std::cout<<std::setw(6)<<v[r*N+c]<<' ';
+        std::cout<<"]\n";
+    }
+    std::cout<<"]\n";
+}
+
+template <typename Tfloat>
+void log_matrices(const benchmark_context& ctx,
+                  const std::vector<Tfloat>& original_input,
+                  gpubuf_vec<Tfloat>&        device_output,
+                  std::vector<Tfloat>&       assembled_output)
+{
+    assemble_output_to_host<Tfloat>(ctx.N, ctx.ngpus,
+                                    device_output.data(), assembled_output.data());
+
+    std::cout << "Original Input:\n";
+    print2d_host<Tfloat>(ctx.N, original_input);
+
+    std::cout << "------------------------\nDevice Side Computation:\n";
+    print2d_host<Tfloat>(ctx.N, assembled_output);
+}
+
+//======================================================================
+//  I/O helpers (setup / reset / teardown)
+//======================================================================
+template <typename Tfloat>
+void setup(size_t N,size_t ngpus,
+           gpubuf_vec<Tfloat>& in,
+           gpubuf_vec<Tfloat>& out,
+           const std::vector<Tfloat>& h,
+           std::vector<hipStream_t>& streams)
+{
+    size_t per = N*N/ngpus;
+    in   = gpubuf_vec<Tfloat>(N,ngpus);
+    out  = gpubuf_vec<Tfloat>(N,ngpus);
+    streams.resize(ngpus*ngpus);
+
+    for(size_t g=0; g<ngpus; ++g)
+    {
+        HIP_CHECK(hipSetDevice(g));
+        HIP_CHECK(hipMemcpy(in[g], h.data()+g*per, per*sizeof(Tfloat), hipMemcpyHostToDevice));
+        for(size_t s=0;s<ngpus;++s) HIP_CHECK(hipStreamCreate(&streams[g*ngpus+s]));
+    }
+    HIP_CHECK(hipSetDevice(0));
+}
+
+template <typename Tfloat>
+void reset(size_t N,size_t ngpus,
+           gpubuf_vec<Tfloat>& out,
+           std::vector<Tfloat>& h)
+{
+    size_t per=N*N/ngpus;
+    for(size_t g=0;g<ngpus;++g)
+    {
+        HIP_CHECK(hipSetDevice(g));
+        HIP_CHECK(hipMemset(out[g],0,per*sizeof(Tfloat)));
+    }
+    std::fill(h.begin(),h.end(),0);
+}
+
+template <typename Tfloat>
+void teardown(size_t ngpus,
+              gpubuf_vec<Tfloat>& in,
+              gpubuf_vec<Tfloat>& out,
+              std::vector<hipStream_t>& streams)
+{
+    for(size_t g=0; g<ngpus; ++g)
+    {
+        HIP_CHECK(hipSetDevice(g));
+        for(size_t s=0;s<ngpus;++s) HIP_CHECK(hipStreamDestroy(streams[g*ngpus+s]));
+    }
+    streams.clear();
+    in  = gpubuf_vec<Tfloat>();
+    out = gpubuf_vec<Tfloat>();
+}
+
+//======================================================================
+//  Device-side print helper (for verbose debugging)
+//======================================================================
+template <typename Tfloat>
+__global__ void print2d(int rows,int cols,const Tfloat* d)
+{
+    printf("[\n");
+    for(int r=0;r<rows;++r)
+    {
+        printf("  [ ");
+        for(int c=0;c<cols;++c) printf("%6.3f ", (double)d[r*cols+c]);
+        printf("]\n");
+    }
+    printf("]\n");
+}
+
+//======================================================================
+//  CLI lexical cast helpers
+//======================================================================
+inline bool lexical_cast(const std::string& w, precision& p)
+{
+    if(w=="single"||w=="0")            p=precision::p_single;
+    else if(w=="double"||w=="1")       p=precision::p_double;
+    else if(w=="c_single"||w=="2")     p=precision::p_complex_single;
+    else if(w=="c_double"||w=="3")     p=precision::p_complex_double;
+    else throw std::runtime_error("invalid precision");
+    return true;
+}
+inline bool lexical_cast(const std::string& w, generator& g)
+{
+    if(w=="random"||w=="0")        g=gen_random;
+    else if(w=="ordered"||w=="1")  g=gen_ordered;
+    else throw std::runtime_error("invalid generator");
+    return true;
+}
 
 #endif /* MEMBENCH_HELPER_HPP */
