@@ -4,6 +4,8 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(membench LANGUAGES CUDA CXX)
+find_package(GTest QUIET)
+find_package(TBB QUIET)
 
 # Make sure the CUDA toolkit shim injected by SCALE is visible
 find_package(CUDA REQUIRED)           # comes from scaleenv
