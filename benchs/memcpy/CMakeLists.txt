@@ -1,38 +1,72 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 
-# ── project & languages ────────────────────────────────────────────
-project(membench LANGUAGES CUDA CXX)
+# ──────────────────────────────────────────────────────────────
+#  Project & language setup
+# ──────────────────────────────────────────────────────────────
+project(membench LANGUAGES CXX CUDA)
 
-find_package(CUDA REQUIRED)
+# Make sure the CUDA language is really on
+enable_language(CUDA)
 
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_ARCHITECTURES native)
+# Tell CMake where the shim CUDA toolkit lives (set by `scaleenv`)
+set(CUDAToolkit_ROOT $ENV{CUDA_HOME})
+find_package(CUDAToolkit REQUIRED)        # creates CUDA::cudart, … targets
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# C++ / CUDA dialect
+set(CMAKE_CXX_STANDARD        17)
+set(CMAKE_CUDA_STANDARD       17)
+set(CMAKE_CXX_STANDARD_REQUIRED  ON)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-# ── include path for hip_to_cuda.h (repo root) ─────────────────────
-# CMAKE_CURRENT_LIST_DIR = .../benchs/memcpy
-include_directories(${CMAKE_CURRENT_LIST_DIR}/../..)   # => /workspace
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# ── Google Benchmark fetch (one-time; cached by CMake) ─────────────
+# ──────────────────────────────────────────────────────────────
+#  Google Benchmark dependency
+# ──────────────────────────────────────────────────────────────
 include(FetchContent)
 FetchContent_Declare(
   googlebenchmark
   GIT_REPOSITORY https://github.com/google/benchmark.git
   GIT_TAG        v1.9.1
 )
-set(BENCHMARK_ENABLE_TESTING OFF)
-set(BENCHMARK_ENABLE_INSTALL OFF)
 FetchContent_MakeAvailable(googlebenchmark)
 
-# ── source files for this benchmark ────────────────────────────────
+# ──────────────────────────────────────────────────────────────
+#  Sources
+#   – only the .cpp goes here; headers are pulled in automatically
+#   – mark it as CUDA so nvcc handles kernels sprinkled in headers
+# ──────────────────────────────────────────────────────────────
 add_executable(membench
     main.cpp
-    src/membench.hpp
-    src/helper.hpp
 )
 
-target_compile_options(membench PRIVATE -Wall)
-target_link_libraries(membench PRIVATE CUDA::cudart benchmark::benchmark)
+set_source_files_properties(main.cpp PROPERTIES LANGUAGE CUDA)
+
+# ──────────────────────────────────────────────────────────────
+#  Linking
+# ──────────────────────────────────────────────────────────────
+target_link_libraries(membench
+    PRIVATE
+        CUDA::cudart                # CUDA runtime from the shim
+        benchmark::benchmark        # Google Benchmark
+        Threads::Threads
+)
+
+# ──────────────────────────────────────────────────────────────
+#  Optional unit-test target
+# ──────────────────────────────────────────────────────────────
+enable_testing()
+
+add_executable(test-membench
+    test/membench-test.cpp
+)
+set_source_files_properties(test/membench-test.cpp PROPERTIES LANGUAGE CUDA)
+
+target_link_libraries(test-membench
+    PRIVATE
+        CUDA::cudart
+        benchmark::benchmark
+        Threads::Threads
+)
+
+add_test(NAME membench-test COMMAND test-membench)
