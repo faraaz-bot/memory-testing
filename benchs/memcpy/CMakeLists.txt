@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
 
+# ── project & languages ────────────────────────────────────────────
 project(membench LANGUAGES CUDA CXX)
 
-# CUDA tool-chain provided by SCALE
 find_package(CUDA REQUIRED)
+
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_ARCHITECTURES native)
 
@@ -11,8 +12,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# -------------------------------------------------------------------
-# Google Benchmark (pulled only once, even if other targets do the same)
+# ── include path for hip_to_cuda.h (repo root) ─────────────────────
+# CMAKE_CURRENT_LIST_DIR = .../benchs/memcpy
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../..)   # => /workspace
+
+# ── Google Benchmark fetch (one-time; cached by CMake) ─────────────
 include(FetchContent)
 FetchContent_Declare(
   googlebenchmark
@@ -23,10 +27,11 @@ set(BENCHMARK_ENABLE_TESTING OFF)
 set(BENCHMARK_ENABLE_INSTALL OFF)
 FetchContent_MakeAvailable(googlebenchmark)
 
-# -------------------------------------------------------------------
-# Source files for this benchmark
+# ── source files for this benchmark ────────────────────────────────
 add_executable(membench
-    ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+    main.cpp
+    src/membench.hpp
+    src/helper.hpp
 )
 
 target_compile_options(membench PRIVATE -Wall)
