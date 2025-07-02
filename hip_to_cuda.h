@@ -24,6 +24,11 @@
 #define hipEventRecord                cudaEventRecord
 #define hipEventSynchronize           cudaEventSynchronize
 #define hipGetErrorString             cudaGetErrorString
+#define hipDeviceSynchronize          cudaDeviceSynchronize
+#define hipEventDestroy               cuEventDestroy
+#define hipEventElapsedTime           cuEventElapsedTime
+#define hipStreamDestroy              cudaStreamDestroy
+
 
 /* simple CHECK macro—keeps all existing error handling intact */
 #define HIP_CHECK(expr)                                           \
