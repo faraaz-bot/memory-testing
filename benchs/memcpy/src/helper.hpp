@@ -40,7 +40,7 @@ inline bool   is_power_of_two(size_t v)      { return v && !(v & (v-1)); }
 using std::min;  using std::max;                             // avoid custom overloads
 
 //======================================================================
-//  Public enums (CLI11 uses these later)
+//  Public enums
 //======================================================================
 enum class precision
 {
@@ -141,7 +141,7 @@ struct GPUTimer
 };
 
 //======================================================================
-//  xorwow PRNG – macro wrapped in its own scope to avoid name clashes
+//  xorwow PRNG
 //======================================================================
 #define XORWOW_NEXT(states,maxv,minv,val)            do {                    \
     uint32_t t__ = states[4];                                               \
@@ -243,8 +243,26 @@ void print2d_host(size_t N,const std::vector<Tfloat>& v)
     std::cout<<"]\n";
 }
 
+//----------------  NEW: log_matrices  ---------------------------------
+template <typename Tfloat>
+void log_matrices(const benchmark_context& ctx,
+                  const std::vector<Tfloat>& original_input,
+                  gpubuf_vec<Tfloat>&        device_output,
+                  std::vector<Tfloat>&       assembled_output)
+{
+    assemble_output_to_host<Tfloat>(
+        ctx.N, ctx.ngpus, device_output.data(), assembled_output.data());
+
+    std::cout << "Original Input:\n";
+    print2d_host<Tfloat>(ctx.N, original_input);
+
+    std::cout << "------------------------\nDevice Side Computation:\n";
+    print2d_host<Tfloat>(ctx.N, assembled_output);
+}
+//-----------------------------------------------------------------------
+
 //======================================================================
-//  I/O helpers used by membench.cpp
+//  I/O helpers (setup / reset / teardown) – unchanged
 //======================================================================
 template <typename Tfloat>
 void setup(size_t N,size_t ngpus,
@@ -298,7 +316,7 @@ void teardown(size_t ngpus,
 }
 
 //======================================================================
-//  Device-side print helpers (for verbose / debug builds)
+//  Device-side print helper (for verbose debugging)
 //======================================================================
 template <typename Tfloat>
 __global__ void print2d(int rows,int cols,const Tfloat* d)
@@ -314,7 +332,7 @@ __global__ void print2d(int rows,int cols,const Tfloat* d)
 }
 
 //======================================================================
-//  CLI-style lexical cast helpers (unchanged)
+//  CLI lexical cast helpers
 //======================================================================
 inline bool lexical_cast(const std::string& w, precision& p)
 {
